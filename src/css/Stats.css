@@ -40,3 +40,21 @@
 	font-size: 1rem;
 	color: #adb5bd;
 }
+
+@media (max-width: 768px) {
+	.stats-header h2 {
+		font-size: 2rem;
+	}
+
+	.stats-header p {
+		font-size: 1rem;
+	}
+
+	.stat-value {
+		font-size: 2.5rem;
+	}
+
+	.stat-item {
+		padding: 1rem;
+	}
+}

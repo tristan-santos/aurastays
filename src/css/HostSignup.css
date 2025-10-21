@@ -1,0 +1,175 @@
+.host-signup-modal {
+	width: 100%;
+	height: 100vh;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+.host-signup-content {
+	display: flex;
+	background-color: #fff;
+	border-radius: 8px;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+}
+
+.carousel-container {
+	background-color: var(--primary);
+	width: 50%;
+	padding: 0 5rem;
+	overflow: hidden;
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+}
+
+.carousel-header {
+	text-align: center;
+	margin-bottom: 2rem;
+}
+
+.carousel-logo {
+	width: 100px;
+	height: 100px;
+}
+
+.carousel-header h1 {
+	color: #fff;
+	font-size: 2.5rem;
+	margin: 0;
+}
+
+.carousel-image {
+	width: 80%;
+	height: auto;
+	object-fit: contain;
+}
+
+.host-signup-form-container {
+	width: 50%;
+	padding: 1.25rem 5rem;
+}
+
+.host-signup-header {
+	text-align: center;
+	margin-bottom: 1.5rem;
+}
+
+.host-signup-header h2 {
+	color: var(--primary);
+	margin: 0.5rem 0;
+	font-weight: bold;
+	font-size: 2rem;
+}
+
+.host-signup-header p {
+	color: #666;
+}
+
+.name-fields {
+	display: flex;
+	gap: 1rem;
+}
+
+.form-group {
+	margin-bottom: 1rem;
+	width: 100%;
+}
+
+.form-group label {
+	display: block;
+	margin-bottom: 0.5rem;
+	color: #333;
+	font-weight: 600;
+}
+
+.form-group input {
+	width: 100%;
+	padding: 0.75rem;
+	border: 1px solid #a1a0a0;
+	border-radius: 0.7rem;
+	font-size: 1rem;
+	box-sizing: border-box;
+}
+
+.form-group input:focus {
+	outline: none;
+	border-color: var(--primary);
+	box-shadow: 0 0 0 2px rgba(97, 191, 156, 0.2);
+}
+
+.btn-signup {
+	width: 100%;
+	padding: 0.75rem;
+	border: none;
+	border-radius: 0.7rem;
+	background-color: var(--primary);
+	color: #fff;
+	font-size: 1rem;
+	font-weight: bold;
+	cursor: pointer;
+	transition: all 0.3s ease;
+}
+
+.btn-signup:hover {
+	background-color: #52a887;
+	scale: 1.03;
+}
+
+.google-signin {
+	text-align: center;
+	margin: 1.5rem 0;
+}
+
+.google-signin p {
+	color: #666;
+	margin-bottom: 1rem;
+}
+
+.btn-google {
+	width: 100%;
+	padding: 0.75rem;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	background-color: #fff;
+	color: #333;
+	font-size: 1rem;
+	font-weight: 600;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	transition: all 0.3s ease;
+}
+
+.btn-google:hover {
+	scale: 1.03;
+	background-color: #f0f0f0;
+}
+
+.btn-google img {
+	width: 20px;
+	height: 20px;
+}
+
+.host-signup-footer {
+	margin-top: 1.5rem;
+	text-align: center;
+	color: #666;
+}
+
+.host-signup-footer a {
+	color: var(--primary);
+	text-decoration: none;
+	font-weight: 600;
+}
+
+.host-signup-footer a:hover {
+	text-decoration: underline;
+}

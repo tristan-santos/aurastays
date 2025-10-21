@@ -52,7 +52,7 @@ export default function FeaturedProperties() {
 				variants={containerVariants}
 				initial="hidden"
 				whileInView="visible"
-				viewport={{ once: true, amount: 0.2 }}
+				viewport={{ once: true, amount: 0.5 }}
 			>
 				{loading
 					? Array.from({ length: 4 }).map((_, index) => (

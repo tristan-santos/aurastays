@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-	--primary: #97e7c9;
+	--primary: #61bf9c;
 	--secondary: #d9c26e;
 }
 * {
@@ -11,6 +11,7 @@
 	display: none;
 }
 body {
+	background-color: #333;
 	margin: 0;
 	padding: 0;
 	box-sizing: border-box;

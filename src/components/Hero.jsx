@@ -43,7 +43,10 @@ export default function Hero() {
 					>
 						Explore More
 					</button>
-					<button className="btn-secondary" onClick={() => navigate("/signup")}>
+					<button
+						className="btn-secondary"
+						onClick={() => navigate("/hostSignup")}
+					>
 						Become a Host
 					</button>
 				</div>

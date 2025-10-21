@@ -1,15 +1,8 @@
-// eslint-disable-next-line no-unused-vars
-import React, { useEffect, useRef } from "react"
-// eslint-disable-next-line no-unused-vars
+import React, { useEffect, useState } from "react"
 import { motion, useInView, useAnimate } from "framer-motion"
+import { collection, getDocs } from "firebase/firestore"
+import { db } from "./firebaseConfig" // Assuming firebaseConfig.js is in the same directory
 import "../css/Stats.css"
-
-const stats = [
-	{ value: 2, suffix: "M+", label: "Happy Guests" },
-	{ value: 50, suffix: "K+", label: "Properties Listed" },
-	{ value: 195, suffix: "", label: "Countries" },
-	{ value: 4.9, suffix: "", label: "Average Rating" },
-]
 
 function Counter({ from, to, suffix }) {
 	const [scope, animate] = useAnimate()
@@ -52,6 +45,73 @@ const itemVariants = {
 }
 
 export default function Stats() {
+	const [stats, setStats] = useState([
+		{ value: 0, suffix: "", label: "Happy Guests" }, // Initial value
+		{ value: 0, suffix: "", label: "Properties Listed" }, // Initial value
+		{ value: 195, suffix: "", label: "Countries" },
+		{ value: 0, suffix: "", label: "Average Rating" }, // Initial value
+	])
+
+	useEffect(() => {
+		const fetchStats = async () => {
+			try {
+				const propertiesCollection = collection(db, "properties")
+				const propertiesSnapshot = await getDocs(propertiesCollection)
+				const propertiesCount = propertiesSnapshot.size
+
+				const usersCollection = collection(db, "users")
+				const usersSnapshot = await getDocs(usersCollection)
+				const usersCount = usersSnapshot.size
+
+				let totalRating = 0
+				propertiesSnapshot.forEach((doc) => {
+					totalRating += doc.data().rating // Assuming 'rating' field exists
+				})
+
+				const averageRating =
+					propertiesCount > 0 ? totalRating / propertiesCount : 0
+
+				let propertiesCountValue = propertiesCount
+				let propertiesCountSuffix = ""
+
+				if (propertiesCount >= 1000) {
+					propertiesCountValue = propertiesCount / 1000
+					propertiesCountSuffix = "K+"
+				}
+
+				let happyGuestsValue = usersCount
+				let happyGuestsSuffix = ""
+
+				if (usersCount >= 1000000) {
+					happyGuestsValue = usersCount / 1000000
+					happyGuestsSuffix = "M+"
+				} else if (usersCount >= 1000) {
+					happyGuestsValue = usersCount / 1000
+					happyGuestsSuffix = "K+"
+				}
+
+				setStats([
+					{
+						value: happyGuestsValue,
+						suffix: happyGuestsSuffix,
+						label: "Happy Guests",
+					},
+					{
+						value: propertiesCountValue,
+						suffix: propertiesCountSuffix,
+						label: "Properties Listed",
+					},
+					{ value: 195, suffix: "", label: "Countries" },
+					{ value: averageRating, suffix: "", label: "Average Rating" },
+				])
+			} catch (error) {
+				console.error("Error fetching stats: ", error)
+			}
+		}
+
+		fetchStats()
+	}, [])
+
 	return (
 		<section className="stats-section">
 			<div className="stats-header">
