@@ -1,0 +1,91 @@
+NatureBnB – Terms and Conditions
+
+Effective Date: October 2025
+Contact: support@naturebnb.com
+| (+63) 0929-012-3432
+
+1. Introduction
+
+Welcome to NatureBnB, a school project web application developed for educational purposes. NatureBnB allows users, particularly hosts, to list and manage nature-themed rental properties. This platform is not a commercial service and is intended only for learning and demonstration.
+
+By accessing or using NatureBnB, you agree to these Terms and Conditions. Please read them carefully.
+
+2. User Accounts
+
+To use NatureBnB, users must create an account. During registration, the following information may be collected:
+
+Full name (first, middle, and last)
+
+Email address and password
+
+Gender
+
+Contact number (with country code)
+
+Date of birth
+
+Address (province, city, street, ZIP code)
+
+PayPal account details (for testing with Sandbox only)
+
+Users are responsible for keeping their account information accurate, complete, and confidential. NatureBnB is not responsible for any unauthorized access caused by sharing login credentials.
+
+3. Host Responsibilities
+
+Hosts can create listings for their nature-themed properties.
+By submitting a listing, hosts agree that:
+
+All information provided is accurate and truthful.
+
+Photos, descriptions, and amenities represent the actual property.
+
+They hold the rights to upload any photos or text.
+
+If they wish to remove a listing, they must provide a 7-day notice before removal to allow verification and data updates.
+
+NatureBnB reserves the right to hide or remove listings that violate school or ethical guidelines.
+
+4. Payments (PayPal Sandbox)
+
+All payments and transactions in NatureBnB are conducted using PayPal Sandbox, a testing environment for educational purposes only.
+No real financial transactions occur.
+Users should not input real credit card or personal financial data beyond what is required for testing.
+
+5. Content Ownership
+
+Users retain ownership of any content they upload, including images, text, and descriptions.
+However, by uploading to NatureBnB, users grant permission for the platform to display this content within the app for educational or presentation purposes.
+
+NatureBnB is not responsible for any copyrighted material uploaded by users.
+
+6. Data Privacy
+
+All collected user information is stored securely in the Firebase Firestore database.
+Data will not be shared, sold, or distributed outside the educational project.
+This platform follows privacy best practices for classroom demonstrations only.
+
+7. Limitations of Liability
+
+NatureBnB is a school project and does not provide real-world booking, hosting, or payment services.
+The developers are not liable for any loss, damage, or misuse of information resulting from testing or simulated transactions.
+
+8. Termination
+
+NatureBnB reserves the right to deactivate or remove any account that violates these Terms or misuses the system.
+Users may also request account deletion by contacting support.
+
+9. Changes to Terms
+
+These Terms and Conditions may be updated to improve clarity or meet school project requirements. Updated versions will include a revised “Effective Date.”
+
+10. Contact Information
+
+For any questions or concerns regarding this project, you may contact:
+📧 support@naturebnb.com
+
+📞 (+63) 0929-012-3432
+
+🏫 Disclaimer
+
+NatureBnB is an academic project created for educational use only.
+It is not affiliated with Airbnb or any commercial entity. All names, listings, and transactions within this system are for simulation purposes.
