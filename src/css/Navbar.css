@@ -25,10 +25,10 @@
 	font-size: 1.5rem;
 	margin: 0;
 }
-.login button:hover {
+.nav-links button:hover {
 	scale: 1.1;
 }
-.login button {
+.nav-links button {
 	transition: all 0.3s ease-in-out;
 	color: #333;
 }
