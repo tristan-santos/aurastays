@@ -1,0 +1,77 @@
+.footer {
+	background-color: #1c1c1c;
+	color: #adb5bd;
+	padding: 4rem 2rem 1.5rem;
+	border-top: 1px solid #343a40;
+}
+
+.footer-container {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+	gap: 2.5rem;
+	max-width: 1200px;
+	margin: 0 auto;
+	padding-bottom: 2.5rem;
+}
+
+.footer-brand .footer-logo {
+	width: 50px;
+	margin-bottom: 1rem;
+}
+
+.footer-brand p {
+	font-size: 0.9rem;
+	line-height: 1.6;
+	max-width: 300px;
+}
+
+.footer-links h4,
+.footer-social h4 {
+	color: #e4e4e4;
+	font-size: 1.1rem;
+	margin-bottom: 1.5rem;
+	font-weight: 600;
+}
+
+.footer-links ul {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.footer-links li {
+	margin-bottom: 0.75rem;
+}
+
+.footer-links a {
+	color: #adb5bd;
+	text-decoration: none;
+	transition: color 0.3s ease;
+}
+
+.footer-links a:hover {
+	color: var(--secondary);
+}
+
+.social-icons {
+	display: flex;
+	gap: 1rem;
+}
+
+.social-icons a {
+	color: #adb5bd;
+	text-decoration: none;
+	font-size: 1.2rem;
+	transition: color 0.3s ease;
+}
+
+.social-icons a:hover {
+	color: var(--secondary);
+}
+
+.footer-bottom {
+	text-align: center;
+	padding-top: 1.5rem;
+	border-top: 1px solid #343a40;
+	font-size: 0.85rem;
+}

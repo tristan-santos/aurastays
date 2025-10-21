@@ -1,0 +1,42 @@
+.stats-section {
+	padding: 2rem 0 0;
+	text-align: center;
+}
+.stats-header h2 {
+	font-size: 2.5rem;
+	margin-bottom: 1rem;
+	color: #e4e4e4;
+	font-weight: 600;
+}
+
+.stats-header p {
+	font-size: 1.1rem;
+	color: #adb5bd;
+	max-width: 600px;
+	margin: 0 auto;
+}
+
+.stats-container {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+	gap: 2rem;
+	max-width: 1000px;
+	margin: 0 auto;
+}
+
+.stat-item {
+	padding: 2rem;
+}
+
+.stat-value {
+	font-size: 3.5rem;
+	font-weight: 700;
+	color: var(--secondary);
+	display: block;
+	margin-bottom: 0.5rem;
+}
+
+.stat-label {
+	font-size: 1rem;
+	color: #adb5bd;
+}

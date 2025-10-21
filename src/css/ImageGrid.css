@@ -1,0 +1,84 @@
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+.image-grid {
+	position: relative;
+	width: 100%;
+	height: 60vh; /* Define a height for the container */
+}
+
+.grid-item {
+	position: absolute;
+	overflow: hidden;
+	border-radius: 8px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+	transition: transform 0.3s ease;
+}
+
+.grid-item:hover {
+	transform: scale(1.03);
+}
+
+.grid-item img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+/* Card A: Woman with Red Hair */
+.card-a {
+	top: 25%;
+	left: 15%;
+	width: 32%;
+	height: 45%;
+}
+
+/* Card B: Man Laughing */
+.card-b {
+	top: 5%;
+	right: 5%;
+	width: 38%;
+	height: 50%;
+}
+
+/* Card C: Two Women on Sofa */
+.card-c {
+	top: 65%;
+	right: 10%;
+	width: 35%;
+	height: 40%;
+}
+
+/* Card D: Group in Office */
+.card-d {
+	top: 72%;
+	left: 18%;
+	width: 30%;
+	height: 25%;
+}
+
+@media (max-width: 768px) {
+	.image-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem;
+		position: static;
+		height: auto;
+	}
+
+	.grid-item {
+		position: static;
+		width: 100%;
+		height: 200px;
+		top: auto;
+		left: auto;
+		right: auto;
+		bottom: auto;
+	}
+}

@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom"
-import "../sass/404.scss"
+import "../css/404.css"
 import image404 from "../assets/404 Error-rafiki (2).png"
 
 export default function NotFound() {

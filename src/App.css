@@ -1,1 +1,17 @@
 @import "tailwindcss";
+
+:root {
+	--primary: #97e7c9;
+	--secondary: #d9c26e;
+}
+* {
+	font-family: "Montserrat", sans-serif;
+}
+::-webkit-scrollbar {
+	display: none;
+}
+body {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}

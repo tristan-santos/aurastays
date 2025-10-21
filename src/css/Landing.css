@@ -1,0 +1,22 @@
+.landing-page {
+	background: linear-gradient(to bottom right, #232323, #2a2a2a);
+	color: #e4e4e4;
+	min-height: 100vh;
+	font-family: "Poppins", sans-serif;
+}
+
+.main-content {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	align-items: center;
+	padding: 2rem;
+}
+
+@media (max-width: 768px) {
+	.main-content {
+		grid-template-columns: 1fr;
+		gap: 2rem;
+		padding: 1rem;
+		text-align: center;
+	}
+}
