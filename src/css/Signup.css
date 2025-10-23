@@ -13,11 +13,11 @@
 	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 	width: 100%;
 	height: 100%;
-	overflow: hidden;
+	/* overflow: hidden; */
 }
 
 .carousel-container {
-	background-color: #333;
+	background-image: linear-gradient(180deg, #333, rgb(74, 74, 74));
 	width: 50%;
 	padding: 0 5rem;
 	overflow: hidden;
@@ -26,6 +26,20 @@
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
+}
+.carousel-container .bg {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-size: cover;
+	background-position: center;
+}
+.carousel-container .tagline {
+	font-size: 2rem;
+	font-weight: 650;
+	color: rgb(219, 217, 217);
 }
 
 .carousel-header {
@@ -37,8 +51,8 @@
 }
 
 .carousel-logo {
-	width: 125px;
-	height: 125px;
+	width: 200px;
+	aspect-ratio: 1;
 }
 
 .carousel-header h1 {
@@ -58,6 +72,9 @@
 }
 
 .host-signup-form-container {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
 	width: 50%;
 	padding: 1.25rem 5rem;
 }
@@ -82,10 +99,36 @@
 	display: flex;
 	gap: 1rem;
 }
-
 .form-group {
 	margin-bottom: 1rem;
 	width: 100%;
+}
+
+.form-group .forgot .forgottext::after {
+	content: "";
+	position: absolute;
+	width: 0%;
+	height: 3px;
+	bottom: 0;
+	left: 0;
+	background-color: var(--primary);
+	transition: all 0.3s ease-in-out;
+}
+.form-group .forgot .forgottext {
+	padding-bottom: 0.5rem;
+	position: relative;
+	color: #333;
+	cursor: pointer;
+	transition: all 0.3s ease-in-out;
+}
+.form-group .forgot .forgottext:hover::after {
+	width: 100%;
+}
+.form-group .forgot {
+	font-size: 1rem;
+	font-weight: 550;
+	text-align: end;
+	padding: 1rem;
 }
 
 .form-group label {
@@ -135,7 +178,7 @@
 
 .google-signin p {
 	color: #666;
-	margin-bottom: 1rem;
+	margin-bottom: 0.5rem;
 }
 
 .btn-google {
@@ -166,7 +209,7 @@
 }
 
 .host-signup-footer {
-	margin-top: 1.5rem;
+	/* margin-top: 1.5rem; */
 	text-align: center;
 	color: #666;
 }
@@ -179,4 +222,37 @@
 
 .host-signup-footer a:hover {
 	text-decoration: underline;
+}
+
+.back-button {
+	position: absolute;
+	display: flex;
+	left: 55%;
+	top: 5%;
+	align-items: center;
+	justify-content: flex-start;
+	text-decoration: none;
+	color: #333;
+	font-weight: 600;
+	gap: 0.5rem;
+	margin-bottom: 1rem;
+}
+
+.password-input-container {
+	position: relative;
+	width: 100%;
+}
+
+.password-input-container input {
+	padding-right: 2.5rem; /* Make space for the icon */
+}
+
+.password-input-container img {
+	position: absolute;
+	top: 50%;
+	right: 0.75rem;
+	transform: translateY(-50%);
+	cursor: pointer;
+	width: 20px;
+	height: 20px;
 }

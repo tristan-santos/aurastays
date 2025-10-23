@@ -10,9 +10,11 @@ export default function Navbar() {
 				<h1 className="text-[1rem] font-bold">AuraStays</h1>
 			</div>
 			<div className="nav-links">
-				<button className="pt-3 pb-3 pl-5 pr-5 bg-(--secondary) font-[650] rounded-xl">
-					Login
-				</button>
+				<Link to="/login">
+					<button className="pt-3 pb-3 pl-5 pr-5 bg-(--secondary) font-[650] rounded-xl">
+						Login
+					</button>
+				</Link>
 			</div>
 		</nav>
 	)
