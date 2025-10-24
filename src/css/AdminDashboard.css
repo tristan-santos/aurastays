@@ -1,0 +1,277 @@
+.admin-dashboard {
+	min-height: 100vh;
+	background: #f5f5f5;
+	font-family: "Montserrat", sans-serif;
+}
+
+.admin-loading {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	height: 100vh;
+	background: #333;
+	color: white;
+}
+
+.admin-loading .loading-spinner {
+	width: 50px;
+	height: 50px;
+	border: 5px solid #f3f3f3;
+	border-top: 5px solid var(--primary);
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+	margin-bottom: 1rem;
+}
+
+.admin-header {
+	background: linear-gradient(135deg, var(--primary), var(--secondary));
+	color: white;
+	padding: 1rem 0;
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.admin-header-content {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 0 2rem;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.admin-header h1 {
+	margin: 0;
+	font-size: 2rem;
+	font-weight: 700;
+}
+
+.admin-user-info {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+}
+
+.admin-user-info span {
+	font-weight: 500;
+}
+
+.back-to-landing-btn,
+.logout-btn {
+	background: rgba(255, 255, 255, 0.2);
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	color: white;
+	padding: 0.5rem 1rem;
+	border-radius: 6px;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	font-weight: 500;
+}
+
+.back-to-landing-btn:hover,
+.logout-btn:hover {
+	background: rgba(255, 255, 255, 0.3);
+	transform: translateY(-1px);
+}
+
+.admin-main {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 2rem;
+}
+
+.admin-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+	gap: 1.5rem;
+	margin-bottom: 3rem;
+}
+
+.stat-card {
+	background: white;
+	border-radius: 12px;
+	padding: 1.5rem;
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stat-card:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 8px 15px rgba(0, 0, 0, 0.15);
+}
+
+.stat-icon {
+	font-size: 2.5rem;
+	opacity: 0.8;
+}
+
+.stat-content h3 {
+	margin: 0 0 0.5rem 0;
+	color: #666;
+	font-size: 0.9rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.stat-number {
+	margin: 0;
+	font-size: 2rem;
+	font-weight: 700;
+	color: var(--primary);
+}
+
+.stat-content small {
+	color: #999;
+	font-size: 0.8rem;
+}
+
+.admin-sections {
+	display: grid;
+	grid-template-columns: 2fr 1fr;
+	gap: 2rem;
+}
+
+.admin-section {
+	background: white;
+	border-radius: 12px;
+	padding: 1.5rem;
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.admin-section h2 {
+	margin: 0 0 1.5rem 0;
+	color: #333;
+	font-size: 1.5rem;
+	font-weight: 600;
+}
+
+.users-table {
+	overflow-x: auto;
+}
+
+.users-table table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.users-table th,
+.users-table td {
+	padding: 0.75rem;
+	text-align: left;
+	border-bottom: 1px solid #eee;
+}
+
+.users-table th {
+	background: #f8f9fa;
+	font-weight: 600;
+	color: #666;
+	font-size: 0.9rem;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.users-table td {
+	color: #333;
+}
+
+.user-type {
+	padding: 0.25rem 0.5rem;
+	border-radius: 4px;
+	font-size: 0.8rem;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.user-type.host {
+	background: #e3f2fd;
+	color: #1976d2;
+}
+
+.user-type.guest {
+	background: #f3e5f5;
+	color: #7b1fa2;
+}
+
+.status {
+	padding: 0.25rem 0.5rem;
+	border-radius: 4px;
+	font-size: 0.8rem;
+	font-weight: 600;
+}
+
+.status.verified {
+	background: #e8f5e8;
+	color: #2e7d32;
+}
+
+.status.pending {
+	background: #fff3e0;
+	color: #f57c00;
+}
+
+.system-info {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
+.info-item {
+	padding: 0.75rem;
+	background: #f8f9fa;
+	border-radius: 6px;
+	border-left: 4px solid var(--primary);
+}
+
+.info-item strong {
+	color: var(--primary);
+	margin-right: 0.5rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+	.admin-header-content {
+		flex-direction: column;
+		gap: 1rem;
+		text-align: center;
+	}
+
+	.admin-main {
+		padding: 1rem;
+	}
+
+	.admin-stats {
+		grid-template-columns: 1fr;
+	}
+
+	.admin-sections {
+		grid-template-columns: 1fr;
+	}
+
+	.stat-card {
+		flex-direction: column;
+		text-align: center;
+	}
+
+	.users-table {
+		font-size: 0.9rem;
+	}
+
+	.users-table th,
+	.users-table td {
+		padding: 0.5rem;
+	}
+}
+
+/* Loading Animation */
+@keyframes spin {
+	0% {
+		transform: rotate(0deg);
+	}
+	100% {
+		transform: rotate(360deg);
+	}
+}

@@ -27,7 +27,7 @@ export default function FeaturedProperties() {
 		const fetchProperties = async () => {
 			try {
 				const propertiesRef = collection(db, "properties")
-				const q = query(propertiesRef, orderBy("rating", "desc"), limit(4))
+				const q = query(propertiesRef, orderBy("rating", "desc"), limit(3))
 				const querySnapshot = await getDocs(q)
 				const propertiesData = querySnapshot.docs.map((doc) => ({
 					id: doc.id,
@@ -55,7 +55,7 @@ export default function FeaturedProperties() {
 				viewport={{ once: true, amount: 0.5 }}
 			>
 				{loading
-					? Array.from({ length: 4 }).map((_, index) => (
+					? Array.from({ length: 3 }).map((_, index) => (
 							<PropertyCardSkeleton key={index} />
 					  ))
 					: properties.map((property) => (
@@ -66,7 +66,7 @@ export default function FeaturedProperties() {
 							>
 								<a href="#" className="property-card-link">
 									<img
-										src={property.image}
+										src={property.images?.[0] || property.image}
 										alt={property.title}
 										className="property-image"
 									/>
@@ -77,8 +77,16 @@ export default function FeaturedProperties() {
 												<FaStar /> {property.rating}
 											</div>
 										</div>
-										<p className="property-location">{property.location}</p>
-										<p className="property-price">{property.price}</p>
+										<p className="property-location">
+											{property.location?.city
+												? `${property.location.city}, ${property.location.province}`
+												: property.location || "Location"}
+										</p>
+										<p className="property-price">
+											{property.pricing?.basePrice
+												? `₱${property.pricing.basePrice.toLocaleString()}/night`
+												: property.price || "Price"}
+										</p>
 									</div>
 								</a>
 							</motion.div>

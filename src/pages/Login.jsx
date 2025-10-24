@@ -1,4 +1,4 @@
-import { toast } from "react-toastify"
+import { toast } from "react-stacked-toast"
 import "../css/Signup.css" // Reusing the same CSS for a similar look
 import { FaArrowLeft } from "react-icons/fa"
 import { Link, useNavigate } from "react-router-dom"
@@ -32,9 +32,35 @@ export default function Login() {
 	async function handleSubmit(e) {
 		e.preventDefault()
 		try {
-			await signInWithEmailAndPassword(auth, formdata.email, formdata.password)
+			const userCredential = await signInWithEmailAndPassword(
+				auth,
+				formdata.email,
+				formdata.password
+			)
+			const user = userCredential.user
+
+			// Get user data from Firebase to determine user type
+			const docRef = doc(db, "users", user.uid)
+			const docSnap = await getDoc(docRef)
+
+			if (!docSnap.exists() || !docSnap.data().userType) {
+				// User doesn't exist or has no role, sign them out
+				await auth.signOut()
+				toast.error("User doesn't exist. Please sign up first!")
+				return
+			}
+
+			const userData = docSnap.data()
 			toast.success("Logged in successfully!")
-			navigate("/dashboardHost")
+
+			// Redirect based on user type
+			if (userData.userType === "admin") {
+				navigate("/admin")
+			} else if (userData.userType === "host") {
+				navigate("/dashboardHost")
+			} else {
+				navigate("/dashboardGuest")
+			}
 		} catch (error) {
 			toast.error(error.message)
 			console.error(error)
@@ -50,17 +76,32 @@ export default function Login() {
 			const docSnap = await getDoc(docRef)
 
 			if (!docSnap.exists()) {
-				// If the user doesn't exist in Firestore, create a new document
-				await setDoc(docRef, {
-					displayName: user.displayName,
-					email: user.email,
-					uid: user.uid,
-					isHost: false, // Default to not a host
-				})
+				// User doesn't exist, sign them out and show error
+				await auth.signOut()
+				toast.error("User doesn't exist. Please sign up first!")
+				return
 			}
 
-			toast.success(`Welcome, ${user.displayName}!`)
-			navigate("/dashboardHost")
+			// Check if user has a role assigned
+			const userData = docSnap.data()
+			if (!userData.userType) {
+				// User exists but has no role, sign them out and show error
+				await auth.signOut()
+				toast.error("User doesn't exist. Please sign up first!")
+				return
+			}
+
+			// User exists and has a role, proceed with login
+			toast.success(`Welcome back, ${user.displayName}!`)
+
+			// Redirect based on user type
+			if (userData.userType === "admin") {
+				navigate("/admin")
+			} else if (userData.userType === "host") {
+				navigate("/dashboardHost")
+			} else {
+				navigate("/dashboardGuest")
+			}
 		} catch (error) {
 			toast.error(error.message)
 			console.error(error)
@@ -69,8 +110,8 @@ export default function Login() {
 
 	return (
 		<>
-			<div className="host-signup-modal">
-				<div className="host-signup-content">
+			<div className="signup-modal">
+				<div className="signup-content">
 					<div className="carousel-container">
 						<div className="bg">
 							<LightRays
@@ -102,8 +143,8 @@ export default function Login() {
 						<FaArrowLeft />
 						<span>Back</span>
 					</Link>
-					<div className="host-signup-form-container">
-						<div className="host-signup-header">
+					<div className="signup-form-container">
+						<div className="signup-header">
 							<h2>Login</h2>
 							<p>Welcome back!</p>
 						</div>
@@ -155,7 +196,7 @@ export default function Login() {
 								Continue with Google
 							</button>
 						</div>
-						<div className="host-signup-footer">
+						<div className="signup-footer">
 							<p>
 								Don't have an account? <Link to="/signup">Sign up</Link>
 							</p>

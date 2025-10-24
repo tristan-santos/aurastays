@@ -10,19 +10,21 @@ import "../css/Landing.css"
 
 export default function Landing() {
 	return (
-		<div className="landing-page">
-			<div className="finisher-header">
-				<Navbar />
-				<main className="main-content">
-					<Hero />
-					<ImageGrid />
-				</main>
-				<FeaturedProperties />
-				<HowItWorks />
-				<BackToTopButton />
-				<Stats />
-				<Footer />
+		<>
+			<div className="landing-page">
+				<div className="finisher-header">
+					<Navbar />
+					<main className="main-content">
+						<Hero />
+						<ImageGrid />
+					</main>
+					<FeaturedProperties />
+					<HowItWorks />
+					<BackToTopButton />
+					<Stats />
+					<Footer />
+				</div>
 			</div>
-		</div>
+		</>
 	)
 }
