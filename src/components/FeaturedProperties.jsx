@@ -26,16 +26,20 @@ export default function FeaturedProperties() {
 	useEffect(() => {
 		const fetchProperties = async () => {
 			try {
+				console.log("Fetching featured properties...")
 				const propertiesRef = collection(db, "properties")
 				const q = query(propertiesRef, orderBy("rating", "desc"), limit(3))
 				const querySnapshot = await getDocs(q)
+				console.log("Query snapshot size:", querySnapshot.size)
 				const propertiesData = querySnapshot.docs.map((doc) => ({
 					id: doc.id,
 					...doc.data(),
 				}))
+				console.log("Fetched properties:", propertiesData)
 				setProperties(propertiesData)
 			} catch (error) {
 				console.error("Error fetching featured properties:", error)
+				console.error("Error details:", error.message, error.code)
 			} finally {
 				setLoading(false)
 			}
@@ -72,7 +76,9 @@ export default function FeaturedProperties() {
 									/>
 									<div className="property-content">
 										<div className="property-header">
-											<h3>{property.title}</h3>
+											<h3 className="property-title-featured">
+												{property.title}
+											</h3>
 											<div className="property-rating">
 												<FaStar /> {property.rating}
 											</div>

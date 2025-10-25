@@ -9,26 +9,34 @@
 .image-grid {
 	position: relative;
 	width: 100%;
-	height: 60vh; /* Define a height for the container */
+	height: 60vh;
+	z-index: 1;
 }
 
 .grid-item {
 	position: absolute;
 	overflow: hidden;
-	border-radius: 8px;
-	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-	transition: transform 0.3s ease;
+	border-radius: 16px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+	transition: transform 0.3s ease, box-shadow 0.3s ease;
+	border: 3px solid white;
 }
 
 .grid-item:hover {
 	transform: scale(1.03);
+	box-shadow: 0 12px 32px rgba(97, 191, 156, 0.25);
+	border-color: var(--primary);
 }
 
 .grid-item img {
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
+	transition: transform 0.3s ease;
 	display: block;
+}
+.grid-item:hover img {
+	transform: scale(1.05);
 }
 
 /* Card A: Woman with Red Hair */

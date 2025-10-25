@@ -12,6 +12,7 @@ import DashboardGuest from "./pages/dashboardGuest"
 import AdminDashboard from "./pages/AdminDashboard"
 import Profile from "./pages/Profile"
 import Search from "./pages/Search"
+import PropertyDetails from "./pages/PropertyDetails"
 
 function App() {
 	return (
@@ -28,13 +29,21 @@ function App() {
 					<Route path="/admin" element={<AdminDashboard />} />
 					<Route path="/profile" element={<Profile />} />
 					<Route path="/search" element={<Search />} />
+					<Route path="/property/:propertyId" element={<PropertyDetails />} />
 
 					{/* 404 Route */}
 					<Route path="*" element={<NotFound />} />
 				</Routes>
 			</BrowserRouter>
 			<Toaster
-				position="top-right"
+				containerStyle={{
+					top: "10px",
+					left: "10px",
+					right: "auto",
+					bottom: "auto",
+					zIndex: 1000,
+				}}
+				position="top-left"
 				toastOptions={{
 					success: {
 						style: {

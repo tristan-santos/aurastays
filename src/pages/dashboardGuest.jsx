@@ -299,14 +299,36 @@ export default function DashboardGuest() {
 		if (currentUser?.uid) {
 			try {
 				const userDocRef = doc(db, "users", currentUser.uid)
-				await updateDoc(userDocRef, {
-					recentSearches: arrayUnion({
+				const userDoc = await getDoc(userDocRef)
+
+				if (userDoc.exists()) {
+					const userData = userDoc.data()
+					let searches = userData.recentSearches || []
+
+					// Check if the exact same query already exists (case-sensitive)
+					const existingIndex = searches.findIndex(
+						(s) => s.query === searchQuery.trim()
+					)
+
+					if (existingIndex !== -1) {
+						// Remove the old entry
+						searches.splice(existingIndex, 1)
+					}
+
+					// Add the new/updated search at the end
+					searches.push({
 						query: searchQuery.trim(),
 						timestamp: new Date().toISOString(),
-					}),
-				})
-				// Update local state
-				await fetchRecentSearches()
+					})
+
+					// Update Firebase with the modified array
+					await updateDoc(userDocRef, {
+						recentSearches: searches,
+					})
+
+					// Update local state
+					await fetchRecentSearches()
+				}
 			} catch (error) {
 				console.error("Error saving search:", error)
 			}
@@ -326,6 +348,13 @@ export default function DashboardGuest() {
 			await logout()
 			toast.success("Logged out successfully")
 			navigate("/")
+			localStorage.clear()
+			sessionStorage.clear()
+			history.push("/")
+			history.go(0)
+			window.location.reload()
+			window.location.href = "/"
+			window.location.reload()
 		} catch (error) {
 			console.error("Error logging out:", error)
 			toast.error("Failed to logout")
@@ -591,151 +620,176 @@ export default function DashboardGuest() {
 								<p>No properties found in this category</p>
 							</div>
 						) : (
-							<div className="listings-grid">
-								{filteredProperties.map((property) => (
-									<div key={property.id} className="listing-card">
-										<div
-											className="listing-image"
-											style={{
-												backgroundImage: `url(${
-													property.images?.[0] || housePlaceholder
-												})`,
-											}}
-										>
-											<button
-												className={`favorite-icon ${
-													favorites.includes(property.id) ? "active" : ""
-												}`}
-												onClick={() => toggleFavorite(property.id)}
+							<>
+								<div className="listings-grid">
+									{filteredProperties.slice(0, 6).map((property) => (
+										<div key={property.id} className="listing-card">
+											<div
+												className="listing-image"
+												style={{
+													backgroundImage: `url(${
+														property.images?.[0] || housePlaceholder
+													})`,
+												}}
 											>
-												<FaHeart />
-											</button>
-											{property.featured && (
-												<span className="listing-badge">Featured</span>
-											)}
-										</div>
-										<div className="listing-content">
-											<div className="listing-header">
-												<h3 className="listing-title">{property.title}</h3>
-												<div className="listing-rating">
-													<span className="star">⭐</span>
-													<span className="rating-text">{property.rating}</span>
-													<span className="reviews-count">
-														({property.reviewsCount})
+												<button
+													className={`favorite-icon ${
+														favorites.includes(property.id) ? "active" : ""
+													}`}
+													onClick={() => toggleFavorite(property.id)}
+												>
+													<FaHeart />
+												</button>
+												{property.featured && (
+													<span className="listing-badge">Featured</span>
+												)}
+											</div>
+											<div className="listing-content">
+												<div className="listing-header">
+													<h3 className="listing-title">{property.title}</h3>
+													<div className="listing-rating">
+														<span className="star">⭐</span>
+														<span className="rating-text">
+															{property.rating}
+														</span>
+														<span className="reviews-count">
+															({property.reviewsCount})
+														</span>
+													</div>
+												</div>
+												<div className="listing-location">
+													<FaMapMarkerAlt className="location-icon" />
+													<span>
+														{property.location?.city},{" "}
+														{property.location?.province}
 													</span>
 												</div>
-											</div>
-											<div className="listing-location">
-												<FaMapMarkerAlt className="location-icon" />
-												<span>
-													{property.location?.city},{" "}
-													{property.location?.province}
-												</span>
-											</div>
 
-											{/* Property Type */}
-											<div className="listing-type">
-												<span className="type-badge">
-													{getPropertyTypeName(property)}
-												</span>
-											</div>
-
-											{/* Details for Homes */}
-											{property.category === "home" && property.capacity && (
-												<div className="listing-details">
-													<div className="detail-item">
-														<span className="detail-icon">🛏️</span>
-														<span className="detail-text">
-															{property.capacity.beds} beds
-														</span>
-													</div>
-													<div className="detail-item">
-														<span className="detail-icon">🛁</span>
-														<span className="detail-text">
-															{property.capacity.bathrooms} bath
-														</span>
-													</div>
-													<div className="detail-item">
-														<span className="detail-icon">👥</span>
-														<span className="detail-text">
-															{property.capacity.guests} guests
-														</span>
-													</div>
+												{/* Property Type */}
+												<div className="listing-type">
+													<span className="type-badge">
+														{getPropertyTypeName(property)}
+													</span>
 												</div>
-											)}
 
-											{/* Details for Experiences */}
-											{property.category === "experience" &&
-												property.duration && (
+												{/* Details for Homes */}
+												{property.category === "home" && property.capacity && (
 													<div className="listing-details">
 														<div className="detail-item">
-															<span className="detail-icon">⏰</span>
+															<span className="detail-icon">🛏️</span>
 															<span className="detail-text">
-																{property.duration.hours}h
+																{property.capacity.beds} beds
+															</span>
+														</div>
+														<div className="detail-item">
+															<span className="detail-icon">🛁</span>
+															<span className="detail-text">
+																{property.capacity.bathrooms} bath
 															</span>
 														</div>
 														<div className="detail-item">
 															<span className="detail-icon">👥</span>
 															<span className="detail-text">
-																{property.capacity.minGuests}-
-																{property.capacity.maxGuests} guests
+																{property.capacity.guests} guests
 															</span>
 														</div>
 													</div>
 												)}
 
-											{/* Details for Services */}
-											{property.category === "service" && (
-												<div className="listing-details">
-													<div className="detail-item">
-														<span className="detail-icon">📍</span>
-														<span className="detail-text">
-															{property.location.serviceable
-																? "Multiple Locations"
-																: property.location.city}
+												{/* Details for Experiences */}
+												{property.category === "experience" &&
+													property.duration && (
+														<div className="listing-details">
+															<div className="detail-item">
+																<span className="detail-icon">⏰</span>
+																<span className="detail-text">
+																	{property.duration.hours}h
+																</span>
+															</div>
+															<div className="detail-item">
+																<span className="detail-icon">👥</span>
+																<span className="detail-text">
+																	{property.capacity.minGuests}-
+																	{property.capacity.maxGuests} guests
+																</span>
+															</div>
+														</div>
+													)}
+
+												{/* Details for Services */}
+												{property.category === "service" && (
+													<div className="listing-details">
+														<div className="detail-item">
+															<span className="detail-icon">📍</span>
+															<span className="detail-text">
+																{property.location.serviceable
+																	? "Multiple Locations"
+																	: property.location.city}
+															</span>
+														</div>
+													</div>
+												)}
+
+												<div className="listing-footer">
+													<div className="listing-price">
+														<span className="price-amount">
+															{formatPrice(
+																property.pricing?.basePrice ||
+																	property.pricing?.price ||
+																	0,
+																property.pricing?.currency
+															)}
+														</span>
+														<span className="price-period">
+															{property.category === "home"
+																? "/ night"
+																: property.category === "experience"
+																? "/ person"
+																: ""}
 														</span>
 													</div>
-												</div>
-											)}
-
-											<div className="listing-footer">
-												<div className="listing-price">
-													<span className="price-amount">
-														{formatPrice(
-															property.pricing?.basePrice ||
-																property.pricing?.price ||
-																0,
-															property.pricing?.currency
-														)}
-													</span>
-													<span className="price-period">
-														{property.category === "home"
-															? "/ night"
-															: property.category === "experience"
-															? "/ person"
-															: ""}
-													</span>
-												</div>
-												<div className="listing-actions">
-													<button className="view-btn">View Details</button>
-													<button
-														className={`wishlist-btn-card ${
-															wishlist.includes(property.id) ? "active" : ""
-														}`}
-														onClick={(e) => {
-															e.stopPropagation()
-															toggleWishlist(property.id)
-														}}
-														title="Add to Wishlist"
-													>
-														<FaBookmark />
-													</button>
+													<div className="listing-actions">
+														<button
+															className="view-btn"
+															onClick={() =>
+																navigate(`/property/${property.id}`)
+															}
+														>
+															View Details
+														</button>
+														<button
+															className={`wishlist-btn-card ${
+																wishlist.includes(property.id) ? "active" : ""
+															}`}
+															onClick={(e) => {
+																e.stopPropagation()
+																toggleWishlist(property.id)
+															}}
+															title="Add to Wishlist"
+														>
+															<FaBookmark />
+														</button>
+													</div>
 												</div>
 											</div>
 										</div>
+									))}
+								</div>
+
+								{/* View All Button */}
+								{filteredProperties.length > 6 && (
+									<div className="view-all-container">
+										<button
+											className="view-all-properties-btn"
+											onClick={() =>
+												navigate(`/search?category=${activeCategory}`)
+											}
+										>
+											View All {filteredProperties.length} Properties
+										</button>
 									</div>
-								))}
-							</div>
+								)}
+							</>
 						)}
 					</div>
 				</section>
@@ -973,7 +1027,12 @@ export default function DashboardGuest() {
 																			/ night
 																		</span>
 																	</div>
-																	<button className="favorite-view-btn">
+																	<button
+																		className="favorite-view-btn"
+																		onClick={() =>
+																			navigate(`/property/${property.id}`)
+																		}
+																	>
 																		View Details
 																	</button>
 																</div>
@@ -1046,7 +1105,12 @@ export default function DashboardGuest() {
 																			/ person
 																		</span>
 																	</div>
-																	<button className="favorite-view-btn">
+																	<button
+																		className="favorite-view-btn"
+																		onClick={() =>
+																			navigate(`/property/${property.id}`)
+																		}
+																	>
 																		View Details
 																	</button>
 																</div>
@@ -1114,7 +1178,12 @@ export default function DashboardGuest() {
 																			property.pricing?.currency
 																		)}
 																	</div>
-																	<button className="favorite-view-btn">
+																	<button
+																		className="favorite-view-btn"
+																		onClick={() =>
+																			navigate(`/property/${property.id}`)
+																		}
+																	>
 																		View Details
 																	</button>
 																</div>

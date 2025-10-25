@@ -1,12 +1,16 @@
 .hero {
+	position: relative;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	text-align: center;
-	color: rgb(228, 228, 228);
+	color: #2c3e50;
+	z-index: 1;
 }
 
 .hero-content {
+	position: relative;
+	z-index: 1;
 	max-width: 600px;
 	padding: 0 1rem;
 }
@@ -14,12 +18,16 @@
 .hero-content h1 {
 	font-size: 3rem;
 	margin-bottom: 1rem;
+	color: var(--primary);
+	font-weight: 700;
 }
 
 .hero-content p {
 	font-size: 1.25rem;
 	margin-bottom: 2rem;
 	text-align: left;
+	color: #495057;
+	line-height: 1.6;
 }
 
 .hero-buttons {
@@ -43,16 +51,17 @@
 }
 
 .btn-primary {
-	background-color: var(--secondary);
-	color: #333;
+	background: var(--secondary);
+	color: #2c3e50;
 	border: 2px solid var(--secondary);
+	box-shadow: 0 4px 12px rgba(217, 198, 111, 0.3);
 }
 
 .btn-primary:hover {
-	background-color: var(--secondary);
-	color: #333;
-	scale: 1.1;
-	border: 2px solid var(--secondary);
+	background: #cfc263;
+	color: #2c3e50;
+	scale: 1.05;
+	box-shadow: 0 6px 16px rgba(217, 198, 111, 0.4);
 }
 
 .btn-primary:active {
@@ -61,15 +70,17 @@
 }
 
 .btn-secondary {
-	background-color: transparent;
-	color: white;
-	border: 2px solid white;
+	background-color: white;
+	color: var(--primary);
+	border: 2px solid var(--primary);
+	box-shadow: 0 2px 8px rgba(97, 191, 156, 0.15);
 }
 
 .btn-secondary:hover {
-	scale: 1.1;
-	background-color: #333;
+	scale: 1.05;
+	background-color: var(--primary);
 	color: white;
+	box-shadow: 0 4px 12px rgba(97, 191, 156, 0.3);
 }
 
 @media (max-width: 768px) {

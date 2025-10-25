@@ -128,7 +128,7 @@ export default function Profile() {
 		// Load PayPal SDK (Sandbox)
 		const paypalScript = document.createElement("script")
 		paypalScript.src =
-			"https://www.paypal.com/sdk/js?client-id=AZDxjDScFpQtjWTOUtWKbyN_bDt4OgqaF4eYXlewfBP4-8aqX3PiV8e1GWU6liB2CdFLxErltuTn3n7Z&vault=true&intent=tokenize"
+			"https://www.paypal.com/sdk/js?client-id=AWu1C01rCyrjqljj3axT3ztlh25ARLpdRgi3TNCYJQw4u4ihBd9yYbR_rnbPNL8JgYc1mhIB2Uxpzch2&vault=true&intent=tokenize"
 		paypalScript.async = true
 		document.head.appendChild(paypalScript)
 

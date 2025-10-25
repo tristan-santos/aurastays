@@ -624,6 +624,39 @@
 	gap: 2rem;
 }
 
+/* View All Button Container */
+.view-all-container {
+	display: flex;
+	justify-content: center;
+	margin-top: 3rem;
+	padding: 2rem 0;
+}
+
+.view-all-properties-btn {
+	background: linear-gradient(135deg, var(--primary), var(--secondary));
+	color: white;
+	border: none;
+	padding: 1rem 3rem;
+	border-radius: 50px;
+	font-size: 1.1rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	box-shadow: 0 4px 15px rgba(65, 95, 148, 0.3);
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.view-all-properties-btn:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 20px rgba(65, 95, 148, 0.4);
+}
+
+.view-all-properties-btn:active {
+	transform: translateY(0);
+}
+
 .listing-card {
 	background: white;
 	border-radius: 16px;

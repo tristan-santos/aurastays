@@ -40,6 +40,9 @@ export default function Search() {
 	const [isLoading, setIsLoading] = useState(true)
 	const [favorites, setFavorites] = useState([])
 	const [wishlist, setWishlist] = useState([])
+	const [searchSuggestions, setSearchSuggestions] = useState([])
+	const [showSuggestions, setShowSuggestions] = useState(false)
+	const [recentSearches, setRecentSearches] = useState([])
 
 	// Filter states
 	const [selectedCategory, setSelectedCategory] = useState("all")
@@ -63,11 +66,14 @@ export default function Search() {
 			.slice(0, 2)
 	}
 
-	// Get search query from URL or state
+	// Get search query and category from URL or state
 	useEffect(() => {
 		const params = new URLSearchParams(location.search)
-		const query = params.get("q") || location.state?.query || ""
+		const query =
+			params.get("q") || params.get("query") || location.state?.query || ""
+		const category = params.get("category") || "all"
 		setSearchQuery(query)
+		setSelectedCategory(category)
 	}, [location])
 
 	// Fetch properties and user data
@@ -76,10 +82,43 @@ export default function Search() {
 			await fetchProperties()
 			await fetchUserFavorites()
 			await fetchUserWishlist()
+			await fetchRecentSearches()
 		}
 		fetchData()
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [currentUser])
+
+	// Generate search suggestions
+	useEffect(() => {
+		if (searchQuery.trim().length > 0) {
+			const query = searchQuery.toLowerCase()
+			const suggestions = []
+
+			// Get unique suggestions from properties
+			properties.forEach((property) => {
+				// Add property titles
+				if (
+					property.title?.toLowerCase().includes(query) &&
+					!suggestions.find((s) => s.text === property.title)
+				) {
+					suggestions.push({ text: property.title, type: "property" })
+				}
+
+				// Add locations
+				const locationText = `${property.location?.city}, ${property.location?.province}`
+				if (
+					locationText.toLowerCase().includes(query) &&
+					!suggestions.find((s) => s.text === locationText)
+				) {
+					suggestions.push({ text: locationText, type: "location" })
+				}
+			})
+
+			setSearchSuggestions(suggestions.slice(0, 8)) // Limit to 8 suggestions
+		} else {
+			setSearchSuggestions([])
+		}
+	}, [searchQuery, properties])
 
 	// Filter properties based on search and filters
 	useEffect(() => {
@@ -201,20 +240,60 @@ export default function Search() {
 		}
 	}
 
+	const fetchRecentSearches = async () => {
+		if (!currentUser?.uid) return
+
+		try {
+			const userDoc = await getDoc(doc(db, "users", currentUser.uid))
+			if (userDoc.exists()) {
+				const data = userDoc.data()
+				const searches = data.recentSearches || []
+				setRecentSearches(searches.slice(-5).reverse()) // Get last 5, most recent first
+			}
+		} catch (error) {
+			console.error("Error fetching recent searches:", error)
+		}
+	}
+
 	const handleSearch = async (e) => {
 		e.preventDefault()
 		if (!searchQuery.trim()) return
+
+		setShowSuggestions(false)
 
 		// Save search to Firebase
 		if (currentUser?.uid) {
 			try {
 				const userDocRef = doc(db, "users", currentUser.uid)
-				await updateDoc(userDocRef, {
-					recentSearches: arrayUnion({
+				const userDoc = await getDoc(userDocRef)
+
+				if (userDoc.exists()) {
+					const userData = userDoc.data()
+					let searches = userData.recentSearches || []
+
+					// Check if the exact same query already exists (case-sensitive)
+					const existingIndex = searches.findIndex(
+						(s) => s.query === searchQuery.trim()
+					)
+
+					if (existingIndex !== -1) {
+						// Remove the old entry
+						searches.splice(existingIndex, 1)
+					}
+
+					// Add the new/updated search at the end
+					searches.push({
 						query: searchQuery.trim(),
 						timestamp: new Date().toISOString(),
-					}),
-				})
+					})
+
+					// Update Firebase with the modified array
+					await updateDoc(userDocRef, {
+						recentSearches: searches,
+					})
+
+					await fetchRecentSearches()
+				}
 			} catch (error) {
 				console.error("Error saving search:", error)
 			}
@@ -224,6 +303,21 @@ export default function Search() {
 		navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`, {
 			replace: true,
 		})
+	}
+
+	const handleSuggestionClick = (suggestion) => {
+		setSearchQuery(suggestion)
+		setShowSuggestions(false)
+		handleSearch({ preventDefault: () => {} })
+	}
+
+	const handleSearchInputChange = (e) => {
+		setSearchQuery(e.target.value)
+		setShowSuggestions(true)
+	}
+
+	const handleSearchInputFocus = () => {
+		setShowSuggestions(true)
 	}
 
 	const handleLogout = async () => {
@@ -340,8 +434,49 @@ export default function Search() {
 						type="text"
 						placeholder="Search destinations, hotels, experiences..."
 						value={searchQuery}
-						onChange={(e) => setSearchQuery(e.target.value)}
+						onChange={handleSearchInputChange}
+						onFocus={handleSearchInputFocus}
+						onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
 					/>
+
+					{/* Search Suggestions Dropdown */}
+					{showSuggestions && (
+						<div className="search-suggestions">
+							{searchQuery.trim().length === 0 && recentSearches.length > 0 ? (
+								<>
+									<div className="suggestions-header">Recent Searches</div>
+									{recentSearches.map((search, index) => (
+										<div
+											key={`recent-${index}`}
+											className="suggestion-item recent"
+											onClick={() => handleSuggestionClick(search.query)}
+										>
+											<FaSearch className="suggestion-icon" />
+											<span>{search.query}</span>
+										</div>
+									))}
+								</>
+							) : searchSuggestions.length > 0 ? (
+								<>
+									<div className="suggestions-header">Suggestions</div>
+									{searchSuggestions.map((suggestion, index) => (
+										<div
+											key={`suggestion-${index}`}
+											className="suggestion-item"
+											onClick={() => handleSuggestionClick(suggestion.text)}
+										>
+											{suggestion.type === "location" ? (
+												<FaMapMarkerAlt className="suggestion-icon" />
+											) : (
+												<FaSearch className="suggestion-icon" />
+											)}
+											<span>{suggestion.text}</span>
+										</div>
+									))}
+								</>
+							) : null}
+						</div>
+					)}
 				</form>
 
 				{/* Right Section */}
@@ -486,31 +621,45 @@ export default function Search() {
 					{/* Price Range Filter */}
 					<div className="filter-section">
 						<h4>Price Range</h4>
-						<div className="price-inputs">
-							<input
-								type="number"
-								placeholder="Min"
-								value={priceRange[0]}
-								onChange={(e) =>
-									setPriceRange([parseInt(e.target.value) || 0, priceRange[1]])
-								}
-							/>
-							<span>-</span>
-							<input
-								type="number"
-								placeholder="Max"
-								value={priceRange[1]}
-								onChange={(e) =>
-									setPriceRange([
-										priceRange[0],
-										parseInt(e.target.value) || 50000,
-									])
-								}
-							/>
-						</div>
-						<div className="price-display">
-							₱{priceRange[0].toLocaleString()} - ₱
-							{priceRange[1].toLocaleString()}
+						<div className="price-slider-container">
+							<div className="price-display">
+								₱{priceRange[0].toLocaleString()} - ₱
+								{priceRange[1].toLocaleString()}
+							</div>
+							<div className="slider-wrapper">
+								<label>Min Price</label>
+								<input
+									type="range"
+									min="0"
+									max="50000"
+									step="500"
+									value={priceRange[0]}
+									onChange={(e) =>
+										setPriceRange([
+											Math.min(parseInt(e.target.value), priceRange[1] - 500),
+											priceRange[1],
+										])
+									}
+									className="price-slider"
+								/>
+							</div>
+							<div className="slider-wrapper">
+								<label>Max Price</label>
+								<input
+									type="range"
+									min="0"
+									max="50000"
+									step="500"
+									value={priceRange[1]}
+									onChange={(e) =>
+										setPriceRange([
+											priceRange[0],
+											Math.max(parseInt(e.target.value), priceRange[0] + 500),
+										])
+									}
+									className="price-slider"
+								/>
+							</div>
 						</div>
 					</div>
 
@@ -612,10 +761,22 @@ export default function Search() {
 										{property.featured && (
 											<span className="property-badge">Featured</span>
 										)}
+										<div className="listing-category-tag">
+											{property.category === "home" && "🏠 Home"}
+											{property.category === "experience" && "✨ Experience"}
+											{property.category === "service" && "🛎️ Service"}
+										</div>
 									</div>
 									<div className="property-content">
+										<div className="property-type-header">
+											<span className="type-badge">
+												{getPropertyTypeName(property)}
+											</span>
+										</div>
 										<div className="property-header">
-											<h3 className="property-title">{property.title}</h3>
+											<h3 className="property-title-search">
+												{property.title}
+											</h3>
 											<div className="property-rating">
 												<span className="star">⭐</span>
 												<span className="rating-text">{property.rating}</span>
@@ -628,12 +789,6 @@ export default function Search() {
 											<FaMapMarkerAlt className="location-icon" />
 											<span>
 												{property.location?.city}, {property.location?.province}
-											</span>
-										</div>
-
-										<div className="property-type">
-											<span className="type-badge">
-												{getPropertyTypeName(property)}
 											</span>
 										</div>
 
@@ -691,7 +846,12 @@ export default function Search() {
 												</span>
 											</div>
 											<div className="property-actions">
-												<button className="view-btn">View Details</button>
+												<button
+													className="view-btn"
+													onClick={() => navigate(`/property/${property.id}`)}
+												>
+													View Details
+												</button>
 												<button
 													className={`wishlist-btn-card ${
 														wishlist.includes(property.id) ? "active" : ""

@@ -2,7 +2,7 @@
 	position: fixed;
 	bottom: 2rem;
 	right: 2rem;
-	background-color: #9f7aea;
+	background: var(--secondary);
 	color: white;
 	border: none;
 	border-radius: 50%;
@@ -13,12 +13,13 @@
 	justify-content: center;
 	font-size: 1.25rem;
 	cursor: pointer;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-	transition: background-color 0.3s ease, transform 0.3s ease;
+	box-shadow: 0 4px 12px rgba(217, 198, 111, 0.3);
+	transition: all 0.3s ease;
 	z-index: 1000;
 }
 
 .back-to-top-button:hover {
-	background-color: #8b5cf6;
+	background: #cfc263;
 	transform: scale(1.1);
+	box-shadow: 0 6px 16px rgba(217, 198, 111, 0.4);
 }

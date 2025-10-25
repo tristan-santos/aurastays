@@ -1,12 +1,14 @@
 .featured-properties {
 	padding: 7rem 2rem;
 	text-align: center;
+	background: white;
 }
 
 .featured-properties h2 {
 	font-size: 2.5rem;
 	margin-bottom: 4rem;
-	color: #e4e4e4;
+	color: var(--primary);
+	font-weight: 700;
 }
 
 .properties-container {
@@ -18,17 +20,19 @@
 }
 
 .property-card {
-	background: #343a40;
-	border-radius: 12px;
+	background: white;
+	border-radius: 16px;
 	overflow: hidden;
-	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 	transition: transform 0.3s ease, box-shadow 0.3s ease;
 	text-align: left;
+	border: 2px solid #e9ecef;
 }
 
 .property-card:hover {
-	transform: translateY(-10px);
-	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+	transform: translateY(-8px);
+	box-shadow: 0 12px 28px rgba(97, 191, 156, 0.15);
+	border-color: var(--primary);
 }
 
 .property-image {
@@ -49,28 +53,29 @@
 	margin-bottom: 0.5rem;
 }
 
-.property-header h3 {
-	font-size: 1.25rem;
+.property-title-featured {
+	font-size: 1.15rem;
+	font-weight: 700;
+	color: #2c3e50;
 	margin: 0;
-	color: #fff;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	line-clamp: 2;
+	flex: 1;
 }
-
-.property-rating {
-	font-size: 1rem;
-	font-weight: bold;
-	color: var(--secondary);
-	white-space: nowrap;
-}
-
 .property-location {
-	color: #adb5bd;
+	color: #6c757d;
 	margin-bottom: 1rem;
+	font-weight: 500;
 }
 
 .property-price {
 	font-size: 1.1rem;
 	font-weight: bold;
-	color: #e4e4e4;
+	color: var(--primary);
 }
 
 .property-card-link {
