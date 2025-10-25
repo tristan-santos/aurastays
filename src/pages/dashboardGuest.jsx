@@ -46,6 +46,11 @@ export default function DashboardGuest() {
 		wishlistItems: 0,
 	})
 	const [favorites, setFavorites] = useState([])
+	const [wishlist, setWishlist] = useState([])
+	const [showFavoritesModal, setShowFavoritesModal] = useState(false)
+	const [favoriteProperties, setFavoriteProperties] = useState([])
+	const [favoritesCategory, setFavoritesCategory] = useState("all")
+	const [recentSearches, setRecentSearches] = useState([])
 
 	// Get user's display name
 	const displayName =
@@ -68,6 +73,8 @@ export default function DashboardGuest() {
 			await fetchProperties()
 			await fetchUserStats()
 			await fetchUserFavorites()
+			await fetchUserWishlist()
+			await fetchRecentSearches()
 		}
 		fetchData()
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,8 +85,16 @@ export default function DashboardGuest() {
 		if (properties.length > 0) {
 			const filtered = properties.filter((p) => p.category === activeCategory)
 			setFilteredProperties(filtered)
+
+			// Update favorite properties when properties change
+			if (favorites.length > 0) {
+				const favProps = properties.filter((prop) =>
+					favorites.includes(prop.id)
+				)
+				setFavoriteProperties(favProps)
+			}
 		}
-	}, [activeCategory, properties])
+	}, [activeCategory, properties, favorites])
 
 	const fetchProperties = async () => {
 		try {
@@ -140,10 +155,35 @@ export default function DashboardGuest() {
 			const userDoc = await getDoc(doc(db, "users", currentUser.uid))
 			if (userDoc.exists()) {
 				const data = userDoc.data()
-				setFavorites(data.favorites || [])
+				const favoritesIds = data.favorites || []
+				setFavorites(favoritesIds)
+
+				// Fetch full property details for favorites
+				if (favoritesIds.length > 0 && properties.length > 0) {
+					const favProps = properties.filter((prop) =>
+						favoritesIds.includes(prop.id)
+					)
+					setFavoriteProperties(favProps)
+				} else {
+					setFavoriteProperties([])
+				}
 			}
 		} catch (error) {
 			console.error("Error fetching favorites:", error)
+		}
+	}
+
+	const fetchUserWishlist = async () => {
+		if (!currentUser?.uid) return
+
+		try {
+			const userDoc = await getDoc(doc(db, "users", currentUser.uid))
+			if (userDoc.exists()) {
+				const data = userDoc.data()
+				setWishlist(data.wishlist || [])
+			}
+		} catch (error) {
+			console.error("Error fetching wishlist:", error)
 		}
 	}
 
@@ -161,21 +201,61 @@ export default function DashboardGuest() {
 				// Remove from favorites
 				await updateDoc(userDocRef, {
 					favorites: arrayRemove(propertyId),
+				})
+				const newFavorites = favorites.filter((id) => id !== propertyId)
+				setFavorites(newFavorites)
+				setFavoriteProperties(
+					favoriteProperties.filter((p) => p.id !== propertyId)
+				)
+				toast.success("Removed from favorites")
+			} else {
+				// Add to favorites
+				await updateDoc(userDocRef, {
+					favorites: arrayUnion(propertyId),
+				})
+				const newFavorites = [...favorites, propertyId]
+				setFavorites(newFavorites)
+				const property = properties.find((p) => p.id === propertyId)
+				if (property) {
+					setFavoriteProperties([...favoriteProperties, property])
+				}
+				toast.success("Added to favorites")
+			}
+		} catch (error) {
+			console.error("Error toggling favorite:", error)
+			toast.error("Failed to update favorites")
+		}
+	}
+
+	const toggleWishlist = async (propertyId) => {
+		if (!currentUser?.uid) {
+			toast.error("Please login to add to wishlist")
+			return
+		}
+
+		try {
+			const userDocRef = doc(db, "users", currentUser.uid)
+			const isInWishlist = wishlist.includes(propertyId)
+
+			if (isInWishlist) {
+				// Remove from wishlist
+				await updateDoc(userDocRef, {
+					wishlist: arrayRemove(propertyId),
 					wishlistItems: Math.max(0, (userStats.wishlistItems || 0) - 1),
 				})
-				setFavorites(favorites.filter((id) => id !== propertyId))
+				setWishlist(wishlist.filter((id) => id !== propertyId))
 				setUserStats({
 					...userStats,
 					wishlistItems: Math.max(0, userStats.wishlistItems - 1),
 				})
 				toast.success("Removed from wishlist")
 			} else {
-				// Add to favorites
+				// Add to wishlist
 				await updateDoc(userDocRef, {
-					favorites: arrayUnion(propertyId),
+					wishlist: arrayUnion(propertyId),
 					wishlistItems: (userStats.wishlistItems || 0) + 1,
 				})
-				setFavorites([...favorites, propertyId])
+				setWishlist([...wishlist, propertyId])
 				setUserStats({
 					...userStats,
 					wishlistItems: userStats.wishlistItems + 1,
@@ -183,7 +263,7 @@ export default function DashboardGuest() {
 				toast.success("Added to wishlist")
 			}
 		} catch (error) {
-			console.error("Error toggling favorite:", error)
+			console.error("Error toggling wishlist:", error)
 			toast.error("Failed to update wishlist")
 		}
 	}
@@ -192,10 +272,53 @@ export default function DashboardGuest() {
 		setActiveCategory(category)
 	}
 
-	const handleSearch = (e) => {
+	const fetchRecentSearches = async () => {
+		if (!currentUser?.uid) return
+
+		try {
+			const userDoc = await getDoc(doc(db, "users", currentUser.uid))
+			if (userDoc.exists()) {
+				const data = userDoc.data()
+				const searches = data.recentSearches || []
+				// Get the last 5 searches and sort by timestamp descending
+				const sortedSearches = searches
+					.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+					.slice(0, 5)
+				setRecentSearches(sortedSearches)
+			}
+		} catch (error) {
+			console.error("Error fetching recent searches:", error)
+		}
+	}
+
+	const handleSearch = async (e) => {
 		e.preventDefault()
-		console.log("Searching for:", searchQuery)
-		// TODO: Implement search functionality
+		if (!searchQuery.trim()) return
+
+		// Save search to Firebase
+		if (currentUser?.uid) {
+			try {
+				const userDocRef = doc(db, "users", currentUser.uid)
+				await updateDoc(userDocRef, {
+					recentSearches: arrayUnion({
+						query: searchQuery.trim(),
+						timestamp: new Date().toISOString(),
+					}),
+				})
+				// Update local state
+				await fetchRecentSearches()
+			} catch (error) {
+				console.error("Error saving search:", error)
+			}
+		}
+
+		// Navigate to search page
+		navigate("/search", { state: { query: searchQuery.trim() } })
+	}
+
+	const handleRecentSearchClick = (query) => {
+		setSearchQuery(query)
+		navigate("/search", { state: { query } })
 	}
 
 	const handleLogout = async () => {
@@ -257,7 +380,11 @@ export default function DashboardGuest() {
 					</button>
 
 					{/* Favorites */}
-					<button className="icon-button favorites-btn">
+					<button
+						className="icon-button favorites-btn"
+						title="Favorites"
+						onClick={() => setShowFavoritesModal(true)}
+					>
 						<FaHeart />
 						{favorites.length > 0 && (
 							<span className="badge">{favorites.length}</span>
@@ -311,8 +438,8 @@ export default function DashboardGuest() {
 									<span>My Profile</span>
 								</button>
 								<button className="dropdown-item">
-									<FaHeart />
-									<span>Favorites</span>
+									<FaBookmark />
+									<span>Wishlist</span>
 								</button>
 								<button className="dropdown-item">
 									<FaCog />
@@ -394,20 +521,26 @@ export default function DashboardGuest() {
 				</section>
 
 				{/* Recent Searches */}
-				<section className="recent-section">
-					<div className="section-header">
-						<h3>Recent Searches</h3>
-						<button className="view-all-btn">View All</button>
-					</div>
-					<div className="recent-searches">
-						{["Boracay", "Palawan", "Siargao", "Baguio"].map((place, index) => (
-							<div key={index} className="search-chip">
-								<FaMapMarkerAlt className="chip-icon" />
-								<span>{place}</span>
-							</div>
-						))}
-					</div>
-				</section>
+				{recentSearches.length > 0 && (
+					<section className="recent-section">
+						<div className="section-header">
+							<h3>Recent Searches</h3>
+						</div>
+						<div className="recent-searches">
+							{recentSearches.map((search, index) => (
+								<div
+									key={index}
+									className="search-chip"
+									onClick={() => handleRecentSearchClick(search.query)}
+									style={{ cursor: "pointer" }}
+								>
+									<FaMapMarkerAlt className="chip-icon" />
+									<span>{search.query}</span>
+								</div>
+							))}
+						</div>
+					</section>
+				)}
 
 				{/* Browse Categories */}
 				<section className="categories-section">
@@ -583,7 +716,21 @@ export default function DashboardGuest() {
 															: ""}
 													</span>
 												</div>
-												<button className="view-btn">View Details</button>
+												<div className="listing-actions">
+													<button className="view-btn">View Details</button>
+													<button
+														className={`wishlist-btn-card ${
+															wishlist.includes(property.id) ? "active" : ""
+														}`}
+														onClick={(e) => {
+															e.stopPropagation()
+															toggleWishlist(property.id)
+														}}
+														title="Add to Wishlist"
+													>
+														<FaBookmark />
+													</button>
+												</div>
 											</div>
 										</div>
 									</div>
@@ -670,6 +817,333 @@ export default function DashboardGuest() {
 					</div>
 				</section>
 			</main>
+
+			{/* Favorites Modal */}
+			{showFavoritesModal && (
+				<div
+					className="favorites-modal-overlay"
+					onClick={() => setShowFavoritesModal(false)}
+				>
+					<div
+						className="favorites-modal-content"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="favorites-modal-header">
+							<h2>
+								<FaHeart className="modal-heart-icon" /> My Favorites
+							</h2>
+							<button
+								className="close-modal-btn"
+								onClick={() => setShowFavoritesModal(false)}
+							>
+								×
+							</button>
+						</div>
+
+						{favoriteProperties.length === 0 ? (
+							<div className="empty-favorites">
+								<FaHeart className="empty-icon" />
+								<h3>No favorites yet</h3>
+								<p>Start adding properties to your favorites!</p>
+							</div>
+						) : (
+							<>
+								{/* Category Filter Buttons */}
+								<div className="favorites-category-filters">
+									<button
+										className={`filter-btn ${
+											favoritesCategory === "all" ? "active" : ""
+										}`}
+										onClick={() => setFavoritesCategory("all")}
+									>
+										<span className="filter-icon">🌟</span>
+										<span className="filter-label">All</span>
+										<span className="filter-count">
+											{favoriteProperties.length}
+										</span>
+									</button>
+									<button
+										className={`filter-btn ${
+											favoritesCategory === "home" ? "active" : ""
+										}`}
+										onClick={() => setFavoritesCategory("home")}
+									>
+										<span className="filter-icon">🏠</span>
+										<span className="filter-label">Homes</span>
+										<span className="filter-count">
+											{
+												favoriteProperties.filter((p) => p.category === "home")
+													.length
+											}
+										</span>
+									</button>
+									<button
+										className={`filter-btn ${
+											favoritesCategory === "experience" ? "active" : ""
+										}`}
+										onClick={() => setFavoritesCategory("experience")}
+									>
+										<span className="filter-icon">✨</span>
+										<span className="filter-label">Experiences</span>
+										<span className="filter-count">
+											{
+												favoriteProperties.filter(
+													(p) => p.category === "experience"
+												).length
+											}
+										</span>
+									</button>
+									<button
+										className={`filter-btn ${
+											favoritesCategory === "service" ? "active" : ""
+										}`}
+										onClick={() => setFavoritesCategory("service")}
+									>
+										<span className="filter-icon">🛎️</span>
+										<span className="filter-label">Services</span>
+										<span className="filter-count">
+											{
+												favoriteProperties.filter(
+													(p) => p.category === "service"
+												).length
+											}
+										</span>
+									</button>
+								</div>
+
+								<div className="favorites-modal-body">
+									{/* Homes Section */}
+									{(favoritesCategory === "all" ||
+										favoritesCategory === "home") &&
+										favoriteProperties.filter((p) => p.category === "home")
+											.length > 0 && (
+											<div className="favorites-category-section">
+												<h3 className="favorites-category-title">
+													<span className="category-icon">🏠</span> Homes (
+													{
+														favoriteProperties.filter(
+															(p) => p.category === "home"
+														).length
+													}
+													)
+												</h3>
+												<div className="favorites-grid">
+													{favoriteProperties
+														.filter((p) => p.category === "home")
+														.map((property) => (
+															<div key={property.id} className="favorite-card">
+																<div
+																	className="favorite-image"
+																	style={{
+																		backgroundImage: `url(${
+																			property.images?.[0] || housePlaceholder
+																		})`,
+																	}}
+																>
+																	<button
+																		className="remove-favorite-btn"
+																		onClick={() => toggleFavorite(property.id)}
+																		title="Remove from favorites"
+																	>
+																		<FaHeart />
+																	</button>
+																</div>
+																<div className="favorite-info">
+																	<h4 className="favorite-title">
+																		{property.title}
+																	</h4>
+																	<p className="favorite-location">
+																		<FaMapMarkerAlt />
+																		{property.location?.city},{" "}
+																		{property.location?.province}
+																	</p>
+																	<div className="favorite-rating">
+																		<span>⭐</span>
+																		<span>{property.rating}</span>
+																		<span className="review-count">
+																			({property.reviewsCount})
+																		</span>
+																	</div>
+																	<div className="favorite-price">
+																		{formatPrice(
+																			property.pricing?.basePrice || 0,
+																			property.pricing?.currency
+																		)}
+																		<span className="price-period">
+																			/ night
+																		</span>
+																	</div>
+																	<button className="favorite-view-btn">
+																		View Details
+																	</button>
+																</div>
+															</div>
+														))}
+												</div>
+											</div>
+										)}
+
+									{/* Experiences Section */}
+									{(favoritesCategory === "all" ||
+										favoritesCategory === "experience") &&
+										favoriteProperties.filter(
+											(p) => p.category === "experience"
+										).length > 0 && (
+											<div className="favorites-category-section">
+												<h3 className="favorites-category-title">
+													<span className="category-icon">✨</span> Experiences
+													(
+													{
+														favoriteProperties.filter(
+															(p) => p.category === "experience"
+														).length
+													}
+													)
+												</h3>
+												<div className="favorites-grid">
+													{favoriteProperties
+														.filter((p) => p.category === "experience")
+														.map((property) => (
+															<div key={property.id} className="favorite-card">
+																<div
+																	className="favorite-image"
+																	style={{
+																		backgroundImage: `url(${
+																			property.images?.[0] || housePlaceholder
+																		})`,
+																	}}
+																>
+																	<button
+																		className="remove-favorite-btn"
+																		onClick={() => toggleFavorite(property.id)}
+																		title="Remove from favorites"
+																	>
+																		<FaHeart />
+																	</button>
+																</div>
+																<div className="favorite-info">
+																	<h4 className="favorite-title">
+																		{property.title}
+																	</h4>
+																	<p className="favorite-location">
+																		<FaMapMarkerAlt />
+																		{property.location?.city},{" "}
+																		{property.location?.province}
+																	</p>
+																	<div className="favorite-rating">
+																		<span>⭐</span>
+																		<span>{property.rating}</span>
+																		<span className="review-count">
+																			({property.reviewsCount})
+																		</span>
+																	</div>
+																	<div className="favorite-price">
+																		{formatPrice(
+																			property.pricing?.price || 0,
+																			property.pricing?.currency
+																		)}
+																		<span className="price-period">
+																			/ person
+																		</span>
+																	</div>
+																	<button className="favorite-view-btn">
+																		View Details
+																	</button>
+																</div>
+															</div>
+														))}
+												</div>
+											</div>
+										)}
+
+									{/* Services Section */}
+									{(favoritesCategory === "all" ||
+										favoritesCategory === "service") &&
+										favoriteProperties.filter((p) => p.category === "service")
+											.length > 0 && (
+											<div className="favorites-category-section">
+												<h3 className="favorites-category-title">
+													<span className="category-icon">🛎️</span> Services (
+													{
+														favoriteProperties.filter(
+															(p) => p.category === "service"
+														).length
+													}
+													)
+												</h3>
+												<div className="favorites-grid">
+													{favoriteProperties
+														.filter((p) => p.category === "service")
+														.map((property) => (
+															<div key={property.id} className="favorite-card">
+																<div
+																	className="favorite-image"
+																	style={{
+																		backgroundImage: `url(${
+																			property.images?.[0] || housePlaceholder
+																		})`,
+																	}}
+																>
+																	<button
+																		className="remove-favorite-btn"
+																		onClick={() => toggleFavorite(property.id)}
+																		title="Remove from favorites"
+																	>
+																		<FaHeart />
+																	</button>
+																</div>
+																<div className="favorite-info">
+																	<h4 className="favorite-title">
+																		{property.title}
+																	</h4>
+																	<p className="favorite-location">
+																		<FaMapMarkerAlt />
+																		{property.location?.city},{" "}
+																		{property.location?.province}
+																	</p>
+																	<div className="favorite-rating">
+																		<span>⭐</span>
+																		<span>{property.rating}</span>
+																		<span className="review-count">
+																			({property.reviewsCount})
+																		</span>
+																	</div>
+																	<div className="favorite-price">
+																		{formatPrice(
+																			property.pricing?.price || 0,
+																			property.pricing?.currency
+																		)}
+																	</div>
+																	<button className="favorite-view-btn">
+																		View Details
+																	</button>
+																</div>
+															</div>
+														))}
+												</div>
+											</div>
+										)}
+									{/* No results for selected category */}
+									{((favoritesCategory === "home" &&
+										favoriteProperties.filter((p) => p.category === "home")
+											.length === 0) ||
+										(favoritesCategory === "experience" &&
+											favoriteProperties.filter(
+												(p) => p.category === "experience"
+											).length === 0) ||
+										(favoritesCategory === "service" &&
+											favoriteProperties.filter((p) => p.category === "service")
+												.length === 0)) && (
+										<div className="no-category-results">
+											<p>No favorites in this category yet</p>
+										</div>
+									)}
+								</div>
+							</>
+						)}
+					</div>
+				</div>
+			)}
 		</div>
 	)
 }

@@ -836,7 +836,7 @@ export default function Profile() {
 			<div className="profile-header">
 				<h1>My Profile</h1>
 				<button
-					className="back-button"
+					className="backButton"
 					onClick={() => navigate("/dashboardGuest")}
 				>
 					<span>Back to Dashboard</span>
