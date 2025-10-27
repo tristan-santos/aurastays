@@ -8,9 +8,14 @@ import {
 	updateDoc,
 	arrayUnion,
 	arrayRemove,
+	collection,
+	query,
+	where,
+	getDocs,
 } from "firebase/firestore"
 import { toast } from "react-stacked-toast"
 import emailjs from "@emailjs/browser"
+import { sendHostBookingConfirmation } from "../utils/hostEmailService"
 import {
 	FaArrowLeft,
 	FaHeart,
@@ -38,11 +43,10 @@ import "../css/PropertyDetails.css"
 import housePlaceholder from "../assets/housePlaceholder.png"
 
 // Mapbox token
-mapboxgl.accessToken =
-	"pk.eyJ1IjoidGludGFuMjQiLCJhIjoiY21oNTFqeHA0MDJ6aTJxcHVhMjgzcHF6cSJ9.1Bl76fy8KzMBFXF-LsKyEQ"
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN
 
-// Initialize EmailJS
-emailjs.init("MNZEXjfpJmX3C1zCG")
+// Initialize EmailJS (Guest)
+emailjs.init(import.meta.env.VITE_EMAILJS_GUEST_PUBLIC_KEY)
 
 export default function PropertyDetails() {
 	const { propertyId } = useParams()
@@ -55,9 +59,10 @@ export default function PropertyDetails() {
 	const [selectedImage, setSelectedImage] = useState(0)
 	const [showShareModal, setShowShareModal] = useState(false)
 	const [showAllPhotos, setShowAllPhotos] = useState(false)
-	const [selectedDate, setSelectedDate] = useState(null)
 	const [bookedDates, setBookedDates] = useState([])
 	const [currentMonth, setCurrentMonth] = useState(new Date())
+	const [showDatePickerModal, setShowDatePickerModal] = useState(false)
+	const [selectingCheckIn, setSelectingCheckIn] = useState(true)
 
 	// Booking states
 	const [checkInDate, setCheckInDate] = useState("")
@@ -65,6 +70,14 @@ export default function PropertyDetails() {
 	const [numberOfGuests, setNumberOfGuests] = useState(1)
 	const [isProcessingPayment, setIsProcessingPayment] = useState(false)
 	const [isPayPalLoaded, setIsPayPalLoaded] = useState(false)
+	const [paymentMethod, setPaymentMethod] = useState("paypal") // 'paypal' or 'wallet'
+	const [walletBalance, setWalletBalance] = useState(0)
+
+	// Promo code states
+	const [promoCode, setPromoCode] = useState("")
+	const [appliedPromo, setAppliedPromo] = useState(null)
+	const [promoDiscount, setPromoDiscount] = useState(0)
+	const [isValidatingPromo, setIsValidatingPromo] = useState(false)
 
 	// Map ref
 	const mapContainer = useRef(null)
@@ -80,6 +93,7 @@ export default function PropertyDetails() {
 		if (currentUser) {
 			checkFavoriteStatus()
 			checkWishlistStatus()
+			fetchWalletBalance()
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [propertyId, currentUser])
@@ -106,8 +120,9 @@ export default function PropertyDetails() {
 		}
 
 		const script = document.createElement("script")
-		script.src =
-			"https://www.paypal.com/sdk/js?client-id=AWu1C01rCyrjqljj3axT3ztlh25ARLpdRgi3TNCYJQw4u4ihBd9yYbR_rnbPNL8JgYc1mhIB2Uxpzch2&currency=USD"
+		script.src = `https://www.paypal.com/sdk/js?client-id=${
+			import.meta.env.VITE_PAYPAL_CLIENT_ID
+		}&currency=PHP`
 		script.async = true
 		script.onload = () => {
 			setIsPayPalLoaded(true)
@@ -303,6 +318,127 @@ export default function PropertyDetails() {
 		}
 	}
 
+	// Fetch wallet balance
+	const fetchWalletBalance = async () => {
+		try {
+			const userDoc = await getDoc(doc(db, "users", currentUser.uid))
+			if (userDoc.exists()) {
+				const balance = userDoc.data().walletBalance || 0
+				setWalletBalance(balance)
+			}
+		} catch (error) {
+			console.error("Error fetching wallet balance:", error)
+		}
+	}
+
+	// Promo code functions
+	const validateAndApplyPromo = async () => {
+		if (!promoCode.trim()) {
+			toast.error("Please enter a promo code")
+			return
+		}
+
+		setIsValidatingPromo(true)
+		try {
+			const promosQuery = query(
+				collection(db, "promos"),
+				where("code", "==", promoCode.toUpperCase())
+			)
+			const promosSnapshot = await getDocs(promosQuery)
+
+			if (promosSnapshot.empty) {
+				toast.error("Invalid promo code")
+				setIsValidatingPromo(false)
+				return
+			}
+
+			const promoData = promosSnapshot.docs[0].data()
+			const promoId = promosSnapshot.docs[0].id
+
+			// Validation checks
+			if (!promoData.isActive) {
+				toast.error("This promo code is no longer active")
+				setIsValidatingPromo(false)
+				return
+			}
+
+			// Check validity dates
+			const now = new Date()
+			if (promoData.validFrom && new Date(promoData.validFrom) > now) {
+				toast.error("This promo code is not yet valid")
+				setIsValidatingPromo(false)
+				return
+			}
+
+			if (promoData.validUntil && new Date(promoData.validUntil) < now) {
+				toast.error("This promo code has expired")
+				setIsValidatingPromo(false)
+				return
+			}
+
+			// Check usage limits
+			if (
+				promoData.usageLimit > 0 &&
+				promoData.usageCount >= promoData.usageLimit
+			) {
+				toast.error("This promo code has reached its usage limit")
+				setIsValidatingPromo(false)
+				return
+			}
+
+			// Check if user already used this promo
+			const userUsageCount =
+				promoData.usedBy?.filter((userId) => userId === currentUser.uid)
+					.length || 0
+			if (userUsageCount >= promoData.usagePerUser) {
+				toast.error("You have already used this promo code")
+				setIsValidatingPromo(false)
+				return
+			}
+
+			// Check minimum purchase
+			const prices = calculatePrices()
+			if (
+				promoData.minPurchase > 0 &&
+				prices.subtotal < promoData.minPurchase
+			) {
+				toast.error(
+					`Minimum purchase of ₱${promoData.minPurchase} required for this promo`
+				)
+				setIsValidatingPromo(false)
+				return
+			}
+
+			// Calculate discount
+			let discount = 0
+			if (promoData.discountType === "percentage") {
+				discount = (prices.subtotal * promoData.discountValue) / 100
+				if (promoData.maxDiscount > 0 && discount > promoData.maxDiscount) {
+					discount = promoData.maxDiscount
+				}
+			} else {
+				discount = promoData.discountValue
+			}
+
+			// Apply promo
+			setAppliedPromo({ ...promoData, id: promoId })
+			setPromoDiscount(discount)
+			toast.success(`Promo applied! You saved ₱${discount.toLocaleString()}`)
+		} catch (error) {
+			console.error("Error validating promo:", error)
+			toast.error("Failed to validate promo code")
+		} finally {
+			setIsValidatingPromo(false)
+		}
+	}
+
+	const removePromo = () => {
+		setAppliedPromo(null)
+		setPromoDiscount(0)
+		setPromoCode("")
+		toast("Promo code removed")
+	}
+
 	const copyToClipboard = () => {
 		navigator.clipboard.writeText(shareableUrl)
 		toast.success("Link copied to clipboard!")
@@ -330,11 +466,12 @@ export default function PropertyDetails() {
 		const cleaningFee = 500
 		const serviceFee = 800
 
-		// Guest fee calculation: ₱100 per guest, or ₱1,000 fixed for 8+ guests
-		const guestFee = numberOfGuests >= 8 ? 1000 : numberOfGuests * 100
+		// Guest fee calculation: ₱100 per guest
+		const guestFee = numberOfGuests * 100
 
 		const subtotal = basePrice * nights
-		const total = subtotal + cleaningFee + serviceFee + guestFee
+		const totalBeforeDiscount = subtotal + cleaningFee + serviceFee + guestFee
+		const total = totalBeforeDiscount - promoDiscount
 
 		return {
 			nights,
@@ -344,6 +481,8 @@ export default function PropertyDetails() {
 			serviceFee,
 			guestFee,
 			numberOfGuests,
+			promoDiscount,
+			totalBeforeDiscount,
 			total,
 		}
 	}
@@ -352,14 +491,6 @@ export default function PropertyDetails() {
 	const getTodayDate = () => {
 		const today = new Date()
 		return today.toISOString().split("T")[0]
-	}
-
-	// Get tomorrow's date for check-out min date
-	const getMinCheckOutDate = () => {
-		if (!checkInDate) return getTodayDate()
-		const checkIn = new Date(checkInDate)
-		checkIn.setDate(checkIn.getDate() + 1)
-		return checkIn.toISOString().split("T")[0]
 	}
 
 	// Get all dates between check-in and check-out
@@ -387,13 +518,28 @@ export default function PropertyDetails() {
 			const prices = calculatePrices()
 			const bookedDatesList = getDatesBetween(checkInDate, checkOutDate)
 
+			// Fetch user data from Firebase to get the most up-to-date email
+			let userEmail = currentUser.email
+			let userName = currentUser.displayName || "Guest"
+
+			try {
+				const userDoc = await getDoc(doc(db, "users", currentUser.uid))
+				if (userDoc.exists()) {
+					const userData = userDoc.data()
+					userEmail = userData.email || currentUser.email
+					userName = userData.displayName || currentUser.displayName || "Guest"
+				}
+			} catch (err) {
+				console.log("Using auth email as fallback:", err)
+			}
+
 			const bookingData = {
 				propertyId,
 				propertyTitle: property.title,
 				hostId: property.hostId || "UI7UgbxJj4atJmzmS61fAjA2E0A3",
 				guestId: currentUser.uid,
-				guestName: currentUser.displayName || "Guest",
-				guestEmail: currentUser.email,
+				guestName: userName,
+				guestEmail: userEmail,
 				checkInDate,
 				checkOutDate,
 				numberOfGuests,
@@ -404,14 +550,25 @@ export default function PropertyDetails() {
 					cleaningFee: prices.cleaningFee,
 					serviceFee: prices.serviceFee,
 					guestFee: prices.guestFee,
+					promoDiscount: prices.promoDiscount || 0,
+					totalBeforeDiscount: prices.totalBeforeDiscount,
 					total: prices.total,
 				},
+				...(appliedPromo && {
+					promo: {
+						code: appliedPromo.code,
+						promoId: appliedPromo.id,
+						discount: prices.promoDiscount,
+					},
+				}),
 				payment: {
 					method: "paypal",
 					paymentId,
 					fullPaymentPaid: true,
 					paymentDate: new Date().toISOString(),
 					paymentDetails,
+					currency: "PHP",
+					amountPaid: prices.total,
 				},
 				bookedDates: bookedDatesList,
 				status: "pending", // Pending host review
@@ -421,32 +578,150 @@ export default function PropertyDetails() {
 			const bookingsRef = firestoreCollection(db, "bookings")
 			const docRef = await addDoc(bookingsRef, bookingData)
 
-			// Send email to guest using EmailJS
+			// Update promo usage if promo was applied
+			if (appliedPromo) {
+				try {
+					const promoRef = doc(db, "promos", appliedPromo.id)
+					await updateDoc(promoRef, {
+						usageCount: (appliedPromo.usageCount || 0) + 1,
+						usedBy: arrayUnion(currentUser.uid),
+					})
+					// Reset promo state after successful booking
+					setAppliedPromo(null)
+					setPromoDiscount(0)
+					setPromoCode("")
+				} catch (promoError) {
+					console.error("Error updating promo usage:", promoError)
+					// Don't fail the booking if promo update fails
+				}
+			}
+
+			// Send invoice email to guest using EmailJS
 			try {
-				await emailjs.send("service_h0uu0iq", "template_oisprxq", {
-					guestName: currentUser.displayName || "Guest",
+				const invoiceData = {
+					guestName: userName,
 					orderNumber: docRef.id.substring(0, 8).toUpperCase(),
 					propertyName: property.title,
 					date: `${checkInDate} to ${checkOutDate}`,
-					price: prices.subtotal,
-					cleaningFee: prices.cleaningFee,
-					serviceFee: prices.serviceFee,
-					guestFee: prices.guestFee,
-					total: prices.total,
-					email: currentUser.email,
-				})
-				console.log("Email sent successfully")
+					checkInDate: checkInDate,
+					checkOutDate: checkOutDate,
+					numberOfNights: prices.nights,
+					numberOfGuests: numberOfGuests,
+					price: prices.subtotal.toFixed(2),
+					cleaningFee: prices.cleaningFee.toFixed(2),
+					serviceFee: prices.serviceFee.toFixed(2),
+					guestFee: prices.guestFee.toFixed(2),
+					total: prices.total.toFixed(2),
+					email: userEmail,
+					paymentId: paymentId,
+					paymentDate: new Date().toLocaleDateString("en-US", {
+						year: "numeric",
+						month: "long",
+						day: "numeric",
+					}),
+					paymentMethod: "PayPal",
+				}
+
+				console.log(
+					"Attempting to send guest invoice email with data:",
+					invoiceData
+				)
+				console.log(
+					"EmailJS Guest Service ID:",
+					import.meta.env.VITE_EMAILJS_GUEST_SERVICE_ID
+				)
+				console.log(
+					"EmailJS Guest Invoice Template ID:",
+					import.meta.env.VITE_EMAILJS_GUEST_INVOICE_TEMPLATE_ID
+				)
+
+				const response = await emailjs.send(
+					import.meta.env.VITE_EMAILJS_GUEST_SERVICE_ID,
+					import.meta.env.VITE_EMAILJS_GUEST_INVOICE_TEMPLATE_ID,
+					invoiceData
+				)
+
+				console.log("EmailJS Response:", response)
+				console.log("Invoice email sent successfully to:", userEmail)
+				toast.success("Invoice sent to your email!")
 			} catch (emailError) {
-				console.error("Error sending email:", emailError)
-				// Don't fail the booking if email fails
+				console.error("Error sending invoice email:", emailError)
+				console.error("Error details:", {
+					message: emailError.message,
+					text: emailError.text,
+					status: emailError.status,
+				})
+				toast.error("Booking confirmed, but failed to send invoice email.")
+			}
+
+			// Send booking confirmation email to host
+			try {
+				const hostId =
+					property.hostId ||
+					property.host?.hostId ||
+					"UI7UgbxJj4atJmzmS61fAjA2E0A3"
+				const hostName = property.host?.hostName || "Host"
+
+				// Fetch host email from users collection
+				let hostEmail = null
+				try {
+					const hostDoc = await getDoc(doc(db, "users", hostId))
+					if (hostDoc.exists()) {
+						hostEmail = hostDoc.data().email
+					}
+				} catch (err) {
+					console.error("Error fetching host email:", err)
+				}
+
+				if (hostEmail) {
+					const hostBookingData = {
+						hostEmail: hostEmail,
+						hostName: hostName,
+						guestName: userName,
+						propertyName: property.title,
+						checkInDate: new Date(checkInDate).toLocaleDateString("en-US", {
+							year: "numeric",
+							month: "long",
+							day: "numeric",
+						}),
+						checkOutDate: new Date(checkOutDate).toLocaleDateString("en-US", {
+							year: "numeric",
+							month: "long",
+							day: "numeric",
+						}),
+						numberOfGuests: numberOfGuests,
+						numberOfNights: prices.nights,
+						totalAmount: `₱${prices.total.toLocaleString()}`,
+						bookingId: docRef.id.substring(0, 8).toUpperCase(),
+					}
+
+					console.log(
+						"Attempting to send host booking confirmation:",
+						hostBookingData
+					)
+
+					await sendHostBookingConfirmation(hostBookingData)
+					console.log(
+						"Host booking confirmation sent successfully to:",
+						hostEmail
+					)
+				} else {
+					console.warn("Host email not found, skipping host notification")
+				}
+			} catch (hostEmailError) {
+				console.error(
+					"Error sending host booking confirmation:",
+					hostEmailError
+				)
+				// Don't show error to guest - this is host-side issue
 			}
 
 			toast.success("Payment successful! Booking is pending host approval.")
 
-			// Redirect to dashboard after 2 seconds
+			// Redirect to dashboard after 3 seconds (increased to show messages)
 			setTimeout(() => {
 				navigate("/dashboardGuest")
-			}, 2000)
+			}, 3000)
 
 			return docRef.id
 		} catch (error) {
@@ -454,6 +729,175 @@ export default function PropertyDetails() {
 			toast.error("Failed to create booking")
 			throw error
 		}
+	}
+
+	// Handle Wallet Payment
+	const handleWalletPayment = async () => {
+		if (!currentUser) {
+			toast.error("Please login to make a booking")
+			return
+		}
+
+		// Validations
+		if (!checkInDate || !checkOutDate) {
+			toast.error("Please select check-in and check-out dates")
+			return
+		}
+
+		const checkIn = new Date(checkInDate)
+		const checkOut = new Date(checkOutDate)
+
+		if (checkOut <= checkIn) {
+			toast.error("Check-out date must be after check-in date")
+			return
+		}
+
+		// Validate number of guests doesn't exceed property capacity
+		const maxGuests =
+			property.capacity?.guests || property.capacity?.maxGuests || 8
+		if (numberOfGuests > maxGuests) {
+			toast.error(
+				`This property can accommodate a maximum of ${maxGuests} guests.`
+			)
+			setNumberOfGuests(maxGuests)
+			return
+		}
+
+		// Check if selected dates are available
+		if (!checkDateAvailability()) {
+			toast.error(
+				"Selected dates are not available. Please choose different dates."
+			)
+			return
+		}
+
+		const prices = calculatePrices()
+		const totalAmount = prices.total
+
+		// Check if wallet has sufficient balance
+		if (walletBalance < totalAmount) {
+			toast.error(
+				`Insufficient wallet balance. You need ₱${totalAmount.toLocaleString()} but have ₱${walletBalance.toLocaleString()}`
+			)
+			return
+		}
+
+		// Confirm payment
+		const confirmed = window.confirm(
+			`Pay ₱${totalAmount.toLocaleString()} from your wallet for this booking?`
+		)
+		if (!confirmed) return
+
+		setIsProcessingPayment(true)
+		try {
+			toast("Processing payment from wallet...", { type: "info" })
+
+			// Deduct from wallet
+			const {
+				collection: firestoreCollection,
+				addDoc,
+				serverTimestamp: timestamp,
+			} = await import("firebase/firestore")
+			const userRef = doc(db, "users", currentUser.uid)
+			const userDoc = await getDoc(userRef)
+			const currentBalance = userDoc.data()?.walletBalance || 0
+			const newBalance = currentBalance - totalAmount
+
+			await updateDoc(userRef, {
+				walletBalance: newBalance,
+			})
+
+			// Record wallet transaction
+			await addDoc(firestoreCollection(db, "walletTransactions"), {
+				userId: currentUser.uid,
+				type: "payment",
+				amount: totalAmount,
+				propertyTitle: property.title,
+				propertyId: propertyId,
+				balanceBefore: currentBalance,
+				balanceAfter: newBalance,
+				status: "completed",
+				createdAt: timestamp(),
+			})
+
+			// Create booking with wallet payment details
+			await createBooking("WALLET-" + Date.now(), {
+				method: "wallet",
+				status: "COMPLETED",
+			})
+
+			// Update local wallet balance
+			setWalletBalance(newBalance)
+
+			toast.success("Payment successful from wallet!")
+		} catch (error) {
+			console.error("Wallet payment error:", error)
+			toast.error("Payment failed. Please try again.")
+		} finally {
+			setIsProcessingPayment(false)
+		}
+	}
+
+	// Handle calendar day click for booking
+	const handleCalendarDayClick = (dateString, isBooked) => {
+		if (isBooked) {
+			toast.error("This date is already booked")
+			return
+		}
+
+		if (selectingCheckIn) {
+			// Selecting check-in date
+			setCheckInDate(dateString)
+			setCheckOutDate("") // Reset check-out
+			setSelectingCheckIn(false)
+			toast.success("Check-in date selected. Now select check-out date.")
+		} else {
+			// Selecting check-out date
+			const checkIn = new Date(checkInDate)
+			const checkOut = new Date(dateString)
+
+			if (checkOut <= checkIn) {
+				toast.error("Check-out must be after check-in date")
+				return
+			}
+
+			// Check if date range is available
+			const tempDates = getDatesBetween(checkInDate, dateString)
+			const hasConflict = tempDates.some((date) => bookedDates.includes(date))
+
+			if (hasConflict) {
+				toast.error(
+					"Some dates in this range are booked. Please select different dates."
+				)
+				return
+			}
+
+			setCheckOutDate(dateString)
+			setSelectingCheckIn(true)
+			setShowDatePickerModal(false)
+			toast.success("Dates selected successfully!")
+		}
+	}
+
+	// Open date picker modal
+	const openDatePicker = () => {
+		setSelectingCheckIn(true)
+		setShowDatePickerModal(true)
+	}
+
+	// Check if selected dates are available
+	const checkDateAvailability = () => {
+		if (!checkInDate || !checkOutDate) return false
+
+		const selectedDates = getDatesBetween(checkInDate, checkOutDate)
+
+		// Check if any selected date is already booked
+		for (const date of selectedDates) {
+			if (bookedDates.includes(date)) {
+				return false
+			}
+		}
+		return true
 	}
 
 	// Handle PayPal payment
@@ -468,12 +912,39 @@ export default function PropertyDetails() {
 			return
 		}
 
+		// Validate check-out is after check-in
+		const checkIn = new Date(checkInDate)
+		const checkOut = new Date(checkOutDate)
+		if (checkOut <= checkIn) {
+			toast.error("Check-out date must be after check-in date")
+			return
+		}
+
+		// Validate number of guests doesn't exceed property capacity
+		const maxGuests =
+			property.capacity?.guests || property.capacity?.maxGuests || 8
+		if (numberOfGuests > maxGuests) {
+			toast.error(
+				`This property can accommodate a maximum of ${maxGuests} guests.`
+			)
+			setNumberOfGuests(maxGuests)
+			return
+		}
+
+		// Check if selected dates are available
+		if (!checkDateAvailability()) {
+			toast.error(
+				"Selected dates are not available. Please choose different dates."
+			)
+			return
+		}
+
 		const prices = calculatePrices()
 		const totalAmount = prices.total.toFixed(2)
 
 		// Check if PayPal SDK is loaded
 		if (!window.paypal || !isPayPalLoaded) {
-			toast.info("PayPal is loading, please wait...")
+			toast("PayPal is loading, please wait...")
 			return
 		}
 
@@ -493,7 +964,7 @@ export default function PropertyDetails() {
 								{
 									description: `${property.title} - ${prices.nights} nights (Full Payment)`,
 									amount: {
-										currency_code: "USD",
+										currency_code: "PHP",
 										value: totalAmount,
 									},
 								},
@@ -505,29 +976,87 @@ export default function PropertyDetails() {
 					},
 					onApprove: async (data, actions) => {
 						try {
+							setIsProcessingPayment(true)
+							toast("Processing your payment...", { type: "info" })
+
 							const details = await actions.order.capture()
-							await createBooking(details.id, details)
+
+							// Check if payment was successful
+							if (details.status === "COMPLETED") {
+								await createBooking(details.id, details)
+								// Refresh booked dates
+								await fetchBookedDates()
+								// Clear form
+								setCheckInDate("")
+								setCheckOutDate("")
+								setNumberOfGuests(1)
+							} else {
+								throw new Error("Payment not completed")
+							}
+
 							setIsProcessingPayment(false)
-							// Refresh booked dates
-							await fetchBookedDates()
-							// Clear form
-							setCheckInDate("")
-							setCheckOutDate("")
-							setNumberOfGuests(1)
 						} catch (error) {
 							console.error("Payment error:", error)
-							toast.error("Payment processing failed")
+
+							// Check for specific error types
+							if (
+								error.message &&
+								error.message.includes("INSUFFICIENT_FUNDS")
+							) {
+								toast.error(
+									"Insufficient funds in your PayPal account. Please add funds and try again."
+								)
+							} else if (
+								error.message &&
+								error.message.includes("INSTRUMENT_DECLINED")
+							) {
+								toast.error(
+									"Payment method declined. Please try a different payment method."
+								)
+							} else {
+								toast.error("Payment processing failed. Please try again.")
+							}
+
 							setIsProcessingPayment(false)
 						}
 					},
 					onError: (err) => {
 						console.error("PayPal error:", err)
-						toast.error("Payment failed")
+
+						// Provide specific error messages
+						if (err && err.message) {
+							if (err.message.includes("INSUFFICIENT_FUNDS")) {
+								toast.error(
+									"Insufficient balance in PayPal account. Please add funds."
+								)
+							} else if (err.message.includes("currency")) {
+								toast.error("Currency not supported. Please contact support.")
+							} else {
+								toast.error(`Payment failed: ${err.message}`)
+							}
+						} else {
+							toast.error(
+								"Payment failed. Please try again or contact support."
+							)
+						}
+
 						setIsProcessingPayment(false)
+
+						// Reload page after error
+						setTimeout(() => {
+							window.location.reload()
+						}, 2000)
 					},
 					onCancel: () => {
-						toast.info("Payment cancelled")
+						toast("Payment cancelled by user. Reloading page...", {
+							type: "info",
+						})
 						setIsProcessingPayment(false)
+
+						// Reload page after cancellation
+						setTimeout(() => {
+							window.location.reload()
+						}, 1500)
 					},
 				})
 				.render(paypalRef.current)
@@ -773,15 +1302,17 @@ export default function PropertyDetails() {
 												<div
 													key={index}
 													className={`calendar-day ${
-														dayData.isBooked || dayData.isPast
+														dayData.isBooked
 															? "booked"
+															: dayData.isPast
+															? "past"
 															: "available"
 													}`}
 													title={
 														dayData.isBooked
 															? "Already booked"
 															: dayData.isPast
-															? "Past date"
+															? "Past date (not bookable)"
 															: "Available"
 													}
 												>
@@ -798,6 +1329,10 @@ export default function PropertyDetails() {
 								<div className="legend-item">
 									<span className="legend-color available"></span>
 									Available
+								</div>
+								<div className="legend-item">
+									<span className="legend-color past"></span>
+									Past Date ( Not Bookable)
 								</div>
 								<div className="legend-item">
 									<span className="legend-color booked"></span>
@@ -909,26 +1444,46 @@ export default function PropertyDetails() {
 						</div>
 
 						<div className="booking-form">
-							<div className="date-inputs">
-								<div className="date-input">
-									<label>Check-in</label>
-									<input
-										type="date"
-										value={checkInDate}
-										onChange={(e) => setCheckInDate(e.target.value)}
-										min={getTodayDate()}
-									/>
-								</div>
-								<div className="date-input">
-									<label>Check-out</label>
-									<input
-										type="date"
-										value={checkOutDate}
-										onChange={(e) => setCheckOutDate(e.target.value)}
-										min={getMinCheckOutDate()}
-										disabled={!checkInDate}
-									/>
-								</div>
+							<div className="date-selector-container">
+								<label>Select Dates</label>
+								<button
+									className="date-selector-btn"
+									onClick={openDatePicker}
+									type="button"
+								>
+									<FaCalendarAlt className="calendar-icon" />
+									<div className="date-display">
+										{checkInDate && checkOutDate ? (
+											<>
+												<span className="date-label">Check-in:</span>
+												<span className="date-value">
+													{new Date(checkInDate).toLocaleDateString("en-US", {
+														month: "short",
+														day: "numeric",
+														year: "numeric",
+													})}
+												</span>
+												<span className="date-separator">→</span>
+												<span className="date-label">Check-out:</span>
+												<span className="date-value">
+													{new Date(checkOutDate).toLocaleDateString("en-US", {
+														month: "short",
+														day: "numeric",
+														year: "numeric",
+													})}
+												</span>
+											</>
+										) : (
+											<span className="placeholder">Click to select dates</span>
+										)}
+									</div>
+								</button>
+								{checkInDate && checkOutDate && (
+									<span className="nights-display">
+										{calculateNights()}{" "}
+										{calculateNights() === 1 ? "night" : "nights"}
+									</span>
+								)}
 							</div>
 							<div className="guests-input">
 								<label>Guests</label>
@@ -936,15 +1491,28 @@ export default function PropertyDetails() {
 									value={numberOfGuests}
 									onChange={(e) => setNumberOfGuests(Number(e.target.value))}
 								>
-									<option value={1}>1 guest</option>
-									<option value={2}>2 guests</option>
-									<option value={3}>3 guests</option>
-									<option value={4}>4 guests</option>
-									<option value={5}>5 guests</option>
-									<option value={6}>6 guests</option>
-									<option value={7}>7 guests</option>
-									<option value={8}>8+ guests</option>
+									{Array.from(
+										{
+											length:
+												property.capacity?.guests ||
+												property.capacity?.maxGuests ||
+												8,
+										},
+										(_, i) => i + 1
+									).map((num) => (
+										<option key={num} value={num}>
+											{num} {num === 1 ? "guest" : "guests"}
+										</option>
+									))}
 								</select>
+								{(property.capacity?.guests ||
+									property.capacity?.maxGuests) && (
+									<span className="max-guests-note">
+										Maximum{" "}
+										{property.capacity?.guests || property.capacity?.maxGuests}{" "}
+										guests allowed
+									</span>
+								)}
 							</div>
 							{checkInDate && checkOutDate ? (
 								<>
@@ -959,21 +1527,121 @@ export default function PropertyDetails() {
 											Complete payment to secure your booking
 										</p>
 									</div>
-									<button
-										className="book-now-btn"
-										onClick={handlePayPalPayment}
-										disabled={isProcessingPayment || !isPayPalLoaded}
-									>
-										{!isPayPalLoaded
-											? "Loading PayPal..."
-											: isProcessingPayment
-											? "Processing..."
-											: "Pay with PayPal"}
-									</button>
-									<div
-										ref={paypalRef}
-										className="paypal-button-container"
-									></div>
+
+									{/* Promo Code Section */}
+									{!appliedPromo ? (
+										<div className="promo-code-section">
+											<label className="promo-label-main">
+												Have a promo code?
+											</label>
+											<div className="promo-input-group">
+												<input
+													type="text"
+													placeholder="Enter promo code"
+													value={promoCode}
+													onChange={(e) =>
+														setPromoCode(e.target.value.toUpperCase())
+													}
+													className="promo-input"
+													maxLength={20}
+												/>
+												<button
+													onClick={validateAndApplyPromo}
+													className="apply-promo-btn"
+													disabled={isValidatingPromo || !promoCode.trim()}
+												>
+													{isValidatingPromo ? "Validating..." : "Apply"}
+												</button>
+											</div>
+										</div>
+									) : (
+										<div className="applied-promo-section">
+											<div className="applied-promo-info">
+												<span className="promo-label">
+													🎁 Promo: {appliedPromo.code}
+												</span>
+												<span className="discount-amount">
+													-₱{calculatePrices().promoDiscount.toLocaleString()}
+												</span>
+											</div>
+											<button
+												onClick={removePromo}
+												className="remove-promo-btn"
+											>
+												Remove Promo
+											</button>
+										</div>
+									)}
+
+									{/* Payment Method Selection */}
+									<div className="payment-method-selection">
+										<label className="payment-label">
+											Choose Payment Method:
+										</label>
+										<div className="payment-methods">
+											<button
+												className={`payment-method-btn ${
+													paymentMethod === "paypal" ? "active" : ""
+												}`}
+												onClick={() => setPaymentMethod("paypal")}
+											>
+												<span className="method-icon">💳</span>
+												<span>PayPal</span>
+											</button>
+											<button
+												className={`payment-method-btn ${
+													paymentMethod === "wallet" ? "active" : ""
+												}`}
+												onClick={() => setPaymentMethod("wallet")}
+											>
+												<span className="method-icon">💰</span>
+												<span>E-Wallet</span>
+												<span className="wallet-balance-hint">
+													₱{walletBalance.toLocaleString()}
+												</span>
+											</button>
+										</div>
+									</div>
+
+									{/* PayPal Payment */}
+									{paymentMethod === "paypal" ? (
+										<>
+											<button
+												className="book-now-btn paypal-btn"
+												onClick={handlePayPalPayment}
+												disabled={isProcessingPayment || !isPayPalLoaded}
+											>
+												{!isPayPalLoaded
+													? "Loading PayPal..."
+													: isProcessingPayment
+													? "Processing..."
+													: "Pay with PayPal"}
+											</button>
+											<div
+												ref={paypalRef}
+												className="paypal-button-container"
+											></div>
+										</>
+									) : (
+										/* Wallet Payment */
+										<button
+											className="book-now-btn wallet-btn"
+											onClick={handleWalletPayment}
+											disabled={
+												isProcessingPayment ||
+												walletBalance < calculatePrices().total
+											}
+										>
+											{isProcessingPayment
+												? "Processing..."
+												: walletBalance < calculatePrices().total
+												? `Insufficient Balance (₱${(
+														calculatePrices().total - walletBalance
+												  ).toLocaleString()} short)`
+												: "Pay with E-Wallet"}
+										</button>
+									)}
+
 									<p className="nights-info">
 										{calculateNights()}{" "}
 										{calculateNights() === 1 ? "night" : "nights"}
@@ -1020,6 +1688,17 @@ export default function PropertyDetails() {
 											</span>
 											<span>₱{prices.guestFee.toLocaleString()}</span>
 										</div>
+
+										{/* Show discount in breakdown if promo is applied */}
+										{appliedPromo && (
+											<div className="breakdown-item promo-discount">
+												<span className="promo-label">🎁 Promo Discount</span>
+												<span className="discount-amount">
+													-₱{prices.promoDiscount.toLocaleString()}
+												</span>
+											</div>
+										)}
+
 										<div className="breakdown-total">
 											<span>Total</span>
 											<span>
@@ -1128,6 +1807,147 @@ export default function PropertyDetails() {
 							{images.map((img, index) => (
 								<img key={index} src={img} alt={`Property view ${index + 1}`} />
 							))}
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Date Picker Modal */}
+			{showDatePickerModal && (
+				<div
+					className="date-picker-modal-overlay"
+					onClick={() => setShowDatePickerModal(false)}
+				>
+					<div
+						className="date-picker-modal-content"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<button
+							className="close-date-modal"
+							onClick={() => setShowDatePickerModal(false)}
+						>
+							<FaTimes />
+						</button>
+						<h2>
+							<FaCalendarAlt /> Select Your Dates
+						</h2>
+						<div className="modal-date-info">
+							<div className="selected-dates-display">
+								{checkInDate && (
+									<div className="selected-date-item check-in">
+										<span className="date-type">Check-in:</span>
+										<span className="date-text">
+											{new Date(checkInDate).toLocaleDateString("en-US", {
+												weekday: "short",
+												month: "short",
+												day: "numeric",
+												year: "numeric",
+											})}
+										</span>
+									</div>
+								)}
+								{checkOutDate && (
+									<div className="selected-date-item check-out">
+										<span className="date-type">Check-out:</span>
+										<span className="date-text">
+											{new Date(checkOutDate).toLocaleDateString("en-US", {
+												weekday: "short",
+												month: "short",
+												day: "numeric",
+												year: "numeric",
+											})}
+										</span>
+									</div>
+								)}
+								{!checkInDate && !checkOutDate && (
+									<p className="instruction-text">
+										{selectingCheckIn
+											? "Click on a date to select check-in"
+											: "Click on a date to select check-out"}
+									</p>
+								)}
+							</div>
+						</div>
+
+						<div className="modal-calendar">
+							<div className="month-view">
+								<div className="month-header">
+									<button onClick={previousMonth} className="month-nav-btn">
+										◀
+									</button>
+									<h3>
+										{currentMonth.toLocaleString("default", {
+											month: "long",
+											year: "numeric",
+										})}
+									</h3>
+									<button onClick={nextMonth} className="month-nav-btn">
+										▶
+									</button>
+								</div>
+								<div className="calendar-days">
+									{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+										(day) => (
+											<div key={day} className="day-label">
+												{day}
+											</div>
+										)
+									)}
+									{generateCalendarDays().map((dayData, index) =>
+										dayData ? (
+											<div
+												key={index}
+												className={`calendar-day ${
+													dayData.isBooked
+														? "booked"
+														: dayData.isPast
+														? "past"
+														: "available"
+												} ${
+													dayData.dateString === checkInDate
+														? "selected-check-in"
+														: ""
+												} ${
+													dayData.dateString === checkOutDate
+														? "selected-check-out"
+														: ""
+												}`}
+												onClick={() =>
+													handleCalendarDayClick(
+														dayData.dateString,
+														dayData.isBooked
+													)
+												}
+												title={
+													dayData.isBooked
+														? "Already booked"
+														: dayData.isPast
+														? "Past date (bookable)"
+														: "Available"
+												}
+											>
+												{dayData.day}
+											</div>
+										) : (
+											<div key={index} className="calendar-day empty"></div>
+										)
+									)}
+								</div>
+							</div>
+							<div className="calendar-legend">
+								<div className="legend-item">
+									<span className="legend-color available"></span>
+									Available
+								</div>
+								<div className="legend-item">
+									<span className="legend-color past"></span>
+									Past Date (Bookable)
+								</div>
+								<div className="legend-item">
+									<span className="legend-color booked"></span>
+									Booked/Unavailable
+								</div>
+							</div>
 						</div>
 					</div>
 				</div>

@@ -1,0 +1,617 @@
+/* Wallet Widget Styles */
+.wallet-widget {
+	background: linear-gradient(135deg, #415f94 0%, #2d4770 100%);
+	border-radius: 16px;
+	padding: 24px;
+	color: white;
+	box-shadow: 0 8px 24px rgba(65, 95, 148, 0.3);
+	margin-bottom: 24px;
+}
+
+.wallet-header {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	margin-bottom: 20px;
+}
+
+.wallet-icon {
+	font-size: 4rem;
+	background: rgba(255, 255, 255, 0.2);
+	padding: 12px;
+	border-radius: 12px;
+}
+
+.wallet-balance-info {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.wallet-label {
+	font-size: 14px;
+	opacity: 0.9;
+	font-weight: 500;
+}
+
+.wallet-balance {
+	font-size: 32px;
+	font-weight: 700;
+	letter-spacing: -0.5px;
+}
+
+.wallet-actions {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 10px;
+}
+
+.wallet-btn {
+	flex: 1;
+	padding: 12px 20px;
+	border: none;
+	border-radius: 10px;
+	font-size: 14px;
+	font-weight: 600;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	transition: all 0.3s ease;
+}
+
+.wallet-btn.primary {
+	background: white;
+	color: #415f94;
+}
+
+.wallet-btn.primary:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
+}
+
+.wallet-btn.withdraw {
+	background: rgba(255, 255, 255, 0.9);
+	color: #e67e22;
+	border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.wallet-btn.withdraw:hover {
+	background: white;
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(230, 126, 34, 0.3);
+}
+
+.wallet-btn.secondary {
+	background: rgba(255, 255, 255, 0.2);
+	color: white;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.wallet-btn.secondary:hover {
+	background: rgba(255, 255, 255, 0.3);
+}
+
+/* Top-Up Modal */
+.wallet-modal {
+	max-width: 500px;
+	width: 90%;
+}
+
+.wallet-modal .modal-body {
+	background: linear-gradient(135deg, #415f94 0%, #2d4770 100%);
+	padding: 24px;
+	border-radius: 0 0 20px 20px;
+}
+
+.topup-input-group {
+	margin-bottom: 20px;
+}
+
+.wallet-modal .modal-header h3 {
+	color: white;
+}
+
+.topup-input-group label {
+	display: block;
+	margin-bottom: 8px;
+	font-weight: 600;
+	color: white;
+}
+
+.amount-input-wrapper {
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.currency-symbol {
+	position: absolute;
+	left: 16px;
+	font-size: 18px;
+	font-weight: 600;
+	color: #415f94;
+}
+
+.amount-input-wrapper input {
+	width: 100%;
+	padding: 14px 16px 14px 40px;
+	border: 2px solid #e0e0e0;
+	border-radius: 10px;
+	font-size: 18px;
+	font-weight: 600;
+	transition: border-color 0.3s ease;
+}
+
+.amount-input-wrapper input:focus {
+	outline: none;
+	border-color: #415f94;
+}
+
+.quick-amounts {
+	margin-bottom: 24px;
+	background: linear-gradient(
+		135deg,
+		rgba(255, 255, 255, 0.1) 0%,
+		rgba(255, 255, 255, 0.05) 100%
+	);
+	padding: 16px;
+	border-radius: 12px;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.quick-label {
+	display: block;
+	font-size: 13px;
+	color: rgba(255, 255, 255, 0.9);
+	margin-bottom: 12px;
+	font-weight: 600;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
+}
+
+.quick-buttons {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 12px;
+}
+
+.quick-amount-btn {
+	padding: 16px 12px;
+	border: none;
+	background: linear-gradient(
+		180deg,
+		rgba(255, 255, 255, 0.95) 0%,
+		rgba(255, 255, 255, 0.85) 100%
+	);
+	border-radius: 12px;
+	font-weight: 700;
+	font-size: 16px;
+	color: #415f94;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12),
+		inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 1px 2px rgba(0, 0, 0, 0.05);
+	position: relative;
+	overflow: hidden;
+}
+
+.quick-amount-btn::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 50%;
+	background: linear-gradient(
+		180deg,
+		rgba(255, 255, 255, 0.4) 0%,
+		transparent 100%
+	);
+	border-radius: 12px 12px 0 0;
+}
+
+.quick-amount-btn:hover {
+	transform: translateY(-2px) scale(1.02);
+	box-shadow: 0 4px 16px rgba(65, 95, 148, 0.25),
+		inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 2px 4px rgba(0, 0, 0, 0.08);
+	background: linear-gradient(
+		180deg,
+		rgba(255, 255, 255, 1) 0%,
+		rgba(255, 255, 255, 0.9) 100%
+	);
+}
+
+.quick-amount-btn:active {
+	transform: translateY(0) scale(0.98);
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15), inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.paypal-section {
+	margin-top: 24px;
+	padding-top: 24px;
+	border-top: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.payment-instruction {
+	text-align: center;
+	color: white;
+	margin-bottom: 16px;
+	font-weight: 500;
+}
+
+.paypal-button-container {
+	min-height: 45px;
+}
+
+.paypal-withdraw-button {
+	width: 100%;
+	padding: 12px 20px;
+	background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
+	color: white;
+	border: none;
+	border-radius: 10px;
+	font-size: 15px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+}
+
+.paypal-withdraw-button:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 20px rgba(230, 126, 34, 0.4);
+	background: linear-gradient(135deg, #d35400 0%, #c44a00 100%);
+}
+
+.processing-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(255, 255, 255, 0.95);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	border-radius: 12px;
+	z-index: 1000;
+}
+
+.spinner {
+	width: 40px;
+	height: 40px;
+	border: 4px solid #f3f3f3;
+	border-top: 4px solid #415f94;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+	0% {
+		transform: rotate(0deg);
+	}
+	100% {
+		transform: rotate(360deg);
+	}
+}
+
+.error-message {
+	color: #ff6b6b;
+	font-size: 14px;
+	margin-top: 8px;
+	text-align: center;
+	background: rgba(231, 76, 60, 0.1);
+	padding: 8px;
+	border-radius: 8px;
+	border: 1px solid rgba(231, 76, 60, 0.3);
+}
+
+/* Transactions Modal */
+.transactions-modal {
+	max-width: 600px;
+	width: 90%;
+	max-height: 80vh;
+}
+
+.modal-header-wallet {
+	padding: 24px;
+	border-bottom: 1px solid #e0e0e0;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.modal-header-wallet h3 {
+	margin: 0;
+	font-size: 20px;
+	font-weight: 700;
+	color: #333;
+}
+
+.transactions-modal .modal-body {
+	max-height: 60vh;
+	overflow-y: auto;
+}
+
+.no-transactions {
+	text-align: center;
+	padding: 40px 20px;
+	color: #999;
+}
+
+.no-transactions .empty-icon {
+	font-size: 48px;
+	margin-bottom: 16px;
+	opacity: 0.5;
+}
+
+.transactions-list {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.transaction-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 16px;
+	background: #f9f9f9;
+	border-radius: 12px;
+	border: 1px solid #e0e0e0;
+	transition: all 0.2s ease;
+}
+
+.transaction-item:hover {
+	background: #f0f4f8;
+	border-color: #415f94;
+}
+
+.txn-left {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex: 1;
+}
+
+.txn-icon {
+	font-size: 24px;
+	padding: 10px;
+	border-radius: 10px;
+	background: white;
+}
+
+.txn-icon.green {
+	color: #27ae60;
+	background: #e8f5e9;
+}
+
+.txn-icon.red {
+	color: #e74c3c;
+	background: #ffebee;
+}
+
+.txn-icon.blue {
+	color: #3498db;
+	background: #e3f2fd;
+}
+
+.txn-icon.orange {
+	color: #e67e22;
+	background: #fff3e0;
+}
+
+.txn-details {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.txn-type {
+	font-weight: 600;
+	color: #333;
+	font-size: 14px;
+}
+
+.txn-date {
+	font-size: 12px;
+	color: #999;
+}
+
+.txn-property {
+	font-size: 12px;
+	color: #415f94;
+	font-weight: 500;
+}
+
+.txn-right {
+	text-align: right;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.txn-amount {
+	font-weight: 700;
+	font-size: 16px;
+}
+
+.txn-amount.positive {
+	color: #27ae60;
+}
+
+.txn-amount.negative {
+	color: #e74c3c;
+}
+
+.txn-balance {
+	font-size: 11px;
+	color: #999;
+}
+
+.txn-fee {
+	font-size: 10px;
+	color: #e67e22;
+	font-weight: 600;
+}
+
+/* Withdrawal Modal Specific Styles */
+.withdrawal-info-banner {
+	background: linear-gradient(
+		135deg,
+		rgba(230, 126, 34, 0.2) 0%,
+		rgba(230, 126, 34, 0.1) 100%
+	);
+	border: 2px solid rgba(230, 126, 34, 0.5);
+	border-radius: 10px;
+	padding: 12px 16px;
+	margin-bottom: 20px;
+}
+
+.withdrawal-info-banner p {
+	margin: 0;
+	font-size: 13px;
+	color: white;
+	line-height: 1.5;
+}
+
+.withdrawal-info-banner strong {
+	color: #d9c36f;
+}
+
+.current-balance-display {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	background: linear-gradient(
+		135deg,
+		rgba(255, 255, 255, 0.15) 0%,
+		rgba(255, 255, 255, 0.08) 100%
+	);
+	padding: 16px;
+	border-radius: 10px;
+	margin-bottom: 20px;
+	border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.balance-label {
+	font-size: 14px;
+	color: white;
+	font-weight: 600;
+}
+
+.balance-value {
+	font-size: 20px;
+	font-weight: 700;
+	color: #d9c36f;
+}
+
+.withdrawal-summary {
+	background: #f8f9fa;
+	padding: 16px;
+	border-radius: 10px;
+	margin: 20px 0;
+	border: 2px solid #e0e0e0;
+}
+
+.summary-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 8px 0;
+	font-size: 14px;
+}
+
+.summary-row span {
+	color: #666;
+}
+
+.summary-row strong {
+	color: #333;
+	font-size: 15px;
+}
+
+.fee-row {
+	border-top: 1px solid #e0e0e0;
+	margin-top: 4px;
+	padding-top: 12px;
+}
+
+.fee-amount {
+	color: #e67e22 !important;
+}
+
+.total-row {
+	border-top: 2px solid #415f94;
+	margin-top: 8px;
+	padding-top: 12px;
+}
+
+.total-amount {
+	color: #27ae60 !important;
+	font-size: 18px !important;
+}
+
+.withdraw-confirm-btn {
+	width: 100%;
+	padding: 14px;
+	background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
+	color: white;
+	border: none;
+	border-radius: 10px;
+	font-size: 15px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	margin-top: 20px;
+}
+
+.withdraw-confirm-btn:hover:not(:disabled) {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 20px rgba(230, 126, 34, 0.4);
+}
+
+.withdraw-confirm-btn:disabled {
+	background: #cccccc;
+	cursor: not-allowed;
+	transform: none;
+}
+
+.withdrawal-note {
+	text-align: center;
+	font-size: 12px;
+	color: rgba(255, 255, 255, 0.8);
+	margin-top: 16px;
+	line-height: 1.5;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+	.wallet-balance {
+		font-size: 24px;
+	}
+
+	.wallet-actions {
+		flex-direction: column;
+	}
+
+	.quick-buttons {
+		grid-template-columns: repeat(2, 1fr);
+	}
+
+	.transaction-item {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 12px;
+	}
+
+	.txn-right {
+		align-self: flex-end;
+	}
+}

@@ -84,7 +84,7 @@ export default function Profile() {
 	const [profilePhotoUrl, setProfilePhotoUrl] = useState("")
 
 	// ImgBB API Key
-	const IMGBB_API_KEY = "3faccdbff5c63b07fd226c756d1846f4"
+	const IMGBB_API_KEY = import.meta.env.VITE_IMGBB_API_KEY
 
 	// Check if profile is incomplete
 	const isProfileIncomplete =
@@ -128,7 +128,7 @@ export default function Profile() {
 		// Load PayPal SDK (Sandbox)
 		const paypalScript = document.createElement("script")
 		paypalScript.src =
-			"https://www.paypal.com/sdk/js?client-id=AWu1C01rCyrjqljj3axT3ztlh25ARLpdRgi3TNCYJQw4u4ihBd9yYbR_rnbPNL8JgYc1mhIB2Uxpzch2&vault=true&intent=tokenize"
+			`https://www.paypal.com/sdk/js?client-id=${import.meta.env.VITE_PAYPAL_CLIENT_ID}&vault=true&intent=tokenize`
 		paypalScript.async = true
 		document.head.appendChild(paypalScript)
 

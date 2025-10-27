@@ -1,245 +1,403 @@
-# EmailJS Setup Guide
+# EmailJS Configuration Guide
 
-This guide will help you set up EmailJS for sending verification emails in AuraStays.
+## Overview
 
-## 📧 Why EmailJS?
+This project uses multiple EmailJS configurations to handle different types of emails for guests and hosts.
 
-EmailJS allows you to send emails directly from the frontend without needing a backend server. It's perfect for verification emails, contact forms, and notifications.
+## Environment Variables
 
-## 🚀 Setup Steps
+All EmailJS credentials are stored in the `.env` file (not committed to Git).
 
-### Step 1: Create EmailJS Account
+### Guest Configuration
 
-1. Go to [EmailJS](https://www.emailjs.com/)
-2. Click **Sign Up** (or login if you have an account)
-3. Verify your email address
+Used for sending emails to guests (invoices, verification):
 
-### Step 2: Add Email Service
+- `VITE_EMAILJS_GUEST_PUBLIC_KEY` - Guest public key: `nQD0ZU2iCXUeLVfl_`
+- `VITE_EMAILJS_GUEST_SERVICE_ID` - Guest service: `service_4lomzam`
+- `VITE_EMAILJS_GUEST_INVOICE_TEMPLATE_ID` - Invoice template: `template_oisprxq`
 
-1. In your EmailJS dashboard, click **Add New Service**
-2. Choose your email provider (Gmail, Outlook, etc.)
-3. Follow the instructions to connect your email account
-4. **Copy your Service ID** (e.g., `service_abc123`)
+### Host Configuration
 
-### Step 3: Create Email Template
+Used for sending emails to hosts (booking confirmations, payouts):
 
-1. Go to **Email Templates** in the dashboard
-2. Click **Create New Template**
-3. Use this template structure:
+- `VITE_EMAILJS_HOST_PUBLIC_KEY` - Host public key: `a4lWJRKQBrMrfk4Of`
+- `VITE_EMAILJS_HOST_SERVICE_ID` - Host service: `service_6v439zx`
+- `VITE_EMAILJS_HOST_BOOKING_TEMPLATE_ID` - Booking confirmation template (to be created)
+- `VITE_EMAILJS_HOST_PAYOUT_TEMPLATE_ID` - Payout notification template (to be created)
 
-**Subject:**
+### Verification Configuration
 
-```
-Welcome to AuraStays - Verify Your Email
-```
-
-**Body (HTML):**
-
-```html
-<!DOCTYPE html>
-<html>
-	<head>
-		<style>
-			body {
-				font-family: Arial, sans-serif;
-				background-color: #f4f4f4;
-				padding: 20px;
-			}
-			.container {
-				max-width: 600px;
-				margin: 0 auto;
-				background: white;
-				padding: 30px;
-				border-radius: 10px;
-			}
-			.header {
-				text-align: center;
-				margin-bottom: 30px;
-			}
-			.logo {
-				color: #61bf9c;
-				font-size: 32px;
-				font-weight: bold;
-			}
-			.content {
-				color: #333;
-				line-height: 1.6;
-			}
-			.button {
-				display: inline-block;
-				padding: 12px 30px;
-				background: linear-gradient(45deg, #61bf9c, #4a9d7e);
-				color: white;
-				text-decoration: none;
-				border-radius: 5px;
-				margin: 20px 0;
-			}
-			.footer {
-				margin-top: 30px;
-				padding-top: 20px;
-				border-top: 1px solid #ddd;
-				color: #888;
-				font-size: 12px;
-			}
-		</style>
-	</head>
-	<body>
-		<div class="container">
-			<div class="header">
-				<div class="logo">AuraStays</div>
-				<p style="color: #666;">Find your place, feel the aura.</p>
-			</div>
-
-			<div class="content">
-				<h2>Welcome to AuraStays, {{to_name}}! 🎉</h2>
-
-				<p>
-					Thank you for signing up! We're excited to have you join our
-					community.
-				</p>
-
-				<p>{{message}}</p>
-
-				<p>
-					To complete your registration, please verify your email address by
-					clicking the button below:
-				</p>
-
-				<div style="text-align: center;">
-					<a href="{{verification_link}}" class="button"
-						>Verify Email Address</a
-					>
-				</div>
-
-				<p>Or copy and paste this link into your browser:</p>
-				<p
-					style="background: #f4f4f4; padding: 10px; border-radius: 5px; word-break: break-all;"
-				>
-					{{verification_link}}
-				</p>
-
-				<p>
-					If you didn't create an account with AuraStays, you can safely ignore
-					this email.
-				</p>
-
-				<p>Best regards,<br />The AuraStays Team</p>
-			</div>
-
-			<div class="footer">
-				<p>
-					This is an automated message from AuraStays. Please do not reply to
-					this email.
-				</p>
-				<p>&copy; 2025 AuraStays. All rights reserved.</p>
-			</div>
-		</div>
-	</body>
-</html>
-```
-
-4. Make sure you use these template variables:
-
-   - `{{to_name}}` - Recipient's name
-   - `{{to_email}}` - Recipient's email
-   - `{{verification_link}}` - Link to verification page
-   - `{{message}}` - Welcome message
-   - `{{from_name}}` - Sender name (AuraStays)
-
-5. **Copy your Template ID** (e.g., `template_xyz789`)
-
-### Step 4: Get Public Key
-
-1. Go to **Account** → **General**
-2. Find your **Public Key**
-3. **Copy the Public Key** (e.g., `abcd1234efgh5678`)
-
-### Step 5: Update Configuration
-
-1. Open `src/utils/emailService.js`
-2. Replace the placeholder values:
-
-```javascript
-const EMAILJS_SERVICE_ID = "your_service_id" // Replace with your Service ID
-const EMAILJS_TEMPLATE_ID = "your_template_id" // Replace with your Template ID
-const EMAILJS_PUBLIC_KEY = "your_public_key" // Replace with your Public Key
-```
-
-**Example:**
-
-```javascript
-const EMAILJS_SERVICE_ID = "service_abc123"
-const EMAILJS_TEMPLATE_ID = "template_xyz789"
-const EMAILJS_PUBLIC_KEY = "abcd1234efgh5678"
-```
-
-## 🧪 Testing
-
-1. Run your app: `npm run dev`
-2. Go to the signup page
-3. Create a new account
-4. Check your email inbox for the verification email
-
-## 📝 Template Variables Reference
-
-The following variables are sent to EmailJS from the signup process:
-
-| Variable            | Description               | Example                                              |
-| ------------------- | ------------------------- | ---------------------------------------------------- |
-| `to_email`          | User's email address      | `user@example.com`                                   |
-| `to_name`           | User's full name          | `John Doe`                                           |
-| `verification_link` | Link to verification page | `http://localhost:5173/verify-email`                 |
-| `from_name`         | Sender name               | `AuraStays`                                          |
-| `message`           | Welcome message           | `Welcome to AuraStays! We're excited to have you...` |
-
-## 🔒 Security Notes
-
-1. **Public Key is Safe**: The EmailJS public key can be exposed in the frontend
-2. **Rate Limits**: EmailJS has rate limits based on your plan
-3. **Production**: In production, the verification link will use your domain
-
-## 📊 EmailJS Dashboard Features
-
-- **Email Statistics**: Track sent emails and delivery rates
-- **Template Testing**: Test your templates before deploying
-- **Auto-Reply**: Set up automatic responses
-- **Email Logs**: View all sent emails and their status
-
-## 🐛 Troubleshooting
-
-### Emails not sending?
-
-- Check your Service ID, Template ID, and Public Key are correct
-- Verify your email service is connected in EmailJS dashboard
-- Check browser console for errors
-- Make sure template variables match exactly (case-sensitive)
-
-### Emails going to spam?
-
-- Add your domain to SPF/DKIM records (if using custom domain)
-- Use a professional email service (Gmail, Outlook, etc.)
-- Keep email content professional and avoid spam trigger words
-
-### Template not rendering?
-
-- Double-check variable names: `{{to_name}}` not `{{toName}}`
-- Ensure all variables are included in the template
-- Test the template in EmailJS dashboard first
-
-## 🎯 Next Steps
-
-After setting up EmailJS:
-
-1. ✅ Test the email sending functionality
-2. ✅ Customize the email template to match your brand
-3. ✅ Set up additional templates for other notifications
-4. ✅ Monitor email delivery in EmailJS dashboard
-
-## 📞 Support
-
-- **EmailJS Docs**: [https://www.emailjs.com/docs/](https://www.emailjs.com/docs/)
-- **EmailJS Support**: [https://www.emailjs.com/support/](https://www.emailjs.com/support/)
+- `VITE_EMAILJS_VERIFICATION_TEMPLATE_ID` - Email verification: `template_lug7c18`
 
 ---
 
-**Happy Emailing! 📧**
+## Email Types
+
+### 1. Guest Invoice Email
+
+**When**: After successful payment/booking
+**Template**: `template_oisprxq`
+**Service**: `service_4lomzam` (Guest)
+**File**: `src/pages/PropertyDetails.jsx`
+
+**Template Variables**:
+
+```javascript
+{
+  guestName: "John Doe",
+  orderNumber: "ABC12345",
+  propertyName: "Beachfront Villa",
+  date: "Jan 10, 2024 to Jan 15, 2024",
+  checkInDate: "2024-01-10",
+  checkOutDate: "2024-01-15",
+  numberOfNights: 5,
+  numberOfGuests: 4,
+  price: "25000.00",
+  cleaningFee: "2000.00",
+  serviceFee: "2700.00",
+  guestFee: "400.00",
+  total: "30100.00",
+  email: "guest@example.com",
+  paymentId: "PAYPAL-123456",
+  paymentDate: "October 26, 2025",
+  paymentMethod: "PayPal"
+}
+```
+
+---
+
+### 2. Verification Email
+
+**When**: User signs up
+**Template**: `template_lug7c18`
+**Service**: `service_4lomzam` (Guest)
+**File**: `src/utils/emailService.js`
+
+**Template Variables**:
+
+```javascript
+{
+  name: "John Doe",
+  email: "user@example.com",
+  verification_link: "https://...",
+  from_name: "AuraStays",
+  message: "Welcome to AuraStays! We're excited to have you join our community."
+}
+```
+
+---
+
+### 3. Host Booking Confirmation ✅ IMPLEMENTED
+
+**When**: Guest completes a booking
+**Template**: `VITE_EMAILJS_HOST_BOOKING_TEMPLATE_ID` (create in EmailJS)
+**Service**: `service_6v439zx` (Host)
+**Files**:
+
+- `src/utils/hostEmailService.js` (email service)
+- `src/pages/PropertyDetails.jsx` (calls the service)
+
+**Template Variables**:
+
+```javascript
+{
+  hostEmail: "host@example.com",        // Host's email address
+  hostName: "Jane Host",                 // Host's name
+  guestName: "John Guest",               // Guest's name
+  propertyName: "Beachfront Villa",      // Property title
+  checkInDate: "January 10, 2024",       // Formatted check-in date
+  checkOutDate: "January 15, 2024",      // Formatted check-out date
+  numberOfGuests: 4,                     // Number of guests
+  numberOfNights: 5,                     // Number of nights
+  totalAmount: "₱30,100",                // Total amount (formatted)
+  bookingId: "ABC12345"                  // Booking ID (8 chars)
+}
+```
+
+**EmailJS Template Example**:
+
+```
+Subject: New Booking Confirmation - {{propertyName}}
+
+Dear {{hostName}},
+
+Great news! You have a new booking for {{propertyName}}.
+
+Booking Details:
+- Guest: {{guestName}}
+- Check-in: {{checkInDate}}
+- Check-out: {{checkOutDate}}
+- Nights: {{numberOfNights}}
+- Guests: {{numberOfGuests}}
+- Total Amount: ₱{{totalAmount}}
+- Booking ID: {{bookingId}}
+- Booking Date: {{bookingDate}}
+
+Please prepare your property for the guest's arrival.
+
+Best regards,
+AuraStays Team
+```
+
+---
+
+### 4. Host Payout Notification (To Be Created)
+
+**When**: Admin approves payout
+**Template**: Create `template_host_payout_here`
+**Service**: `service_6v439zx` (Host)
+**File**: `src/utils/hostEmailService.js`
+
+**Template Variables** (suggested):
+
+```javascript
+{
+  to_email: "host@example.com",
+  hostName: "Jane Host",
+  payoutAmount: "25000.00",
+  payoutDate: "2025-10-30",
+  payoutMethod: "PayPal",
+  payoutId: "PO123456",
+  processedDate: "October 26, 2025"
+}
+```
+
+**EmailJS Template Example**:
+
+```
+Subject: Payout Processed - ₱{{payoutAmount}}
+
+Dear {{hostName}},
+
+Your payout has been processed successfully!
+
+Payout Details:
+- Amount: ₱{{payoutAmount}}
+- Method: {{payoutMethod}}
+- Payout Date: {{payoutDate}}
+- Payout ID: {{payoutId}}
+- Processed On: {{processedDate}}
+
+The funds should arrive in your account within 3-5 business days.
+
+Best regards,
+AuraStays Team
+```
+
+---
+
+## Usage Examples
+
+### Sending Guest Invoice (Already Implemented)
+
+```javascript
+// In PropertyDetails.jsx after successful payment
+const response = await emailjs.send(
+	import.meta.env.VITE_EMAILJS_GUEST_SERVICE_ID,
+	import.meta.env.VITE_EMAILJS_GUEST_INVOICE_TEMPLATE_ID,
+	invoiceData
+)
+```
+
+### Sending Host Booking Confirmation (To Be Implemented)
+
+```javascript
+import { sendHostBookingConfirmation } from "@/utils/hostEmailService"
+
+// After guest completes booking
+await sendHostBookingConfirmation({
+	hostEmail: property.hostEmail,
+	hostName: property.hostName,
+	guestName: currentUser.displayName,
+	propertyName: property.title,
+	checkInDate: checkInDate,
+	checkOutDate: checkOutDate,
+	numberOfGuests: numberOfGuests,
+	numberOfNights: calculateNights(),
+	totalAmount: prices.total,
+	bookingId: bookingId,
+})
+```
+
+### Sending Host Payout Notification (To Be Implemented)
+
+```javascript
+import { sendHostPayoutNotification } from "@/utils/hostEmailService"
+
+// In AdminDashboard.jsx when approving payout
+await sendHostPayoutNotification({
+	hostEmail: payout.hostEmail,
+	hostName: payout.hostName,
+	payoutAmount: payout.amount,
+	payoutDate: new Date().toISOString().split("T")[0],
+	payoutMethod: "PayPal",
+	payoutId: payout.id,
+})
+```
+
+---
+
+## File Structure
+
+```
+src/
+├── pages/
+│   └── PropertyDetails.jsx      # Guest invoice emails
+├── utils/
+│   ├── emailService.js          # Guest verification emails
+│   └── hostEmailService.js      # Host emails (NEW)
+└── .env                         # Email credentials (not in Git)
+```
+
+---
+
+## Setup Instructions
+
+### 1. Restart Development Server
+
+After updating `.env` file:
+
+```bash
+npm run dev
+```
+
+### 2. Create Missing Templates in EmailJS
+
+Go to https://dashboard.emailjs.com/admin/templates
+
+**For Host Booking Confirmation:**
+
+1. Click "Create New Template"
+2. Set Template ID: `template_host_booking` (or your choice)
+3. Add the template content (see example above)
+4. Set "To Email": `{{to_email}}`
+5. Update `.env`: `VITE_EMAILJS_HOST_BOOKING_TEMPLATE_ID=your_template_id`
+
+**For Host Payout Notification:**
+
+1. Click "Create New Template"
+2. Set Template ID: `template_host_payout` (or your choice)
+3. Add the template content (see example above)
+4. Set "To Email": `{{to_email}}`
+5. Update `.env`: `VITE_EMAILJS_HOST_PAYOUT_TEMPLATE_ID=your_template_id`
+
+### 3. Update Environment Variables
+
+After creating templates, update your `.env` file with the actual template IDs.
+
+---
+
+## Testing
+
+### Test Guest Invoice
+
+1. Go to a property
+2. Complete a booking with PayPal
+3. Check guest's email for invoice
+
+### Test Host Booking Confirmation
+
+```javascript
+// In browser console (after creating template)
+import { sendHostBookingConfirmation } from "./utils/hostEmailService"
+await sendHostBookingConfirmation({
+	hostEmail: "your-test-email@gmail.com",
+	hostName: "Test Host",
+	guestName: "Test Guest",
+	propertyName: "Test Property",
+	checkInDate: "2025-11-01",
+	checkOutDate: "2025-11-05",
+	numberOfGuests: 2,
+	numberOfNights: 4,
+	totalAmount: "10000",
+	bookingId: "TEST123",
+})
+```
+
+---
+
+## Security Notes
+
+✅ **DO:**
+
+- Keep `.env` file out of Git (already in `.gitignore`)
+- Use `.env.example` as a template for team members
+- Rotate credentials if exposed
+
+❌ **DON'T:**
+
+- Commit `.env` to Git
+- Share credentials in Slack/Discord
+- Hardcode credentials in source files
+
+---
+
+## Troubleshooting
+
+### Email Not Sending
+
+1. Check browser console for errors
+2. Verify service ID and template ID are correct
+3. Ensure public key matches the service
+4. Check EmailJS dashboard for quota limits
+5. Verify `.env` variables are loading (restart dev server)
+
+### Wrong Template Used
+
+- Check that correct service ID matches the public key
+- Guest emails use `service_4lomzam`
+- Host emails use `service_6v439zx`
+
+### 404 Account Not Found
+
+- Public key is incorrect
+- Verify in EmailJS dashboard: Account → Public Key
+
+---
+
+## Setup Instructions for Host Booking Confirmation
+
+### Step 1: Create EmailJS Template
+
+1. Go to [EmailJS Dashboard](https://dashboard.emailjs.com/)
+2. Navigate to **Email Templates**
+3. Click **Create New Template**
+4. Use the template example from section 3 above
+5. Save the template and copy the **Template ID**
+
+### Step 2: Update .env File
+
+Add the template ID to your `.env` file:
+
+```env
+VITE_EMAILJS_HOST_BOOKING_TEMPLATE_ID=your_template_id_here
+```
+
+### Step 3: Restart Development Server
+
+After updating `.env`, restart your Vite dev server:
+
+```bash
+npm run dev
+```
+
+### Step 4: Reconnect Gmail (if needed)
+
+If you get "Invalid grant" errors:
+
+1. Go to EmailJS → **Email Services**
+2. Click on your Host service (`service_6v439zx`)
+3. Click **Reconnect** and authorize Gmail again
+
+---
+
+## Future Enhancements
+
+- [x] ✅ Create host booking confirmation template (IMPLEMENTED)
+- [ ] Create host payout notification template
+- [ ] Add email retry logic
+- [ ] Implement email queue for high volume
+- [ ] Add email analytics/tracking
+- [ ] Create admin notification emails
+- [ ] Add booking reminder emails
+- [ ] Add review request emails

@@ -2,7 +2,14 @@ import { useAuth } from "../contexts/AuthContext"
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { auth, db } from "../components/firebaseConfig"
-import { collection, getDocs, updateDoc, doc, setDoc } from "firebase/firestore"
+import {
+	collection,
+	getDocs,
+	updateDoc,
+	doc,
+	setDoc,
+	addDoc,
+} from "firebase/firestore"
 import { toast } from "react-stacked-toast"
 import {
 	Chart as ChartJS,
@@ -58,8 +65,8 @@ const AdminDashboard = () => {
 	const [policies, setPolicies] = useState({
 		serviceFeeHost: 15, // percentage
 		serviceFeeGuest: 12, // percentage
-		guestFeePerPerson: 100, // fixed amount in pesos
-		guestFeeFor8Plus: 1000, // fixed amount for 8+ guests
+		guestFeePerPerson: 100, // fixed amount in pesos per guest
+		walletWithdrawalFee: 1, // percentage
 		cancellationWindowHours: 48,
 		minPropertyRating: 3.0,
 		maxCancellationsBeforeReview: 3,
@@ -71,6 +78,23 @@ const AdminDashboard = () => {
 		data: null,
 		title: "",
 	})
+	const [showPromoWizard, setShowPromoWizard] = useState(false)
+	const [promoWizardStep, setPromoWizardStep] = useState(1)
+	const [promoFormData, setPromoFormData] = useState({
+		code: "",
+		description: "",
+		discountType: "percentage", // 'percentage' or 'fixed'
+		discountValue: 0,
+		minPurchase: 0,
+		maxDiscount: 0,
+		usageLimit: 0,
+		usagePerUser: 1,
+		validFrom: "",
+		validUntil: "",
+		isActive: true,
+		applicableTo: "all", // 'all', 'properties', 'experiences'
+	})
+	const [isCreatingPromo, setIsCreatingPromo] = useState(false)
 
 	useEffect(() => {
 		fetchAdminData()
@@ -362,6 +386,106 @@ const AdminDashboard = () => {
 			console.error("Error updating policies:", err)
 			toast.error("❌ Failed to update policies: " + err.message)
 		}
+	}
+
+	// Promo Wizard Functions
+	const handlePromoInputChange = (field, value) => {
+		setPromoFormData((prev) => ({
+			...prev,
+			[field]: value,
+		}))
+	}
+
+	const handleNextStep = () => {
+		// Validation for each step
+		if (promoWizardStep === 1) {
+			if (!promoFormData.code || !promoFormData.description) {
+				toast.error("Please fill in promo code and description")
+				return
+			}
+		} else if (promoWizardStep === 2) {
+			if (promoFormData.discountValue <= 0) {
+				toast.error("Please enter a valid discount value")
+				return
+			}
+		}
+		setPromoWizardStep(promoWizardStep + 1)
+	}
+
+	const handlePreviousStep = () => {
+		setPromoWizardStep(promoWizardStep - 1)
+	}
+
+	const handleCreatePromo = async () => {
+		try {
+			setIsCreatingPromo(true)
+
+			// Validate all required fields
+			if (!promoFormData.code || !promoFormData.description) {
+				toast.error("Please fill in all required fields")
+				return
+			}
+
+			if (promoFormData.discountValue <= 0) {
+				toast.error("Discount value must be greater than 0")
+				return
+			}
+
+			// Create promo object
+			const promoData = {
+				...promoFormData,
+				code: promoFormData.code.toUpperCase(),
+				usedBy: [],
+				usageCount: 0,
+				createdAt: new Date().toISOString(),
+				createdBy: currentUser.uid,
+			}
+
+			// Add to Firebase
+			await addDoc(collection(db, "promos"), promoData)
+
+			toast.success("🎉 Promo created successfully!")
+			setShowPromoWizard(false)
+			setPromoWizardStep(1)
+			setPromoFormData({
+				code: "",
+				description: "",
+				discountType: "percentage",
+				discountValue: 0,
+				minPurchase: 0,
+				maxDiscount: 0,
+				usageLimit: 0,
+				usagePerUser: 1,
+				validFrom: "",
+				validUntil: "",
+				isActive: true,
+				applicableTo: "all",
+			})
+		} catch (err) {
+			console.error("Error creating promo:", err)
+			toast.error("❌ Failed to create promo: " + err.message)
+		} finally {
+			setIsCreatingPromo(false)
+		}
+	}
+
+	const handleCancelPromoWizard = () => {
+		setShowPromoWizard(false)
+		setPromoWizardStep(1)
+		setPromoFormData({
+			code: "",
+			description: "",
+			discountType: "percentage",
+			discountValue: 0,
+			minPurchase: 0,
+			maxDiscount: 0,
+			usageLimit: 0,
+			usagePerUser: 1,
+			validFrom: "",
+			validUntil: "",
+			isActive: true,
+			applicableTo: "all",
+		})
 	}
 
 	const updateAllPropertiesOwner = async () => {
@@ -1024,6 +1148,13 @@ const AdminDashboard = () => {
 						<span className="tab-icon">📄</span>
 						<span>Generate Reports</span>
 					</button>
+					<button
+						className={`tab-btn ${activeTab === "promos" ? "active" : ""}`}
+						onClick={() => setActiveTab("promos")}
+					>
+						<span className="tab-icon">🎁</span>
+						<span>Promos</span>
+					</button>
 				</div>
 			</header>
 
@@ -1398,25 +1529,26 @@ const AdminDashboard = () => {
 								</div>
 								<div className="fee-item">
 									<label>
-										<strong>Guest Fee (8+ Guests Fixed):</strong>
+										<strong>Wallet Withdrawal Fee:</strong>
 										<span className="fee-description">
-											Fixed fee for bookings with 8 or more guests
+											Fee deducted from e-wallet withdrawals
 										</span>
 									</label>
 									<div className="fee-input">
-										<span className="fee-unit">₱</span>
 										<input
 											type="number"
-											value={policies.guestFeeFor8Plus}
+											value={policies.walletWithdrawalFee}
 											onChange={(e) =>
 												setPolicies({
 													...policies,
-													guestFeeFor8Plus: parseFloat(e.target.value),
+													walletWithdrawalFee: parseFloat(e.target.value),
 												})
 											}
 											min="0"
-											step="100"
+											max="10"
+											step="0.1"
 										/>
+										<span className="fee-unit">%</span>
 									</div>
 								</div>
 								<button
@@ -1770,17 +1902,32 @@ const AdminDashboard = () => {
 									</li>
 									<li>
 										Guest fee of ₱{policies.guestFeePerPerson} per person for
-										bookings
-									</li>
-									<li>
-										For bookings with 8 or more guests, a fixed guest fee of ₱
-										{policies.guestFeeFor8Plus.toLocaleString()} applies
+										all bookings
 									</li>
 									<li>All charges must be paid in full at time of booking</li>
 									<li>
 										Payment is processed securely through approved methods
 									</li>
 									<li>Guests responsible for any damage caused during stay</li>
+								</ul>
+								<h4>4.3 E-Wallet & Withdrawals</h4>
+								<ul>
+									<li>
+										Users can maintain an e-wallet balance for booking payments
+									</li>
+									<li>
+										E-wallet can be topped up using approved payment methods
+									</li>
+									<li>
+										Withdrawal requests are subject to a{" "}
+										{policies.walletWithdrawalFee}% processing fee
+									</li>
+									<li>Minimum withdrawal amount is ₱100</li>
+									<li>Withdrawals are processed instantly to PayPal</li>
+									<li>
+										Users are responsible for maintaining valid PayPal account
+										details
+									</li>
 								</ul>
 							</div>
 
@@ -2435,6 +2582,48 @@ const AdminDashboard = () => {
 					</div>
 				)}
 
+				{/* Promos Tab */}
+				{activeTab === "promos" && (
+					<div className="content-section promos-section">
+						<div className="section-header">
+							<div>
+								<h2>🎁 Promo Codes Management</h2>
+								<p>Create and manage promotional codes for your platform</p>
+							</div>
+							<button
+								className="create-promo-btn"
+								onClick={() => setShowPromoWizard(true)}
+							>
+								<span>+ Create New Promo</span>
+							</button>
+						</div>
+
+						<div className="promos-info">
+							<div className="info-card">
+								<div className="info-icon">🎯</div>
+								<div>
+									<h4>Active Promos</h4>
+									<p>Manage your promotional campaigns</p>
+								</div>
+							</div>
+							<div className="info-card">
+								<div className="info-icon">💰</div>
+								<div>
+									<h4>Discount Types</h4>
+									<p>Percentage or fixed amount discounts</p>
+								</div>
+							</div>
+							<div className="info-card">
+								<div className="info-icon">⏰</div>
+								<div>
+									<h4>Validity Period</h4>
+									<p>Set start and end dates for promos</p>
+								</div>
+							</div>
+						</div>
+					</div>
+				)}
+
 				{/* Report Preview Modal */}
 				{reportModal.isOpen && (
 					<div
@@ -2720,6 +2909,385 @@ const AdminDashboard = () => {
 								>
 									Cancel
 								</button>
+							</div>
+						</div>
+					</div>
+				)}
+
+				{/* Promo Wizard Modal */}
+				{showPromoWizard && (
+					<div
+						className="promo-wizard-overlay"
+						onClick={handleCancelPromoWizard}
+					>
+						<div
+							className="promo-wizard-modal"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<div className="wizard-header">
+								<h2>✨ Create New Promo Code</h2>
+								<p className="wizard-subtitle">Step {promoWizardStep} of 4</p>
+								<button
+									className="wizard-close-btn"
+									onClick={handleCancelPromoWizard}
+								>
+									×
+								</button>
+							</div>
+
+							<div className="wizard-progress">
+								<div className="progress-bar">
+									<div
+										className="progress-fill"
+										style={{ width: `${(promoWizardStep / 4) * 100}%` }}
+									></div>
+								</div>
+								<div className="progress-steps">
+									<div
+										className={`progress-step ${
+											promoWizardStep >= 1 ? "active" : ""
+										}`}
+									>
+										1
+									</div>
+									<div
+										className={`progress-step ${
+											promoWizardStep >= 2 ? "active" : ""
+										}`}
+									>
+										2
+									</div>
+									<div
+										className={`progress-step ${
+											promoWizardStep >= 3 ? "active" : ""
+										}`}
+									>
+										3
+									</div>
+									<div
+										className={`progress-step ${
+											promoWizardStep >= 4 ? "active" : ""
+										}`}
+									>
+										4
+									</div>
+								</div>
+							</div>
+
+							<div className="wizard-body">
+								{/* Step 1: Basic Info */}
+								{promoWizardStep === 1 && (
+									<div className="wizard-step">
+										<h3>📝 Basic Information</h3>
+										<div className="form-group">
+											<label>
+												Promo Code <span className="required">*</span>
+											</label>
+											<input
+												type="text"
+												placeholder="e.g., SUMMER2024"
+												value={promoFormData.code}
+												onChange={(e) =>
+													handlePromoInputChange(
+														"code",
+														e.target.value.toUpperCase()
+													)
+												}
+												maxLength={20}
+											/>
+											<small>Use uppercase letters and numbers only</small>
+										</div>
+										<div className="form-group">
+											<label>
+												Description <span className="required">*</span>
+											</label>
+											<textarea
+												placeholder="Brief description of this promo"
+												value={promoFormData.description}
+												onChange={(e) =>
+													handlePromoInputChange("description", e.target.value)
+												}
+												rows={3}
+											/>
+										</div>
+										<div className="form-group">
+											<label>Applicable To</label>
+											<select
+												value={promoFormData.applicableTo}
+												onChange={(e) =>
+													handlePromoInputChange("applicableTo", e.target.value)
+												}
+											>
+												<option value="all">All Categories</option>
+												<option value="properties">Properties Only</option>
+												<option value="experiences">Experiences Only</option>
+												<option value="service">Service Only</option>
+											</select>
+										</div>
+									</div>
+								)}
+
+								{/* Step 2: Discount Settings */}
+								{promoWizardStep === 2 && (
+									<div className="wizard-step">
+										<h3>💰 Discount Settings</h3>
+										<div className="form-group">
+											<label>Discount Type</label>
+											<div className="radio-group">
+												<label className="radio-label">
+													<input
+														type="radio"
+														name="discountType"
+														value="percentage"
+														checked={
+															promoFormData.discountType === "percentage"
+														}
+														onChange={(e) =>
+															handlePromoInputChange(
+																"discountType",
+																e.target.value
+															)
+														}
+													/>
+													<span>Percentage (%)</span>
+												</label>
+												<label className="radio-label">
+													<input
+														type="radio"
+														name="discountType"
+														value="fixed"
+														checked={promoFormData.discountType === "fixed"}
+														onChange={(e) =>
+															handlePromoInputChange(
+																"discountType",
+																e.target.value
+															)
+														}
+													/>
+													<span>Fixed Amount (₱)</span>
+												</label>
+											</div>
+										</div>
+										<div className="form-group">
+											<label>
+												Discount Value <span className="required">*</span>
+											</label>
+											<input
+												type="number"
+												placeholder={
+													promoFormData.discountType === "percentage"
+														? "e.g., 20"
+														: "e.g., 500"
+												}
+												value={promoFormData.discountValue || ""}
+												onChange={(e) =>
+													handlePromoInputChange(
+														"discountValue",
+														parseFloat(e.target.value) || 0
+													)
+												}
+												min="0"
+												step={
+													promoFormData.discountType === "percentage"
+														? "1"
+														: "10"
+												}
+												max={
+													promoFormData.discountType === "percentage"
+														? "100"
+														: undefined
+												}
+											/>
+											<small>
+												{promoFormData.discountType === "percentage"
+													? "Enter percentage (0-100)"
+													: "Enter amount in PHP"}
+											</small>
+										</div>
+										{promoFormData.discountType === "percentage" && (
+											<div className="form-group">
+												<label>Maximum Discount (₱)</label>
+												<input
+													type="number"
+													placeholder="e.g., 1000"
+													value={promoFormData.maxDiscount || ""}
+													onChange={(e) =>
+														handlePromoInputChange(
+															"maxDiscount",
+															parseFloat(e.target.value) || 0
+														)
+													}
+													min="0"
+													step="100"
+												/>
+												<small>
+													Optional: Maximum discount amount in pesos
+												</small>
+											</div>
+										)}
+										<div className="form-group">
+											<label>Minimum Purchase Amount (₱)</label>
+											<input
+												type="number"
+												placeholder="e.g., 1000"
+												value={promoFormData.minPurchase || ""}
+												onChange={(e) =>
+													handlePromoInputChange(
+														"minPurchase",
+														parseFloat(e.target.value) || 0
+													)
+												}
+												min="0"
+												step="100"
+											/>
+											<small>Minimum amount required to use this promo</small>
+										</div>
+									</div>
+								)}
+
+								{/* Step 3: Usage Limits */}
+								{promoWizardStep === 3 && (
+									<div className="wizard-step">
+										<h3>🎯 Usage Limits</h3>
+										<div className="form-group">
+											<label>Total Usage Limit</label>
+											<input
+												type="number"
+												placeholder="0 for unlimited"
+												value={promoFormData.usageLimit || ""}
+												onChange={(e) =>
+													handlePromoInputChange(
+														"usageLimit",
+														parseInt(e.target.value) || 0
+													)
+												}
+												min="0"
+											/>
+											<small>
+												Total number of times this promo can be used (0 for
+												unlimited)
+											</small>
+										</div>
+										<div className="form-group">
+											<label>Usage Per User</label>
+											<input
+												type="number"
+												placeholder="1"
+												value={promoFormData.usagePerUser || ""}
+												onChange={(e) =>
+													handlePromoInputChange(
+														"usagePerUser",
+														parseInt(e.target.value) || 1
+													)
+												}
+												min="1"
+											/>
+											<small>How many times each user can use this promo</small>
+										</div>
+									</div>
+								)}
+
+								{/* Step 4: Validity Period */}
+								{promoWizardStep === 4 && (
+									<div className="wizard-step">
+										<h3>⏰ Validity Period</h3>
+										<div className="form-group">
+											<label>Valid From</label>
+											<input
+												type="datetime-local"
+												value={promoFormData.validFrom}
+												onChange={(e) =>
+													handlePromoInputChange("validFrom", e.target.value)
+												}
+											/>
+											<small>Leave empty to start immediately</small>
+										</div>
+										<div className="form-group">
+											<label>Valid Until</label>
+											<input
+												type="datetime-local"
+												value={promoFormData.validUntil}
+												onChange={(e) =>
+													handlePromoInputChange("validUntil", e.target.value)
+												}
+											/>
+											<small>Leave empty for no expiration</small>
+										</div>
+										<div className="form-group">
+											<label className="checkbox-label">
+												<input
+													type="checkbox"
+													checked={promoFormData.isActive}
+													onChange={(e) =>
+														handlePromoInputChange("isActive", e.target.checked)
+													}
+												/>
+												<span>Activate promo immediately</span>
+											</label>
+										</div>
+
+										{/* Summary */}
+										<div className="promo-summary">
+											<h4>📋 Summary</h4>
+											<div className="summary-item">
+												<strong>Code:</strong> {promoFormData.code}
+											</div>
+											<div className="summary-item">
+												<strong>Discount:</strong>{" "}
+												{promoFormData.discountType === "percentage"
+													? `${promoFormData.discountValue}%`
+													: `₱${promoFormData.discountValue}`}
+												{promoFormData.maxDiscount > 0 &&
+													promoFormData.discountType === "percentage" &&
+													` (Max ₱${promoFormData.maxDiscount})`}
+											</div>
+											{promoFormData.minPurchase > 0 && (
+												<div className="summary-item">
+													<strong>Min Purchase:</strong> ₱
+													{promoFormData.minPurchase}
+												</div>
+											)}
+											<div className="summary-item">
+												<strong>Usage:</strong>{" "}
+												{promoFormData.usageLimit > 0
+													? `${promoFormData.usageLimit} total uses`
+													: "Unlimited"}
+												, {promoFormData.usagePerUser} per user
+											</div>
+										</div>
+									</div>
+								)}
+							</div>
+
+							<div className="wizard-footer">
+								<div className="footer-buttons">
+									{promoWizardStep > 1 && (
+										<button
+											className="wizard-btn secondary"
+											onClick={handlePreviousStep}
+											disabled={isCreatingPromo}
+										>
+											← Previous
+										</button>
+									)}
+									{promoWizardStep < 4 ? (
+										<button
+											className="wizard-btn primary"
+											onClick={handleNextStep}
+											disabled={isCreatingPromo}
+										>
+											Next →
+										</button>
+									) : (
+										<button
+											className="wizard-btn primary"
+											onClick={handleCreatePromo}
+											disabled={isCreatingPromo}
+										>
+											{isCreatingPromo ? "Creating..." : "🎉 Create Promo"}
+										</button>
+									)}
+								</div>
 							</div>
 						</div>
 					</div>

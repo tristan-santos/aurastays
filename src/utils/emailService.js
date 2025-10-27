@@ -1,10 +1,11 @@
 import emailjs from "@emailjs/browser"
 
-// EmailJS Configuration
+// EmailJS Configuration - Guest (for verification emails)
 // Get these values from: https://dashboard.emailjs.com/
-const EMAILJS_SERVICE_ID = "service_h0uu0iq" // Replace with your EmailJS service ID
-const EMAILJS_TEMPLATE_ID = "template_lug7c18" // Replace with your EmailJS template ID
-const EMAILJS_PUBLIC_KEY = "nQD0ZU2iCXUeLVfl_" // Replace with your EmailJS public key
+const EMAILJS_SERVICE_ID = import.meta.env.VITE_EMAILJS_GUEST_SERVICE_ID
+const EMAILJS_TEMPLATE_ID = import.meta.env
+	.VITE_EMAILJS_VERIFICATION_TEMPLATE_ID
+const EMAILJS_PUBLIC_KEY = import.meta.env.VITE_EMAILJS_GUEST_PUBLIC_KEY
 
 // Initialize EmailJS
 emailjs.init(EMAILJS_PUBLIC_KEY)
