@@ -166,6 +166,10 @@
 	color: var(--primary);
 }
 
+.search-page-container .icon-button.messages-btn:hover {
+	color: #4a90e2;
+}
+
 .search-page-container .icon-button.favorites-btn:hover {
 	color: #ff6b6b;
 }

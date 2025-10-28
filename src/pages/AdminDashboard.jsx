@@ -9,6 +9,7 @@ import {
 	doc,
 	setDoc,
 	addDoc,
+	deleteDoc,
 } from "firebase/firestore"
 import { toast } from "react-stacked-toast"
 import {
@@ -64,12 +65,11 @@ const AdminDashboard = () => {
 	const [activeTab, setActiveTab] = useState("dashboard")
 	const [policies, setPolicies] = useState({
 		serviceFeeHost: 15, // percentage
-		serviceFeeGuest: 12, // percentage
+		serviceFeeGuest: 800, // fixed amount in pesos
 		guestFeePerPerson: 100, // fixed amount in pesos per guest
 		walletWithdrawalFee: 1, // percentage
 		cancellationWindowHours: 48,
 		minPropertyRating: 3.0,
-		maxCancellationsBeforeReview: 3,
 	})
 	const [recentUsers, setRecentUsers] = useState([])
 	const [reportModal, setReportModal] = useState({
@@ -95,9 +95,12 @@ const AdminDashboard = () => {
 		applicableTo: "all", // 'all', 'properties', 'experiences'
 	})
 	const [isCreatingPromo, setIsCreatingPromo] = useState(false)
+	const [promos, setPromos] = useState([])
+	const [promoFilter, setPromoFilter] = useState("all") // 'all', 'active', 'inactive', 'expired', 'scheduled'
 
 	useEffect(() => {
 		fetchAdminData()
+		fetchPlatformPolicies()
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
@@ -106,7 +109,11 @@ const AdminDashboard = () => {
 			setLoading(true)
 
 			// Fetch all collections in parallel with error handling
-			let usersSnapshot, propertiesSnapshot, bookingsSnapshot, payoutsSnapshot
+			let usersSnapshot,
+				propertiesSnapshot,
+				bookingsSnapshot,
+				payoutsSnapshot,
+				promosSnapshot
 
 			try {
 				const results = await Promise.allSettled([
@@ -114,6 +121,7 @@ const AdminDashboard = () => {
 					getDocs(collection(db, "properties")),
 					getDocs(collection(db, "bookings")).catch(() => ({ docs: [] })),
 					getDocs(collection(db, "payouts")).catch(() => ({ docs: [] })),
+					getDocs(collection(db, "promos")).catch(() => ({ docs: [] })),
 				])
 
 				usersSnapshot =
@@ -124,6 +132,8 @@ const AdminDashboard = () => {
 					results[2].status === "fulfilled" ? results[2].value : { docs: [] }
 				payoutsSnapshot =
 					results[3].status === "fulfilled" ? results[3].value : { docs: [] }
+				promosSnapshot =
+					results[4].status === "fulfilled" ? results[4].value : { docs: [] }
 			} catch (err) {
 				console.error("Error fetching collections:", err)
 				// Set empty defaults
@@ -131,6 +141,7 @@ const AdminDashboard = () => {
 				propertiesSnapshot = { docs: [] }
 				bookingsSnapshot = { docs: [] }
 				payoutsSnapshot = { docs: [] }
+				promosSnapshot = { docs: [] }
 			}
 
 			// Process users with defaults
@@ -194,6 +205,13 @@ const AdminDashboard = () => {
 			setPendingPayouts(payoutsList)
 			const pendingPayoutsTotal =
 				payoutsList.reduce((sum, payout) => sum + (payout.amount || 0), 0) || 0
+
+			// Process promos
+			const allPromos = promosSnapshot.docs.map((doc) => ({
+				id: doc.id,
+				...doc.data(),
+			}))
+			setPromos(allPromos)
 
 			setStats({
 				totalUsers: totalUsers || 0,
@@ -388,6 +406,29 @@ const AdminDashboard = () => {
 		}
 	}
 
+	const fetchPlatformPolicies = async () => {
+		try {
+			const policiesDoc = await getDocs(collection(db, "settings"))
+			const policiesData = policiesDoc.docs
+				.find((doc) => doc.id === "policies")
+				?.data()
+
+			if (policiesData) {
+				setPolicies({
+					serviceFeeHost: policiesData.serviceFeeHost || 15,
+					serviceFeeGuest: policiesData.serviceFeeGuest || 800,
+					guestFeePerPerson: policiesData.guestFeePerPerson || 100,
+					walletWithdrawalFee: policiesData.walletWithdrawalFee || 1,
+					cancellationWindowHours: policiesData.cancellationWindowHours || 48,
+					minPropertyRating: policiesData.minPropertyRating || 3.0,
+				})
+			}
+		} catch (err) {
+			console.error("Error fetching policies:", err)
+			// Keep default values if fetch fails
+		}
+	}
+
 	// Promo Wizard Functions
 	const handlePromoInputChange = (field, value) => {
 		setPromoFormData((prev) => ({
@@ -399,13 +440,55 @@ const AdminDashboard = () => {
 	const handleNextStep = () => {
 		// Validation for each step
 		if (promoWizardStep === 1) {
-			if (!promoFormData.code || !promoFormData.description) {
-				toast.error("Please fill in promo code and description")
+			// Step 1: Basic Information
+			if (!promoFormData.code || promoFormData.code.trim().length === 0) {
+				toast.error("❌ Promo code is required")
+				return
+			}
+			if (promoFormData.code.trim().length < 3) {
+				toast.error("❌ Promo code must be at least 3 characters")
+				return
+			}
+			if (
+				!promoFormData.description ||
+				promoFormData.description.trim().length === 0
+			) {
+				toast.error("❌ Description is required")
+				return
+			}
+			if (promoFormData.description.trim().length < 10) {
+				toast.error("❌ Description must be at least 10 characters")
 				return
 			}
 		} else if (promoWizardStep === 2) {
-			if (promoFormData.discountValue <= 0) {
-				toast.error("Please enter a valid discount value")
+			// Step 2: Discount Settings
+			if (!promoFormData.discountValue || promoFormData.discountValue <= 0) {
+				toast.error("❌ Discount value must be greater than 0")
+				return
+			}
+			if (
+				promoFormData.discountType === "percentage" &&
+				promoFormData.discountValue > 100
+			) {
+				toast.error("❌ Percentage discount cannot exceed 100%")
+				return
+			}
+			if (promoFormData.minPurchase < 0) {
+				toast.error("❌ Minimum purchase cannot be negative")
+				return
+			}
+			if (promoFormData.maxDiscount < 0) {
+				toast.error("❌ Maximum discount cannot be negative")
+				return
+			}
+		} else if (promoWizardStep === 3) {
+			// Step 3: Usage Limits
+			if (promoFormData.usageLimit < 0) {
+				toast.error("❌ Usage limit cannot be negative")
+				return
+			}
+			if (!promoFormData.usagePerUser || promoFormData.usagePerUser < 1) {
+				toast.error("❌ Usage per user must be at least 1")
 				return
 			}
 		}
@@ -420,21 +503,105 @@ const AdminDashboard = () => {
 		try {
 			setIsCreatingPromo(true)
 
-			// Validate all required fields
-			if (!promoFormData.code || !promoFormData.description) {
-				toast.error("Please fill in all required fields")
+			// Comprehensive validation of all fields
+
+			// Step 1 validation: Basic Information
+			if (!promoFormData.code || promoFormData.code.trim().length === 0) {
+				toast.error("❌ Promo code is required")
+				setPromoWizardStep(1)
+				setIsCreatingPromo(false)
 				return
 			}
 
-			if (promoFormData.discountValue <= 0) {
-				toast.error("Discount value must be greater than 0")
+			if (promoFormData.code.trim().length < 3) {
+				toast.error("❌ Promo code must be at least 3 characters")
+				setPromoWizardStep(1)
+				setIsCreatingPromo(false)
 				return
+			}
+
+			if (
+				!promoFormData.description ||
+				promoFormData.description.trim().length === 0
+			) {
+				toast.error("❌ Description is required")
+				setPromoWizardStep(1)
+				setIsCreatingPromo(false)
+				return
+			}
+
+			if (promoFormData.description.trim().length < 10) {
+				toast.error("❌ Description must be at least 10 characters")
+				setPromoWizardStep(1)
+				setIsCreatingPromo(false)
+				return
+			}
+
+			// Step 2 validation: Discount Settings
+			if (!promoFormData.discountValue || promoFormData.discountValue <= 0) {
+				toast.error("❌ Discount value must be greater than 0")
+				setPromoWizardStep(2)
+				setIsCreatingPromo(false)
+				return
+			}
+
+			if (promoFormData.discountType === "percentage") {
+				if (promoFormData.discountValue > 100) {
+					toast.error("❌ Percentage discount cannot exceed 100%")
+					setPromoWizardStep(2)
+					setIsCreatingPromo(false)
+					return
+				}
+			}
+
+			if (promoFormData.minPurchase < 0) {
+				toast.error("❌ Minimum purchase cannot be negative")
+				setPromoWizardStep(2)
+				setIsCreatingPromo(false)
+				return
+			}
+
+			if (promoFormData.maxDiscount < 0) {
+				toast.error("❌ Maximum discount cannot be negative")
+				setPromoWizardStep(2)
+				setIsCreatingPromo(false)
+				return
+			}
+
+			// Step 3 validation: Usage Limits
+			if (promoFormData.usageLimit < 0) {
+				toast.error("❌ Usage limit cannot be negative")
+				setPromoWizardStep(3)
+				setIsCreatingPromo(false)
+				return
+			}
+
+			if (!promoFormData.usagePerUser || promoFormData.usagePerUser < 1) {
+				toast.error("❌ Usage per user must be at least 1")
+				setPromoWizardStep(3)
+				setIsCreatingPromo(false)
+				return
+			}
+
+			// Step 4 validation: Validity Period
+			if (promoFormData.validFrom && promoFormData.validUntil) {
+				const fromDate = new Date(promoFormData.validFrom)
+				const untilDate = new Date(promoFormData.validUntil)
+
+				if (fromDate >= untilDate) {
+					toast.error("❌ Valid From date must be before Valid Until date")
+					setPromoWizardStep(4)
+					setIsCreatingPromo(false)
+					return
+				}
 			}
 
 			// Create promo object
 			const promoData = {
 				...promoFormData,
-				code: promoFormData.code.toUpperCase(),
+				code: promoFormData.code.toUpperCase().trim(),
+				description: promoFormData.description.trim(),
+				isActive: Boolean(promoFormData.isActive), // Ensure boolean type
 				usedBy: [],
 				usageCount: 0,
 				createdAt: new Date().toISOString(),
@@ -461,11 +628,49 @@ const AdminDashboard = () => {
 				isActive: true,
 				applicableTo: "all",
 			})
+			// Refresh the data to show the new promo
+			fetchAdminData()
 		} catch (err) {
 			console.error("Error creating promo:", err)
 			toast.error("❌ Failed to create promo: " + err.message)
 		} finally {
 			setIsCreatingPromo(false)
+		}
+	}
+
+	const handleDeletePromo = async (promoId, promoCode) => {
+		if (
+			!window.confirm(`Are you sure you want to delete promo "${promoCode}"?`)
+		) {
+			return
+		}
+
+		try {
+			await deleteDoc(doc(db, "promos", promoId))
+			toast.success(`🗑️ Promo "${promoCode}" deleted successfully!`)
+			// Refresh the data
+			fetchAdminData()
+		} catch (err) {
+			console.error("Error deleting promo:", err)
+			toast.error("❌ Failed to delete promo: " + err.message)
+		}
+	}
+
+	const handleTogglePromoStatus = async (promoId, currentStatus) => {
+		try {
+			// Convert to boolean and toggle
+			const newStatus = currentStatus === true ? false : true
+			await updateDoc(doc(db, "promos", promoId), {
+				isActive: newStatus,
+			})
+			toast.success(
+				`✅ Promo ${newStatus ? "activated" : "deactivated"} successfully!`
+			)
+			// Refresh the data
+			fetchAdminData()
+		} catch (err) {
+			console.error("Error updating promo:", err)
+			toast.error("❌ Failed to update promo: " + err.message)
 		}
 	}
 
@@ -657,6 +862,129 @@ const AdminDashboard = () => {
 						})),
 					}
 					break
+
+				case "complete":
+				case "system": {
+					// Generate complete system report combining all data
+					reportTitle = "Complete_System_Report"
+
+					// Fetch fresh properties data
+					const propertiesSnapshot = await getDocs(collection(db, "properties"))
+					const allPropertiesData = propertiesSnapshot.docs.map((doc) => ({
+						id: doc.id,
+						...doc.data(),
+					}))
+
+					const hostFees = stats.totalRevenue * (policies.serviceFeeHost / 100)
+					const guestFees =
+						stats.totalRevenue * (policies.serviceFeeGuest / 100)
+
+					reportData = {
+						generatedAt: new Date().toISOString(),
+						reportType: "Complete System Report",
+						platformOverview: {
+							totalUsers: stats.totalUsers,
+							totalHosts: stats.totalHosts,
+							totalGuests: stats.totalGuests,
+							totalProperties: stats.totalProperties,
+							totalBookings: stats.totalBookings,
+							totalRevenue: stats.totalRevenue,
+							pendingPayouts: stats.pendingPayouts,
+						},
+						users: {
+							summary: {
+								total: stats.totalUsers,
+								hosts: stats.totalHosts,
+								guests: stats.totalGuests,
+							},
+							recentUsers: recentUsers.slice(0, 20).map((u) => ({
+								name: u.displayName || "N/A",
+								email: u.email || "N/A",
+								userType: u.userType || "N/A",
+								createdAt:
+									u.createdAt?.toDate?.()?.toLocaleDateString() || "N/A",
+							})),
+						},
+						properties: {
+							summary: {
+								total: allPropertiesData.length,
+								avgRating:
+									allPropertiesData.length > 0
+										? (
+												allPropertiesData.reduce(
+													(sum, p) => sum + (p.rating || 0),
+													0
+												) / allPropertiesData.length
+										  ).toFixed(2)
+										: 0,
+							},
+							topRated: bestReviews.slice(0, 10).map((p) => ({
+								title: p.title || p.name || "Untitled",
+								rating: p.rating || 0,
+								reviews: p.reviewsCount || p.reviews || 0,
+								category: p.category || p.type || "N/A",
+							})),
+							lowRated: lowestReviews.slice(0, 10).map((p) => ({
+								title: p.title || p.name || "Untitled",
+								rating: p.rating || 0,
+								reviews: p.reviewsCount || p.reviews || 0,
+								category: p.category || p.type || "N/A",
+							})),
+						},
+						bookings: {
+							summary: {
+								total: stats.totalBookings,
+								totalRevenue: stats.totalRevenue,
+								avgValue:
+									stats.totalBookings > 0
+										? (stats.totalRevenue / stats.totalBookings).toFixed(2)
+										: 0,
+							},
+							recent: recentBookings.slice(0, 20).map((b) => ({
+								guest: b.guestName || "N/A",
+								property: b.propertyTitle || "N/A",
+								checkIn: b.checkIn || "N/A",
+								checkOut: b.checkOut || "N/A",
+								status: b.status || "pending",
+								amount: b.totalPrice || 0,
+							})),
+						},
+						revenue: {
+							summary: {
+								totalRevenue: stats.totalRevenue,
+								hostServiceFees: hostFees.toFixed(2),
+								guestServiceFees: guestFees.toFixed(2),
+								totalServiceFees: (hostFees + guestFees).toFixed(2),
+								netRevenue: (stats.totalRevenue - hostFees - guestFees).toFixed(
+									2
+								),
+							},
+						},
+						payouts: {
+							summary: {
+								pendingAmount: stats.pendingPayouts,
+								pendingRequests: pendingPayouts.length,
+							},
+							pending: pendingPayouts.map((p) => ({
+								host: p.hostName || "Host",
+								email: p.hostEmail,
+								amount: p.amount || 0,
+								method: p.method || "PayPal",
+								requestedAt:
+									p.createdAt?.toDate?.()?.toLocaleDateString() || "N/A",
+							})),
+						},
+						policies: {
+							serviceFeeHost: policies.serviceFeeHost,
+							serviceFeeGuest: policies.serviceFeeGuest,
+							guestFeePerPerson: policies.guestFeePerPerson,
+							walletWithdrawalFee: policies.walletWithdrawalFee,
+							cancellationWindowHours: policies.cancellationWindowHours,
+							minPropertyRating: policies.minPropertyRating,
+						},
+					}
+					break
+				}
 
 				default:
 					toast.error("Invalid report type")
@@ -1484,10 +1812,11 @@ const AdminDashboard = () => {
 									<label>
 										<strong>Guest Service Fee</strong>
 										<span className="fee-description">
-											Fee charged to guests on each booking
+											Fixed fee charged to guests on each booking
 										</span>
 									</label>
 									<div className="fee-input">
+										<span className="fee-unit">₱</span>
 										<input
 											type="number"
 											value={policies.serviceFeeGuest}
@@ -1498,10 +1827,8 @@ const AdminDashboard = () => {
 												})
 											}
 											min="0"
-											max="100"
-											step="0.5"
+											step="50"
 										/>
-										<span className="fee-unit">%</span>
 									</div>
 								</div>
 								<div className="fee-item">
@@ -1618,26 +1945,6 @@ const AdminDashboard = () => {
 											stars for 3 consecutive months
 										</li>
 										<li>
-											<strong>Multiple Cancellations:</strong> Hosts canceling
-											more than{" "}
-											<input
-												type="number"
-												className="inline-input"
-												value={policies.maxCancellationsBeforeReview}
-												onChange={(e) =>
-													setPolicies({
-														...policies,
-														maxCancellationsBeforeReview: parseInt(
-															e.target.value
-														),
-													})
-												}
-												min="1"
-												max="10"
-											/>{" "}
-											bookings in 6 months
-										</li>
-										<li>
 											<strong>Violation of Terms:</strong> Any breach of
 											community standards or terms of service
 										</li>
@@ -1705,9 +2012,6 @@ const AdminDashboard = () => {
 										<li>Host cancellations are strongly discouraged</li>
 										<li>Guest receives full refund including all fees</li>
 										<li>Host incurs a cancellation fee of ₱1,000</li>
-										<li>
-											Listing may be suspended after multiple cancellations
-										</li>
 										<li>
 											Cancellation impacts host's rating and reliability score
 										</li>
@@ -1897,8 +2201,8 @@ const AdminDashboard = () => {
 								<h4>4.2 Guest Fees & Payments</h4>
 								<ul>
 									<li>
-										Guests agree to pay a service fee of{" "}
-										{policies.serviceFeeGuest}% per booking
+										Guests agree to pay a service fee of ₱
+										{policies.serviceFeeGuest} per booking
 									</li>
 									<li>
 										Guest fee of ₱{policies.guestFeePerPerson} per person for
@@ -2534,13 +2838,9 @@ const AdminDashboard = () => {
 								</div>
 								<button
 									className="generate-report-btn primary"
-									onClick={() => {
-										toast.info(
-											"💡 Please generate each report individually to preview before exporting"
-										)
-									}}
+									onClick={() => openReportModal("complete")}
 								>
-									ℹ️ View Report Instructions
+									📊 Generate Complete System Report
 								</button>
 							</div>
 						</div>
@@ -2602,24 +2902,383 @@ const AdminDashboard = () => {
 							<div className="info-card">
 								<div className="info-icon">🎯</div>
 								<div>
-									<h4>Active Promos</h4>
-									<p>Manage your promotional campaigns</p>
+									<h4>Total Promos</h4>
+									<p>{promos.length} promotional codes</p>
 								</div>
 							</div>
 							<div className="info-card">
-								<div className="info-icon">💰</div>
+								<div className="info-icon">✅</div>
 								<div>
-									<h4>Discount Types</h4>
-									<p>Percentage or fixed amount discounts</p>
+									<h4>Active Promos</h4>
+									<p>
+										{
+											promos.filter((p) => {
+												const now = new Date()
+												const validFrom = p.validFrom
+													? new Date(p.validFrom)
+													: null
+												const validUntil = p.validUntil
+													? new Date(p.validUntil)
+													: null
+												const isExpired = validUntil && validUntil < now
+												const isScheduled = validFrom && validFrom > now
+												return p.isActive === true && !isExpired && !isScheduled
+											}).length
+										}{" "}
+										active campaigns
+									</p>
+								</div>
+							</div>
+							<div className="info-card">
+								<div className="info-icon">⏸️</div>
+								<div>
+									<h4>Inactive Promos</h4>
+									<p>
+										{promos.filter((p) => p.isActive === false).length} inactive
+										codes
+									</p>
 								</div>
 							</div>
 							<div className="info-card">
 								<div className="info-icon">⏰</div>
 								<div>
-									<h4>Validity Period</h4>
-									<p>Set start and end dates for promos</p>
+									<h4>Expired Promos</h4>
+									<p>
+										{
+											promos.filter((p) => {
+												const now = new Date()
+												const validUntil = p.validUntil
+													? new Date(p.validUntil)
+													: null
+												return validUntil && validUntil < now
+											}).length
+										}{" "}
+										expired codes
+									</p>
 								</div>
 							</div>
+							<div className="info-card">
+								<div className="info-icon">📅</div>
+								<div>
+									<h4>Scheduled Promos</h4>
+									<p>
+										{
+											promos.filter((p) => {
+												const now = new Date()
+												const validFrom = p.validFrom
+													? new Date(p.validFrom)
+													: null
+												return validFrom && validFrom > now
+											}).length
+										}{" "}
+										scheduled codes
+									</p>
+								</div>
+							</div>
+						</div>
+
+						{/* Filter Controls */}
+						<div className="promos-filters">
+							<div className="filter-tabs">
+								<button
+									className={`filter-tab ${
+										promoFilter === "all" ? "active" : ""
+									}`}
+									onClick={() => setPromoFilter("all")}
+								>
+									All ({promos.length})
+								</button>
+								<button
+									className={`filter-tab ${
+										promoFilter === "active" ? "active" : ""
+									}`}
+									onClick={() => setPromoFilter("active")}
+								>
+									Active (
+									{
+										promos.filter((p) => {
+											const now = new Date()
+											const validFrom = p.validFrom
+												? new Date(p.validFrom)
+												: null
+											const validUntil = p.validUntil
+												? new Date(p.validUntil)
+												: null
+											const isExpired = validUntil && validUntil < now
+											const isScheduled = validFrom && validFrom > now
+											return p.isActive === true && !isExpired && !isScheduled
+										}).length
+									}
+									)
+								</button>
+								<button
+									className={`filter-tab ${
+										promoFilter === "inactive" ? "active" : ""
+									}`}
+									onClick={() => setPromoFilter("inactive")}
+								>
+									Inactive ({promos.filter((p) => p.isActive === false).length})
+								</button>
+								<button
+									className={`filter-tab ${
+										promoFilter === "expired" ? "active" : ""
+									}`}
+									onClick={() => setPromoFilter("expired")}
+								>
+									Expired (
+									{
+										promos.filter((p) => {
+											const now = new Date()
+											const validUntil = p.validUntil
+												? new Date(p.validUntil)
+												: null
+											return validUntil && validUntil < now
+										}).length
+									}
+									)
+								</button>
+								<button
+									className={`filter-tab ${
+										promoFilter === "scheduled" ? "active" : ""
+									}`}
+									onClick={() => setPromoFilter("scheduled")}
+								>
+									Scheduled (
+									{
+										promos.filter((p) => {
+											const now = new Date()
+											const validFrom = p.validFrom
+												? new Date(p.validFrom)
+												: null
+											return validFrom && validFrom > now
+										}).length
+									}
+									)
+								</button>
+							</div>
+						</div>
+
+						{/* Promos Table */}
+						<div className="promos-table-container">
+							{promos.length === 0 ? (
+								<div className="empty-state">
+									<div className="empty-icon">🎁</div>
+									<h3>No Promo Codes Yet</h3>
+									<p>Create your first promo code to get started</p>
+									<button
+										className="create-promo-btn"
+										onClick={() => setShowPromoWizard(true)}
+									>
+										+ Create New Promo
+									</button>
+								</div>
+							) : (
+								<div className="promos-table-wrapper">
+									<table className="promos-table">
+										<thead>
+											<tr>
+												<th>Code</th>
+												<th>Description</th>
+												<th>Discount</th>
+												<th>Min Purchase</th>
+												<th>Usage</th>
+												<th>Valid Period</th>
+												<th>Status</th>
+												<th>Actions</th>
+											</tr>
+										</thead>
+										<tbody>
+											{promos
+												.filter((promo) => {
+													const now = new Date()
+													const validFrom = promo.validFrom
+														? new Date(promo.validFrom)
+														: null
+													const validUntil = promo.validUntil
+														? new Date(promo.validUntil)
+														: null
+													const isExpired = validUntil && validUntil < now
+													const isScheduled = validFrom && validFrom > now
+
+													if (promoFilter === "active")
+														return (
+															promo.isActive === true &&
+															!isExpired &&
+															!isScheduled
+														)
+													if (promoFilter === "inactive")
+														return promo.isActive === false
+													if (promoFilter === "expired") return isExpired
+													if (promoFilter === "scheduled") return isScheduled
+													return true
+												})
+												.map((promo) => {
+													const now = new Date()
+													const validFrom = promo.validFrom
+														? new Date(promo.validFrom)
+														: null
+													const validUntil = promo.validUntil
+														? new Date(promo.validUntil)
+														: null
+													const isExpired = validUntil && validUntil < now
+													const isNotStarted = validFrom && validFrom > now
+
+													return (
+														<tr
+															key={promo.id}
+															className={
+																!promo.isActive || isExpired
+																	? "inactive-row"
+																	: ""
+															}
+														>
+															<td>
+																<strong className="promo-code">
+																	{promo.code}
+																</strong>
+															</td>
+															<td className="promo-description">
+																{promo.description}
+															</td>
+															<td>
+																{promo.discountType === "percentage" ? (
+																	<span className="discount-badge percentage">
+																		{promo.discountValue}%
+																		{promo.maxDiscount > 0 &&
+																			` (Max ₱${promo.maxDiscount})`}
+																	</span>
+																) : (
+																	<span className="discount-badge fixed">
+																		₱{promo.discountValue}
+																	</span>
+																)}
+															</td>
+															<td>
+																{promo.minPurchase > 0
+																	? `₱${promo.minPurchase}`
+																	: "None"}
+															</td>
+															<td>
+																<div className="usage-info">
+																	<span className="usage-count">
+																		{promo.usageCount || 0}
+																		{promo.usageLimit > 0
+																			? ` / ${promo.usageLimit}`
+																			: " / ∞"}
+																	</span>
+																	<small className="usage-per-user">
+																		{promo.usagePerUser} per user
+																	</small>
+																</div>
+															</td>
+															<td>
+																<div className="validity-info">
+																	{promo.validFrom ? (
+																		<small>
+																			From:{" "}
+																			{new Date(
+																				promo.validFrom
+																			).toLocaleDateString()}
+																		</small>
+																	) : (
+																		<small>No start date</small>
+																	)}
+																	{promo.validUntil ? (
+																		<small>
+																			Until:{" "}
+																			{new Date(
+																				promo.validUntil
+																			).toLocaleDateString()}
+																		</small>
+																	) : (
+																		<small>No end date</small>
+																	)}
+																</div>
+															</td>
+															<td>
+																<div className="status-badges">
+																	{promo.isActive ? (
+																		<span className="status-badge active">
+																			Active
+																		</span>
+																	) : (
+																		<span className="status-badge inactive">
+																			Inactive
+																		</span>
+																	)}
+																	{isExpired && (
+																		<span className="status-badge expired">
+																			Expired
+																		</span>
+																	)}
+																	{isNotStarted && (
+																		<span className="status-badge scheduled">
+																			Scheduled
+																		</span>
+																	)}
+																</div>
+															</td>
+															<td>
+																<div className="promo-actions">
+																	<button
+																		className="toggle-status-btn"
+																		onClick={() =>
+																			handleTogglePromoStatus(
+																				promo.id,
+																				promo.isActive
+																			)
+																		}
+																		title={
+																			promo.isActive ? "Deactivate" : "Activate"
+																		}
+																	>
+																		{promo.isActive ? "⏸️" : "▶️"}
+																	</button>
+																	<button
+																		className="delete-promo-btn"
+																		onClick={() =>
+																			handleDeletePromo(promo.id, promo.code)
+																		}
+																		title="Delete Promo"
+																	>
+																		🗑️
+																	</button>
+																</div>
+															</td>
+														</tr>
+													)
+												})}
+										</tbody>
+									</table>
+									{promos.filter((promo) => {
+										const now = new Date()
+										const validFrom = promo.validFrom
+											? new Date(promo.validFrom)
+											: null
+										const validUntil = promo.validUntil
+											? new Date(promo.validUntil)
+											: null
+										const isExpired = validUntil && validUntil < now
+										const isScheduled = validFrom && validFrom > now
+
+										if (promoFilter === "active")
+											return (
+												promo.isActive === true && !isExpired && !isScheduled
+											)
+										if (promoFilter === "inactive")
+											return promo.isActive === false
+										if (promoFilter === "expired") return isExpired
+										if (promoFilter === "scheduled") return isScheduled
+										return true
+									}).length === 0 && (
+										<div className="empty-state">
+											<div className="empty-icon">🔍</div>
+											<h3>No {promoFilter} promos found</h3>
+											<p>Try changing the filter or create a new promo code</p>
+										</div>
+									)}
+								</div>
+							)}
 						</div>
 					</div>
 				)}
@@ -2890,6 +3549,227 @@ const AdminDashboard = () => {
 											</div>
 										</div>
 									)}
+
+								{/* Complete System Report */}
+								{(reportModal.type === "complete" ||
+									reportModal.type === "system") &&
+									reportModal.data && (
+										<>
+											{/* Platform Overview */}
+											{reportModal.data.platformOverview && (
+												<div className="report-section">
+													<h3>🌐 Platform Overview</h3>
+													<div className="summary-grid">
+														{Object.entries(
+															reportModal.data.platformOverview
+														).map(([key, value]) => {
+															const label = key
+																.replace(/([A-Z])/g, " $1")
+																.trim()
+															const displayLabel =
+																label.charAt(0).toUpperCase() + label.slice(1)
+															return (
+																<div key={key} className="summary-item">
+																	<strong>{displayLabel}:</strong>{" "}
+																	{typeof value === "number" &&
+																	key.includes("revenue")
+																		? `₱${value.toLocaleString()}`
+																		: value.toLocaleString()}
+																</div>
+															)
+														})}
+													</div>
+												</div>
+											)}
+
+											{/* Users Summary */}
+											{reportModal.data.users && (
+												<div className="report-section">
+													<h3>👥 Users Overview</h3>
+													<div className="summary-grid">
+														<div className="summary-item">
+															<strong>Total Users:</strong>{" "}
+															{reportModal.data.users.summary.total}
+														</div>
+														<div className="summary-item">
+															<strong>Hosts:</strong>{" "}
+															{reportModal.data.users.summary.hosts}
+														</div>
+														<div className="summary-item">
+															<strong>Guests:</strong>{" "}
+															{reportModal.data.users.summary.guests}
+														</div>
+													</div>
+												</div>
+											)}
+
+											{/* Properties Summary */}
+											{reportModal.data.properties && (
+												<div className="report-section">
+													<h3>🏠 Properties Overview</h3>
+													<div className="summary-grid">
+														<div className="summary-item">
+															<strong>Total Properties:</strong>{" "}
+															{reportModal.data.properties.summary.total}
+														</div>
+														<div className="summary-item">
+															<strong>Average Rating:</strong> ⭐{" "}
+															{reportModal.data.properties.summary.avgRating}
+														</div>
+													</div>
+													{reportModal.data.properties.topRated?.length > 0 && (
+														<div style={{ marginTop: "1rem" }}>
+															<h4>⭐ Top Rated (Top 5)</h4>
+															<div className="report-table-wrapper">
+																<table className="report-table">
+																	<thead>
+																		<tr>
+																			<th>Property</th>
+																			<th>Rating</th>
+																			<th>Reviews</th>
+																			<th>Category</th>
+																		</tr>
+																	</thead>
+																	<tbody>
+																		{reportModal.data.properties.topRated
+																			.slice(0, 5)
+																			.map((prop, idx) => (
+																				<tr key={idx}>
+																					<td>{prop.title}</td>
+																					<td>
+																						<span className="rating-badge">
+																							⭐ {prop.rating}
+																						</span>
+																					</td>
+																					<td>{prop.reviews}</td>
+																					<td>{prop.category}</td>
+																				</tr>
+																			))}
+																	</tbody>
+																</table>
+															</div>
+														</div>
+													)}
+												</div>
+											)}
+
+											{/* Bookings Summary */}
+											{reportModal.data.bookings && (
+												<div className="report-section">
+													<h3>📅 Bookings Overview</h3>
+													<div className="summary-grid">
+														<div className="summary-item">
+															<strong>Total Bookings:</strong>{" "}
+															{reportModal.data.bookings.summary.total}
+														</div>
+														<div className="summary-item">
+															<strong>Total Revenue:</strong> ₱
+															{reportModal.data.bookings.summary.totalRevenue.toLocaleString()}
+														</div>
+														<div className="summary-item">
+															<strong>Average Value:</strong> ₱
+															{reportModal.data.bookings.summary.avgValue}
+														</div>
+													</div>
+												</div>
+											)}
+
+											{/* Revenue Summary */}
+											{reportModal.data.revenue && (
+												<div className="report-section">
+													<h3>💰 Revenue Overview</h3>
+													<div className="summary-grid">
+														<div className="summary-item">
+															<strong>Total Revenue:</strong> ₱
+															{parseFloat(
+																reportModal.data.revenue.summary.totalRevenue
+															).toLocaleString()}
+														</div>
+														<div className="summary-item">
+															<strong>Host Service Fees:</strong> ₱
+															{parseFloat(
+																reportModal.data.revenue.summary.hostServiceFees
+															).toLocaleString()}
+														</div>
+														<div className="summary-item">
+															<strong>Guest Service Fees:</strong> ₱
+															{parseFloat(
+																reportModal.data.revenue.summary
+																	.guestServiceFees
+															).toLocaleString()}
+														</div>
+														<div className="summary-item">
+															<strong>Total Service Fees:</strong> ₱
+															{parseFloat(
+																reportModal.data.revenue.summary
+																	.totalServiceFees
+															).toLocaleString()}
+														</div>
+														<div className="summary-item">
+															<strong>Net Revenue:</strong> ₱
+															{parseFloat(
+																reportModal.data.revenue.summary.netRevenue
+															).toLocaleString()}
+														</div>
+													</div>
+												</div>
+											)}
+
+											{/* Payouts Summary */}
+											{reportModal.data.payouts && (
+												<div className="report-section">
+													<h3>💳 Payouts Overview</h3>
+													<div className="summary-grid">
+														<div className="summary-item">
+															<strong>Pending Amount:</strong> ₱
+															{reportModal.data.payouts.summary.pendingAmount.toLocaleString()}
+														</div>
+														<div className="summary-item">
+															<strong>Pending Requests:</strong>{" "}
+															{reportModal.data.payouts.summary.pendingRequests}
+														</div>
+													</div>
+												</div>
+											)}
+
+											{/* Policies Summary */}
+											{reportModal.data.policies && (
+												<div className="report-section">
+													<h3>📋 Platform Policies</h3>
+													<div className="summary-grid">
+														<div className="summary-item">
+															<strong>Host Service Fee:</strong>{" "}
+															{reportModal.data.policies.serviceFeeHost}%
+														</div>
+														<div className="summary-item">
+															<strong>Guest Service Fee:</strong> ₱
+															{reportModal.data.policies.serviceFeeGuest}
+														</div>
+														<div className="summary-item">
+															<strong>Guest Fee Per Person:</strong> ₱
+															{reportModal.data.policies.guestFeePerPerson}
+														</div>
+														<div className="summary-item">
+															<strong>Wallet Withdrawal Fee:</strong>{" "}
+															{reportModal.data.policies.walletWithdrawalFee}%
+														</div>
+														<div className="summary-item">
+															<strong>Cancellation Window:</strong>{" "}
+															{
+																reportModal.data.policies
+																	.cancellationWindowHours
+															}{" "}
+															hours
+														</div>
+														<div className="summary-item">
+															<strong>Min Property Rating:</strong> ⭐{" "}
+															{reportModal.data.policies.minPropertyRating}
+														</div>
+													</div>
+												</div>
+											)}
+										</>
+									)}
 							</div>
 
 							<div className="report-modal-footer">
@@ -2993,9 +3873,13 @@ const AdminDashboard = () => {
 														e.target.value.toUpperCase()
 													)
 												}
+												minLength={3}
 												maxLength={20}
+												required
 											/>
-											<small>Use uppercase letters and numbers only</small>
+											<small>
+												Minimum 3 characters, uppercase letters and numbers only
+											</small>
 										</div>
 										<div className="form-group">
 											<label>
@@ -3008,7 +3892,10 @@ const AdminDashboard = () => {
 													handlePromoInputChange("description", e.target.value)
 												}
 												rows={3}
+												minLength={10}
+												required
 											/>
+											<small>Minimum 10 characters required</small>
 										</div>
 										<div className="form-group">
 											<label>Applicable To</label>
@@ -3086,7 +3973,7 @@ const AdminDashboard = () => {
 														parseFloat(e.target.value) || 0
 													)
 												}
-												min="0"
+												min="0.01"
 												step={
 													promoFormData.discountType === "percentage"
 														? "1"
@@ -3097,11 +3984,12 @@ const AdminDashboard = () => {
 														? "100"
 														: undefined
 												}
+												required
 											/>
 											<small>
 												{promoFormData.discountType === "percentage"
-													? "Enter percentage (0-100)"
-													: "Enter amount in PHP"}
+													? "Enter percentage (0-100), required"
+													: "Enter amount in PHP, required"}
 											</small>
 										</div>
 										{promoFormData.discountType === "percentage" && (
@@ -3119,9 +4007,18 @@ const AdminDashboard = () => {
 													}
 													min="0"
 													step="100"
+													disabled={promoFormData.discountValue >= 100}
 												/>
 												<small>
-													Optional: Maximum discount amount in pesos
+													{promoFormData.discountValue >= 100 ? (
+														<span
+															style={{ color: "#999", fontStyle: "italic" }}
+														>
+															Not applicable for 100% discount
+														</span>
+													) : (
+														"Optional: Maximum discount amount in pesos"
+													)}
 												</small>
 											</div>
 										)}
@@ -3169,7 +4066,9 @@ const AdminDashboard = () => {
 											</small>
 										</div>
 										<div className="form-group">
-											<label>Usage Per User</label>
+											<label>
+												Usage Per User <span className="required">*</span>
+											</label>
 											<input
 												type="number"
 												placeholder="1"
@@ -3181,8 +4080,12 @@ const AdminDashboard = () => {
 													)
 												}
 												min="1"
+												required
 											/>
-											<small>How many times each user can use this promo</small>
+											<small>
+												How many times each user can use this promo (minimum 1,
+												required)
+											</small>
 										</div>
 									</div>
 								)}
@@ -3228,31 +4131,97 @@ const AdminDashboard = () => {
 
 										{/* Summary */}
 										<div className="promo-summary">
-											<h4>📋 Summary</h4>
+											<h4>📋 Summary - Review Before Creating</h4>
 											<div className="summary-item">
-												<strong>Code:</strong> {promoFormData.code}
+												<strong>Code:</strong>{" "}
+												{promoFormData.code || (
+													<span
+														style={{ color: "#ff6b6b", fontStyle: "italic" }}
+													>
+														Not set
+													</span>
+												)}
+											</div>
+											<div className="summary-item">
+												<strong>Description:</strong>{" "}
+												{promoFormData.description || (
+													<span
+														style={{ color: "#ff6b6b", fontStyle: "italic" }}
+													>
+														Not set
+													</span>
+												)}
+											</div>
+											<div className="summary-item">
+												<strong>Applicable To:</strong>{" "}
+												{promoFormData.applicableTo === "all"
+													? "All Categories"
+													: promoFormData.applicableTo.charAt(0).toUpperCase() +
+													  promoFormData.applicableTo.slice(1)}
 											</div>
 											<div className="summary-item">
 												<strong>Discount:</strong>{" "}
-												{promoFormData.discountType === "percentage"
-													? `${promoFormData.discountValue}%`
-													: `₱${promoFormData.discountValue}`}
-												{promoFormData.maxDiscount > 0 &&
-													promoFormData.discountType === "percentage" &&
-													` (Max ₱${promoFormData.maxDiscount})`}
+												{promoFormData.discountValue > 0 ? (
+													<>
+														{promoFormData.discountType === "percentage"
+															? `${promoFormData.discountValue}%`
+															: `₱${promoFormData.discountValue}`}
+														{promoFormData.maxDiscount > 0 &&
+															promoFormData.discountType === "percentage" &&
+															promoFormData.discountValue < 100 &&
+															` (Max ₱${promoFormData.maxDiscount})`}
+													</>
+												) : (
+													<span
+														style={{ color: "#ff6b6b", fontStyle: "italic" }}
+													>
+														Not set
+													</span>
+												)}
 											</div>
-											{promoFormData.minPurchase > 0 && (
-												<div className="summary-item">
-													<strong>Min Purchase:</strong> ₱
-													{promoFormData.minPurchase}
-												</div>
-											)}
 											<div className="summary-item">
-												<strong>Usage:</strong>{" "}
+												<strong>Min Purchase:</strong>{" "}
+												{promoFormData.minPurchase > 0
+													? `₱${promoFormData.minPurchase}`
+													: "No minimum"}
+											</div>
+											<div className="summary-item">
+												<strong>Usage Limit:</strong>{" "}
 												{promoFormData.usageLimit > 0
 													? `${promoFormData.usageLimit} total uses`
 													: "Unlimited"}
-												, {promoFormData.usagePerUser} per user
+											</div>
+											<div className="summary-item">
+												<strong>Usage Per User:</strong>{" "}
+												{promoFormData.usagePerUser || 1} time(s)
+											</div>
+											<div className="summary-item">
+												<strong>Valid Period:</strong>{" "}
+												{promoFormData.validFrom || promoFormData.validUntil ? (
+													<>
+														{promoFormData.validFrom
+															? new Date(
+																	promoFormData.validFrom
+															  ).toLocaleDateString()
+															: "No start date"}{" "}
+														to{" "}
+														{promoFormData.validUntil
+															? new Date(
+																	promoFormData.validUntil
+															  ).toLocaleDateString()
+															: "No end date"}
+													</>
+												) : (
+													"No date restrictions"
+												)}
+											</div>
+											<div className="summary-item">
+												<strong>Status:</strong>{" "}
+												{promoFormData.isActive ? (
+													<span style={{ color: "#28a745" }}>✓ Active</span>
+												) : (
+													<span style={{ color: "#dc3545" }}>✗ Inactive</span>
+												)}
 											</div>
 										</div>
 									</div>

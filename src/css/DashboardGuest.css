@@ -107,6 +107,10 @@
 	color: var(--primary);
 }
 
+.icon-button.messages-btn:hover {
+	color: #4a90e2;
+}
+
 .icon-button.favorites-btn:hover {
 	color: #ff6b6b;
 }

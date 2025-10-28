@@ -27,7 +27,7 @@ import {
 	FaUser,
 	FaSignOutAlt,
 	FaCog,
-	FaBell,
+	FaEnvelope,
 	FaPlus,
 	FaMapMarkerAlt,
 	FaCalendarAlt,
@@ -680,9 +680,9 @@ export default function DashboardGuest() {
 
 				{/* Right Section */}
 				<div className="navbar-right">
-					{/* Notifications */}
-					<button className="icon-button notifications-btn">
-						<FaBell />
+					{/* Messages */}
+					<button className="icon-button messages-btn" title="Messages">
+						<FaEnvelope />
 						<span className="badge">0</span>
 					</button>
 

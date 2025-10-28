@@ -1726,6 +1726,15 @@
 	border-color: #667eea;
 }
 
+.form-group input:disabled,
+.form-group select:disabled,
+.form-group textarea:disabled {
+	background-color: #f5f5f5;
+	color: #999;
+	cursor: not-allowed;
+	opacity: 0.7;
+}
+
 .form-group small {
 	display: block;
 	margin-top: 0.4rem;
@@ -1862,5 +1871,279 @@
 
 	.wizard-btn {
 		width: 100%;
+	}
+}
+
+/* Promo Filters */
+.promos-filters {
+	margin: 2rem 0;
+}
+
+.filter-tabs {
+	display: flex;
+	gap: 0.5rem;
+	background: white;
+	padding: 0.5rem;
+	border-radius: 12px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.filter-tab {
+	flex: 1;
+	padding: 0.75rem 1.5rem;
+	border: none;
+	background: transparent;
+	border-radius: 8px;
+	font-weight: 600;
+	font-size: 0.95rem;
+	color: #666;
+	cursor: pointer;
+	transition: all 0.3s ease;
+}
+
+.filter-tab:hover {
+	background: #f8f9fa;
+	color: #333;
+}
+
+.filter-tab.active {
+	background: linear-gradient(135deg, var(--primary), var(--secondary));
+	color: white;
+	box-shadow: 0 2px 8px rgba(65, 95, 148, 0.3);
+}
+
+/* Promos Table */
+.promos-table-container {
+	background: white;
+	border-radius: 12px;
+	overflow: hidden;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.promos-table-wrapper {
+	overflow-x: auto;
+}
+
+.promos-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.9rem;
+}
+
+.promos-table thead {
+	background: linear-gradient(135deg, var(--primary), var(--secondary));
+	color: white;
+}
+
+.promos-table th {
+	padding: 1rem;
+	text-align: left;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.promos-table td {
+	padding: 1rem;
+	border-bottom: 1px solid #f0f0f0;
+	vertical-align: middle;
+}
+
+.promos-table tbody tr:hover {
+	background: #f8f9fa;
+}
+
+.promos-table tbody tr.inactive-row {
+	opacity: 0.6;
+	background: #f9f9f9;
+}
+
+.promo-code {
+	font-size: 1.1rem;
+	color: var(--primary);
+	font-family: "Courier New", monospace;
+	letter-spacing: 1px;
+}
+
+.promo-description {
+	max-width: 250px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.discount-badge {
+	display: inline-block;
+	padding: 0.4rem 0.8rem;
+	border-radius: 20px;
+	font-weight: 600;
+	font-size: 0.85rem;
+}
+
+.discount-badge.percentage {
+	background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+	color: white;
+}
+
+.discount-badge.fixed {
+	background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+	color: white;
+}
+
+.usage-info {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.usage-count {
+	font-weight: 600;
+	color: #333;
+}
+
+.usage-per-user {
+	font-size: 0.8rem;
+	color: #666;
+}
+
+.validity-info {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.validity-info small {
+	font-size: 0.8rem;
+	color: #666;
+}
+
+.status-badges {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+
+.status-badge {
+	display: inline-block;
+	padding: 0.3rem 0.7rem;
+	border-radius: 12px;
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-align: center;
+}
+
+.status-badge.active {
+	background: #d4edda;
+	color: #155724;
+	border: 1px solid #c3e6cb;
+}
+
+.status-badge.inactive {
+	background: #f8d7da;
+	color: #721c24;
+	border: 1px solid #f5c6cb;
+}
+
+.status-badge.expired {
+	background: #fff3cd;
+	color: #856404;
+	border: 1px solid #ffeeba;
+}
+
+.status-badge.scheduled {
+	background: #d1ecf1;
+	color: #0c5460;
+	border: 1px solid #bee5eb;
+}
+
+.promo-actions {
+	display: flex;
+	gap: 0.5rem;
+	align-items: center;
+}
+
+.toggle-status-btn,
+.delete-promo-btn {
+	padding: 0.5rem 0.75rem;
+	border: none;
+	border-radius: 8px;
+	font-size: 1.2rem;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	background: #f8f9fa;
+}
+
+.toggle-status-btn:hover {
+	background: #e9ecef;
+	transform: scale(1.1);
+}
+
+.delete-promo-btn:hover {
+	background: #ffe5e5;
+	transform: scale(1.1);
+}
+
+/* Empty State */
+.promos-table-container .empty-state {
+	padding: 3rem;
+	text-align: center;
+}
+
+.promos-table-container .empty-state .empty-icon {
+	font-size: 4rem;
+	margin-bottom: 1rem;
+	opacity: 0.5;
+}
+
+.promos-table-container .empty-state h3 {
+	margin: 1rem 0 0.5rem 0;
+	color: #333;
+}
+
+.promos-table-container .empty-state p {
+	color: #666;
+	margin-bottom: 1.5rem;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+	.promos-table {
+		font-size: 0.85rem;
+	}
+
+	.promos-table th,
+	.promos-table td {
+		padding: 0.75rem 0.5rem;
+	}
+
+	.promo-description {
+		max-width: 150px;
+	}
+}
+
+@media (max-width: 768px) {
+	.filter-tabs {
+		flex-direction: column;
+	}
+
+	.filter-tab {
+		width: 100%;
+	}
+
+	.promos-table-wrapper {
+		overflow-x: scroll;
+	}
+
+	.promos-table {
+		min-width: 900px;
+	}
+
+	.promos-section .section-header {
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.create-promo-btn {
+		width: 100%;
+		justify-content: center;
 	}
 }

@@ -79,6 +79,28 @@ export default function PropertyDetails() {
 	const [promoDiscount, setPromoDiscount] = useState(0)
 	const [isValidatingPromo, setIsValidatingPromo] = useState(false)
 
+	// Platform policies from admin
+	const [platformPolicies, setPlatformPolicies] = useState({
+		serviceFeeGuest: 800,
+		guestFeePerPerson: 100,
+	})
+
+	// Reviews state
+	const [reviews, setReviews] = useState([])
+	const [userCompletedBookings, setUserCompletedBookings] = useState([])
+	const [showReviewModal, setShowReviewModal] = useState(false)
+	const [reviewFormData, setReviewFormData] = useState({
+		rating: 5,
+		comment: "",
+		cleanliness: 5,
+		accuracy: 5,
+		communication: 5,
+		location: 5,
+		checkIn: 5,
+		value: 5,
+	})
+	const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+
 	// Map ref
 	const mapContainer = useRef(null)
 	const map = useRef(null)
@@ -90,10 +112,13 @@ export default function PropertyDetails() {
 	useEffect(() => {
 		fetchPropertyDetails()
 		fetchBookedDates()
+		fetchPlatformPolicies()
+		fetchReviews()
 		if (currentUser) {
 			checkFavoriteStatus()
 			checkWishlistStatus()
 			fetchWalletBalance()
+			checkUserBookings()
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [propertyId, currentUser])
@@ -331,6 +356,195 @@ export default function PropertyDetails() {
 		}
 	}
 
+	// Fetch platform policies from admin settings
+	const fetchPlatformPolicies = async () => {
+		try {
+			const policiesDoc = await getDoc(doc(db, "settings", "policies"))
+			if (policiesDoc.exists()) {
+				const data = policiesDoc.data()
+				setPlatformPolicies({
+					serviceFeeGuest: data.serviceFeeGuest || 800,
+					guestFeePerPerson: data.guestFeePerPerson || 100,
+				})
+			}
+		} catch (error) {
+			console.error("Error fetching platform policies:", error)
+			// Use default values if fetch fails
+		}
+	}
+
+	// Fetch reviews from Firebase
+	const fetchReviews = async () => {
+		try {
+			const reviewsQuery = query(
+				collection(db, "reviews"),
+				where("propertyId", "==", propertyId)
+			)
+			const reviewsSnapshot = await getDocs(reviewsQuery)
+			const reviewsData = reviewsSnapshot.docs.map((doc) => ({
+				id: doc.id,
+				...doc.data(),
+			}))
+			// Sort by date, newest first
+			reviewsData.sort((a, b) => {
+				const dateA = a.createdAt?.toDate?.() || new Date(0)
+				const dateB = b.createdAt?.toDate?.() || new Date(0)
+				return dateB - dateA
+			})
+			setReviews(reviewsData)
+		} catch (error) {
+			console.error("Error fetching reviews:", error)
+		}
+	}
+
+	// Check user's completed bookings for this property
+	const checkUserBookings = async () => {
+		if (!currentUser) return
+		try {
+			const bookingsQuery = query(
+				collection(db, "bookings"),
+				where("guestId", "==", currentUser.uid),
+				where("propertyId", "==", propertyId),
+				where("status", "==", "completed")
+			)
+			const bookingsSnapshot = await getDocs(bookingsQuery)
+			const completedBookings = bookingsSnapshot.docs.map((doc) => ({
+				id: doc.id,
+				...doc.data(),
+			}))
+
+			// Filter bookings that haven't been reviewed yet
+			const unreviewedBookings = completedBookings.filter((booking) => {
+				return !reviews.some((review) => review.bookingId === booking.id)
+			})
+
+			setUserCompletedBookings(unreviewedBookings)
+		} catch (error) {
+			console.error("Error checking user bookings:", error)
+		}
+	}
+
+	// Submit a review
+	const handleSubmitReview = async () => {
+		if (!currentUser) {
+			toast.error("Please login to submit a review")
+			return
+		}
+
+		if (!reviewFormData.comment.trim()) {
+			toast.error("Please write a comment")
+			return
+		}
+
+		if (reviewFormData.comment.trim().length < 20) {
+			toast.error("Review must be at least 20 characters")
+			return
+		}
+
+		setIsSubmittingReview(true)
+		try {
+			// Calculate overall rating from individual ratings
+			const overallRating =
+				(reviewFormData.cleanliness +
+					reviewFormData.accuracy +
+					reviewFormData.communication +
+					reviewFormData.location +
+					reviewFormData.checkIn +
+					reviewFormData.value) /
+				6
+
+			// Get user data
+			const userDoc = await getDoc(doc(db, "users", currentUser.uid))
+			const userData = userDoc.data()
+
+			// Create review object
+			const reviewData = {
+				propertyId,
+				userId: currentUser.uid,
+				userName: userData?.displayName || currentUser.displayName || "Guest",
+				userEmail: userData?.email || currentUser.email,
+				rating: Math.round(overallRating * 10) / 10, // Round to 1 decimal
+				comment: reviewFormData.comment.trim(),
+				ratings: {
+					cleanliness: reviewFormData.cleanliness,
+					accuracy: reviewFormData.accuracy,
+					communication: reviewFormData.communication,
+					location: reviewFormData.location,
+					checkIn: reviewFormData.checkIn,
+					value: reviewFormData.value,
+					overall: overallRating,
+				},
+				bookingId: userCompletedBookings[0]?.id || null,
+				createdAt: new Date(),
+				status: "approved", // Auto-approve for now, can add moderation later
+			}
+
+			// Add review to Firebase
+			const { collection: firestoreCollection, addDoc: addDocument } =
+				await import("firebase/firestore")
+			await addDocument(firestoreCollection(db, "reviews"), reviewData)
+
+			// Update property's average rating
+			await updatePropertyRating()
+
+			toast.success("✅ Review submitted successfully!")
+			setShowReviewModal(false)
+			setReviewFormData({
+				rating: 5,
+				comment: "",
+				cleanliness: 5,
+				accuracy: 5,
+				communication: 5,
+				location: 5,
+				checkIn: 5,
+				value: 5,
+			})
+
+			// Refresh reviews and bookings
+			fetchReviews()
+			checkUserBookings()
+		} catch (error) {
+			console.error("Error submitting review:", error)
+			toast.error("❌ Failed to submit review. Please try again.")
+		} finally {
+			setIsSubmittingReview(false)
+		}
+	}
+
+	// Update property's average rating
+	const updatePropertyRating = async () => {
+		try {
+			const reviewsQuery = query(
+				collection(db, "reviews"),
+				where("propertyId", "==", propertyId),
+				where("status", "==", "approved")
+			)
+			const reviewsSnapshot = await getDocs(reviewsQuery)
+			const allReviews = reviewsSnapshot.docs.map((doc) => doc.data())
+
+			if (allReviews.length === 0) return
+
+			// Calculate average rating
+			const totalRating = allReviews.reduce(
+				(sum, review) => sum + (review.rating || 0),
+				0
+			)
+			const averageRating = totalRating / allReviews.length
+
+			// Update property document
+			const propertyRef = doc(db, "properties", propertyId)
+			await updateDoc(propertyRef, {
+				rating: Math.round(averageRating * 10) / 10, // Round to 1 decimal
+				reviewsCount: allReviews.length,
+			})
+
+			// Refresh property details
+			fetchPropertyDetails()
+		} catch (error) {
+			console.error("Error updating property rating:", error)
+		}
+	}
+
 	// Promo code functions
 	const validateAndApplyPromo = async () => {
 		if (!promoCode.trim()) {
@@ -464,10 +678,10 @@ export default function PropertyDetails() {
 		const nights = calculateNights()
 		const basePrice = property?.pricing?.basePrice || 0
 		const cleaningFee = 500
-		const serviceFee = 800
+		const serviceFee = platformPolicies.serviceFeeGuest
 
-		// Guest fee calculation: ₱100 per guest
-		const guestFee = numberOfGuests * 100
+		// Guest fee calculation using admin setting
+		const guestFee = numberOfGuests * platformPolicies.guestFeePerPerson
 
 		const subtotal = basePrice * nights
 		const totalBeforeDiscount = subtotal + cleaningFee + serviceFee + guestFee
@@ -1344,43 +1558,106 @@ export default function PropertyDetails() {
 
 					{/* Reviews */}
 					<section className="reviews-section">
-						<h2>
-							<FaStar /> Reviews
-						</h2>
-						{property.rating && (
+						<div className="reviews-header">
+							<h2>
+								<FaStar /> Reviews
+							</h2>
+							{currentUser && userCompletedBookings.length > 0 && (
+								<button
+									className="write-review-btn"
+									onClick={() => setShowReviewModal(true)}
+								>
+									✍️ Write a Review
+								</button>
+							)}
+						</div>
+						{property.rating && reviews.length > 0 && (
 							<div className="reviews-summary">
 								<div className="rating-big">
 									<FaStar /> {property.rating}
 								</div>
 								<div className="review-count">
-									{property.reviewsCount || 0} reviews
+									{reviews.length} {reviews.length === 1 ? "review" : "reviews"}
 								</div>
 							</div>
 						)}
 						<div className="reviews-list">
-							{(property.reviews || []).slice(0, 5).map((review, index) => (
-								<div key={index} className="review-item">
-									<div className="review-header">
-										<div className="reviewer-info">
-											<div className="reviewer-avatar">
-												{review.userName?.[0] || "U"}
+							{reviews.length > 0 ? (
+								reviews.slice(0, 10).map((review) => (
+									<div key={review.id} className="review-item">
+										<div className="review-header">
+											<div className="reviewer-info">
+												<div className="reviewer-avatar">
+													{review.userName?.[0]?.toUpperCase() || "U"}
+												</div>
+												<div>
+													<h4>{review.userName || "Guest"}</h4>
+													<span className="review-date">
+														{review.createdAt?.toDate
+															? review.createdAt
+																	.toDate()
+																	.toLocaleDateString("en-US", {
+																		year: "numeric",
+																		month: "long",
+																		day: "numeric",
+																	})
+															: "Recently"}
+													</span>
+												</div>
 											</div>
-											<div>
-												<h4>{review.userName || "Guest"}</h4>
-												<span className="review-date">{review.date}</span>
+											<div className="review-rating">
+												<FaStar /> {review.rating}
 											</div>
 										</div>
-										<div className="review-rating">
-											<FaStar /> {review.rating}
-										</div>
+										<p className="review-text">{review.comment}</p>
+										{review.ratings && (
+											<div className="review-detailed-ratings">
+												<div className="rating-item">
+													<span>Cleanliness</span>
+													<span>
+														<FaStar /> {review.ratings.cleanliness}
+													</span>
+												</div>
+												<div className="rating-item">
+													<span>Accuracy</span>
+													<span>
+														<FaStar /> {review.ratings.accuracy}
+													</span>
+												</div>
+												<div className="rating-item">
+													<span>Communication</span>
+													<span>
+														<FaStar /> {review.ratings.communication}
+													</span>
+												</div>
+												<div className="rating-item">
+													<span>Location</span>
+													<span>
+														<FaStar /> {review.ratings.location}
+													</span>
+												</div>
+												<div className="rating-item">
+													<span>Check-in</span>
+													<span>
+														<FaStar /> {review.ratings.checkIn}
+													</span>
+												</div>
+												<div className="rating-item">
+													<span>Value</span>
+													<span>
+														<FaStar /> {review.ratings.value}
+													</span>
+												</div>
+											</div>
+										)}
 									</div>
-									<p className="review-text">{review.comment}</p>
-								</div>
-							))}
+								))
+							) : (
+								<p className="no-reviews">
+									No reviews yet. Be the first to review this property!
+								</p>
+							)}
 						</div>
-						{!property.reviews || property.reviews.length === 0 ? (
-							<p className="no-reviews">No reviews yet</p>
-						) : null}
 					</section>
 
 					{/* Location */}
@@ -1948,6 +2225,211 @@ export default function PropertyDetails() {
 									Booked/Unavailable
 								</div>
 							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Review Modal */}
+			{showReviewModal && (
+				<div
+					className="review-modal-overlay"
+					onClick={() => setShowReviewModal(false)}
+				>
+					<div
+						className="review-modal-content"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="review-modal-header">
+							<h3>✍️ Write a Review</h3>
+							<button
+								className="close-review-modal"
+								onClick={() => setShowReviewModal(false)}
+							>
+								<FaTimes />
+							</button>
+						</div>
+
+						<div className="review-modal-body">
+							<p className="review-intro">
+								Share your experience with others! Rate your stay and help
+								future guests make informed decisions.
+							</p>
+
+							<div className="rating-categories">
+								<div className="rating-category">
+									<label>Cleanliness</label>
+									<div className="star-rating-input">
+										{[1, 2, 3, 4, 5].map((star) => (
+											<FaStar
+												key={star}
+												className={
+													star <= reviewFormData.cleanliness ? "active" : ""
+												}
+												onClick={() =>
+													setReviewFormData({
+														...reviewFormData,
+														cleanliness: star,
+													})
+												}
+											/>
+										))}
+										<span className="rating-value">
+											{reviewFormData.cleanliness}
+										</span>
+									</div>
+								</div>
+
+								<div className="rating-category">
+									<label>Accuracy</label>
+									<div className="star-rating-input">
+										{[1, 2, 3, 4, 5].map((star) => (
+											<FaStar
+												key={star}
+												className={
+													star <= reviewFormData.accuracy ? "active" : ""
+												}
+												onClick={() =>
+													setReviewFormData({
+														...reviewFormData,
+														accuracy: star,
+													})
+												}
+											/>
+										))}
+										<span className="rating-value">
+											{reviewFormData.accuracy}
+										</span>
+									</div>
+								</div>
+
+								<div className="rating-category">
+									<label>Communication</label>
+									<div className="star-rating-input">
+										{[1, 2, 3, 4, 5].map((star) => (
+											<FaStar
+												key={star}
+												className={
+													star <= reviewFormData.communication ? "active" : ""
+												}
+												onClick={() =>
+													setReviewFormData({
+														...reviewFormData,
+														communication: star,
+													})
+												}
+											/>
+										))}
+										<span className="rating-value">
+											{reviewFormData.communication}
+										</span>
+									</div>
+								</div>
+
+								<div className="rating-category">
+									<label>Location</label>
+									<div className="star-rating-input">
+										{[1, 2, 3, 4, 5].map((star) => (
+											<FaStar
+												key={star}
+												className={
+													star <= reviewFormData.location ? "active" : ""
+												}
+												onClick={() =>
+													setReviewFormData({
+														...reviewFormData,
+														location: star,
+													})
+												}
+											/>
+										))}
+										<span className="rating-value">
+											{reviewFormData.location}
+										</span>
+									</div>
+								</div>
+
+								<div className="rating-category">
+									<label>Check-in Experience</label>
+									<div className="star-rating-input">
+										{[1, 2, 3, 4, 5].map((star) => (
+											<FaStar
+												key={star}
+												className={
+													star <= reviewFormData.checkIn ? "active" : ""
+												}
+												onClick={() =>
+													setReviewFormData({
+														...reviewFormData,
+														checkIn: star,
+													})
+												}
+											/>
+										))}
+										<span className="rating-value">
+											{reviewFormData.checkIn}
+										</span>
+									</div>
+								</div>
+
+								<div className="rating-category">
+									<label>Value for Money</label>
+									<div className="star-rating-input">
+										{[1, 2, 3, 4, 5].map((star) => (
+											<FaStar
+												key={star}
+												className={star <= reviewFormData.value ? "active" : ""}
+												onClick={() =>
+													setReviewFormData({
+														...reviewFormData,
+														value: star,
+													})
+												}
+											/>
+										))}
+										<span className="rating-value">{reviewFormData.value}</span>
+									</div>
+								</div>
+							</div>
+
+							<div className="review-comment-section">
+								<label>Your Review</label>
+								<textarea
+									placeholder="Share your experience... (minimum 20 characters)"
+									value={reviewFormData.comment}
+									onChange={(e) =>
+										setReviewFormData({
+											...reviewFormData,
+											comment: e.target.value,
+										})
+									}
+									rows={5}
+									minLength={20}
+								/>
+								<small className="character-count">
+									{reviewFormData.comment.length} characters (minimum 20)
+								</small>
+							</div>
+						</div>
+
+						<div className="review-modal-footer">
+							<button
+								className="cancel-review-btn"
+								onClick={() => setShowReviewModal(false)}
+								disabled={isSubmittingReview}
+							>
+								Cancel
+							</button>
+							<button
+								className="submit-review-btn"
+								onClick={handleSubmitReview}
+								disabled={
+									isSubmittingReview ||
+									reviewFormData.comment.trim().length < 20
+								}
+							>
+								{isSubmittingReview ? "Submitting..." : "Submit Review"}
+							</button>
 						</div>
 					</div>
 				</div>
