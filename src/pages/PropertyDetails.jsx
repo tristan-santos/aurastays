@@ -36,6 +36,7 @@ import {
 	FaShieldAlt,
 	FaMedal,
 	FaClock,
+	FaWallet,
 } from "react-icons/fa"
 import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
@@ -59,6 +60,7 @@ export default function PropertyDetails() {
 	const [selectedImage, setSelectedImage] = useState(0)
 	const [showShareModal, setShowShareModal] = useState(false)
 	const [showAllPhotos, setShowAllPhotos] = useState(false)
+	const [showWalletPaymentModal, setShowWalletPaymentModal] = useState(false)
 	const [bookedDates, setBookedDates] = useState([])
 	const [currentMonth, setCurrentMonth] = useState(new Date())
 	const [showDatePickerModal, setShowDatePickerModal] = useState(false)
@@ -461,7 +463,15 @@ export default function PropertyDetails() {
 			const reviewData = {
 				propertyId,
 				userId: currentUser.uid,
-				userName: userData?.displayName || currentUser.displayName || "Guest",
+				userName:
+					userData?.displayName ||
+					currentUser.displayName ||
+					(userData?.firstName && userData?.lastName
+						? `${userData.firstName} ${userData.lastName}`
+						: userData?.firstName ||
+						  userData?.lastName ||
+						  currentUser.email?.split("@")[0] ||
+						  "User"),
 				userEmail: userData?.email || currentUser.email,
 				rating: Math.round(overallRating * 10) / 10, // Round to 1 decimal
 				comment: reviewFormData.comment.trim(),
@@ -741,7 +751,12 @@ export default function PropertyDetails() {
 				if (userDoc.exists()) {
 					const userData = userDoc.data()
 					userEmail = userData.email || currentUser.email
-					userName = userData.displayName || currentUser.displayName || "Guest"
+					userName =
+						userData.displayName ||
+						currentUser.displayName ||
+						(userData?.firstName && userData?.lastName
+							? `${userData.firstName} ${userData.lastName}`
+							: userData?.firstName || userData?.lastName || "Guest")
 				}
 			} catch (err) {
 				console.log("Using auth email as fallback:", err)
@@ -791,6 +806,118 @@ export default function PropertyDetails() {
 
 			const bookingsRef = firestoreCollection(db, "bookings")
 			const docRef = await addDoc(bookingsRef, bookingData)
+
+			// Create notification for booking
+			try {
+				const { createBookingNotification } = await import("../utils/notifications")
+				await createBookingNotification(currentUser.uid, {
+					propertyTitle: property.title,
+					bookingId: docRef.id,
+					totalAmount: prices.total,
+					checkInDate,
+					checkOutDate,
+				})
+			} catch (notifError) {
+				console.error("Error creating booking notification:", notifError)
+				// Don't fail the booking if notification fails
+			}
+
+			// Add money to admin wallet for ALL payment methods
+			try {
+				const adminEmail = "adminAurastays@aurastays.com"
+				const {
+					query: firestoreQuery,
+					where,
+					getDocs: getDocsFirestore,
+				} = await import("firebase/firestore")
+				const adminQuery = firestoreQuery(
+					firestoreCollection(db, "users"),
+					where("email", "==", adminEmail)
+				)
+				const adminSnapshot = await getDocsFirestore(adminQuery)
+
+				if (!adminSnapshot.empty) {
+					const adminDoc = adminSnapshot.docs[0]
+					const adminRef = doc(db, "users", adminDoc.id)
+					const adminData = adminDoc.data()
+					const adminCurrentBalance = adminData?.walletBalance || 0
+					const adminNewBalance = adminCurrentBalance + prices.total
+
+					await updateDoc(adminRef, {
+						walletBalance: adminNewBalance,
+					})
+
+					// Record admin transaction
+					await addDoc(firestoreCollection(db, "walletTransactions"), {
+						userId: adminDoc.id,
+						type: "booking_received",
+						amount: prices.total,
+						propertyTitle: property.title,
+						propertyId: propertyId,
+						guestId: currentUser.uid,
+						paymentMethod: paymentDetails.method || "paypal",
+						bookingId: docRef.id,
+						balanceBefore: adminCurrentBalance,
+						balanceAfter: adminNewBalance,
+						status: "completed",
+						createdAt: serverTimestamp(),
+					})
+
+					console.log(
+						`✅ Added ₱${prices.total} to admin wallet. New balance: ₱${adminNewBalance}`
+					)
+				} else {
+					console.warn(
+						"⚠️ Admin account not found. Please create admin account with email: adminAurastays@aurastays.com"
+					)
+				}
+			} catch (adminError) {
+				console.error("Error adding to admin wallet:", adminError)
+				// Continue with booking even if admin wallet update fails
+			}
+
+			// Add money to host's e-wallet
+			try {
+				const hostId =
+					property.hostId ||
+					property.host?.hostId ||
+					"UI7UgbxJj4atJmzmS61fAjA2E0A3"
+				const hostRef = doc(db, "users", hostId)
+				const hostDoc = await getDoc(hostRef)
+
+				if (hostDoc.exists()) {
+					const hostData = hostDoc.data()
+					const hostCurrentBalance = hostData?.walletBalance || 0
+					const hostNewBalance = hostCurrentBalance + prices.total
+
+					await updateDoc(hostRef, {
+						walletBalance: hostNewBalance,
+					})
+
+					// Record host transaction
+					await addDoc(firestoreCollection(db, "walletTransactions"), {
+						userId: hostId,
+						type: "booking_earning",
+						amount: prices.total,
+						propertyTitle: property.title,
+						propertyId: propertyId,
+						guestId: currentUser.uid,
+						paymentMethod: paymentDetails.method || "paypal",
+						bookingId: docRef.id,
+						balanceBefore: hostCurrentBalance,
+						balanceAfter: hostNewBalance,
+						status: "completed",
+						createdAt: serverTimestamp(),
+					})
+
+					console.log(
+						`✅ Added ₱${prices.total} to host wallet. New balance: ₱${hostNewBalance}`
+					)
+				}
+			} catch (hostError) {
+				console.error("Error adding to host wallet:", hostError)
+				// Continue with booking even if host wallet update fails
+			}
 
 			// Update promo usage if promo was applied
 			if (appliedPromo) {
@@ -865,7 +992,19 @@ export default function PropertyDetails() {
 					text: emailError.text,
 					status: emailError.status,
 				})
-				toast.error("Booking confirmed, but failed to send invoice email.")
+				// Suppress error toast if email was actually sent successfully
+				// EmailJS sometimes returns errors even when emails send successfully
+				const errorMessage = emailError.message?.toLowerCase() || ""
+				const errorText = emailError.text?.toLowerCase() || ""
+				const isAccountNotFound = 
+					errorMessage.includes("account not found") || 
+					errorText.includes("account not found")
+				
+				// Only show error if it's not an "account not found" error
+				// (which often appears even when email sends successfully)
+				if (!isAccountNotFound && emailError.status !== 200) {
+					toast.error("Booking confirmed, but failed to send invoice email.")
+				}
 			}
 
 			// Send booking confirmation email to host
@@ -996,13 +1135,17 @@ export default function PropertyDetails() {
 			return
 		}
 
-		// Confirm payment
-		const confirmed = window.confirm(
-			`Pay ₱${totalAmount.toLocaleString()} from your wallet for this booking?`
-		)
-		if (!confirmed) return
+		// Show custom payment confirmation modal
+		setShowWalletPaymentModal(true)
+	}
 
+	const handleConfirmWalletPayment = async () => {
+		const prices = calculatePrices()
+		const totalAmount = prices.total
+
+		setShowWalletPaymentModal(false)
 		setIsProcessingPayment(true)
+
 		try {
 			toast("Processing payment from wallet...", { type: "info" })
 
@@ -1033,6 +1176,87 @@ export default function PropertyDetails() {
 				status: "completed",
 				createdAt: timestamp(),
 			})
+
+			// Add money to admin wallet
+			try {
+				const adminEmail = "adminAurastays@aurastays.com"
+				const {
+					query: firestoreQuery,
+					where,
+					getDocs,
+				} = await import("firebase/firestore")
+				const adminQuery = firestoreQuery(
+					firestoreCollection(db, "users"),
+					where("email", "==", adminEmail)
+				)
+				const adminSnapshot = await getDocs(adminQuery)
+
+				if (!adminSnapshot.empty) {
+					const adminDoc = adminSnapshot.docs[0]
+					const adminRef = doc(db, "users", adminDoc.id)
+					const adminData = adminDoc.data()
+					const adminCurrentBalance = adminData?.walletBalance || 0
+					const adminNewBalance = adminCurrentBalance + totalAmount
+
+					await updateDoc(adminRef, {
+						walletBalance: adminNewBalance,
+					})
+
+					// Record admin transaction
+					await addDoc(firestoreCollection(db, "walletTransactions"), {
+						userId: adminDoc.id,
+						type: "booking_received",
+						amount: totalAmount,
+						propertyTitle: property.title,
+						propertyId: propertyId,
+						guestId: currentUser.uid,
+						balanceBefore: adminCurrentBalance,
+						balanceAfter: adminNewBalance,
+						status: "completed",
+						createdAt: timestamp(),
+					})
+				}
+			} catch (adminError) {
+				console.error("Error adding to admin wallet:", adminError)
+				// Continue with booking even if admin wallet update fails
+			}
+
+			// Add money to host's e-wallet
+			try {
+				const hostId =
+					property.hostId ||
+					property.host?.hostId ||
+					"UI7UgbxJj4atJmzmS61fAjA2E0A3"
+				const hostRef = doc(db, "users", hostId)
+				const hostDoc = await getDoc(hostRef)
+
+				if (hostDoc.exists()) {
+					const hostData = hostDoc.data()
+					const hostCurrentBalance = hostData?.walletBalance || 0
+					const hostNewBalance = hostCurrentBalance + totalAmount
+
+					await updateDoc(hostRef, {
+						walletBalance: hostNewBalance,
+					})
+
+					// Record host transaction
+					await addDoc(firestoreCollection(db, "walletTransactions"), {
+						userId: hostId,
+						type: "booking_earning",
+						amount: totalAmount,
+						propertyTitle: property.title,
+						propertyId: propertyId,
+						guestId: currentUser.uid,
+						balanceBefore: hostCurrentBalance,
+						balanceAfter: hostNewBalance,
+						status: "completed",
+						createdAt: timestamp(),
+					})
+				}
+			} catch (hostError) {
+				console.error("Error adding to host wallet:", hostError)
+				// Continue with booking even if host wallet update fails
+			}
 
 			// Create booking with wallet payment details
 			await createBooking("WALLET-" + Date.now(), {
@@ -1562,14 +1786,18 @@ export default function PropertyDetails() {
 							<h2>
 								<FaStar /> Reviews
 							</h2>
-							{currentUser && userCompletedBookings.length > 0 && (
-								<button
-									className="write-review-btn"
-									onClick={() => setShowReviewModal(true)}
-								>
-									✍️ Write a Review
-								</button>
-							)}
+							{currentUser &&
+								userCompletedBookings.length > 0 &&
+								!reviews.some(
+									(review) => review.userId === currentUser.uid
+								) && (
+									<button
+										className="write-review-btn"
+										onClick={() => setShowReviewModal(true)}
+									>
+										✍️ Write a Review
+									</button>
+								)}
 						</div>
 						{property.rating && reviews.length > 0 && (
 							<div className="reviews-summary">
@@ -1591,7 +1819,7 @@ export default function PropertyDetails() {
 													{review.userName?.[0]?.toUpperCase() || "U"}
 												</div>
 												<div>
-													<h4>{review.userName || "Guest"}</h4>
+													<h4>{review.userName || "User"}</h4>
 													<span className="review-date">
 														{review.createdAt?.toDate
 															? review.createdAt
@@ -1674,6 +1902,7 @@ export default function PropertyDetails() {
 						</div>
 						<div ref={mapContainer} className="map-container" />
 					</section>
+
 				</div>
 
 				{/* Right Column - Booking Card */}
@@ -2429,6 +2658,107 @@ export default function PropertyDetails() {
 								}
 							>
 								{isSubmittingReview ? "Submitting..." : "Submit Review"}
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Wallet Payment Confirmation Modal */}
+			{showWalletPaymentModal && (
+				<div
+					className="wallet-payment-modal-overlay"
+					onClick={() => setShowWalletPaymentModal(false)}
+				>
+					<div
+						className="wallet-payment-modal-content"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="wallet-payment-modal-header">
+							<div className="wallet-icon-wrapper">
+								<FaWallet />
+							</div>
+							<h3>Confirm E-Wallet Payment</h3>
+							<button
+								className="close-wallet-modal"
+								onClick={() => setShowWalletPaymentModal(false)}
+							>
+								<FaTimes />
+							</button>
+						</div>
+
+						<div className="wallet-payment-modal-body">
+							<div className="wallet-payment-info">
+								<p className="wallet-payment-message">
+									You are about to pay for this booking using your E-Wallet balance.
+								</p>
+								<div className="wallet-payment-summary">
+									<div className="summary-row">
+										<span className="summary-label">Property:</span>
+										<span className="summary-value">{property?.title}</span>
+									</div>
+									<div className="summary-row">
+										<span className="summary-label">Check-in:</span>
+										<span className="summary-value">
+											{checkInDate
+												? new Date(checkInDate).toLocaleDateString("en-US", {
+														month: "short",
+														day: "numeric",
+														year: "numeric",
+												  })
+												: "Not selected"}
+										</span>
+									</div>
+									<div className="summary-row">
+										<span className="summary-label">Check-out:</span>
+										<span className="summary-value">
+											{checkOutDate
+												? new Date(checkOutDate).toLocaleDateString("en-US", {
+														month: "short",
+														day: "numeric",
+														year: "numeric",
+												  })
+												: "Not selected"}
+										</span>
+									</div>
+									<div className="summary-row">
+										<span className="summary-label">Guests:</span>
+										<span className="summary-value">{numberOfGuests}</span>
+									</div>
+									<div className="summary-row total-row">
+										<span className="summary-label">Total Amount:</span>
+										<span className="summary-value total-amount">
+											₱{calculatePrices().total.toLocaleString()}
+										</span>
+									</div>
+									<div className="summary-row balance-row">
+										<span className="summary-label">Current Balance:</span>
+										<span className="summary-value balance-amount">
+											₱{walletBalance.toLocaleString()}
+										</span>
+									</div>
+									<div className="summary-row balance-after-row">
+										<span className="summary-label">Balance After:</span>
+										<span className="summary-value balance-after-amount">
+											₱{(walletBalance - calculatePrices().total).toLocaleString()}
+										</span>
+									</div>
+								</div>
+							</div>
+						</div>
+
+						<div className="wallet-payment-modal-footer">
+							<button
+								className="wallet-modal-cancel-btn"
+								onClick={() => setShowWalletPaymentModal(false)}
+							>
+								Cancel
+							</button>
+							<button
+								className="wallet-modal-confirm-btn"
+								onClick={handleConfirmWalletPayment}
+							>
+								<FaWallet /> Confirm Payment
 							</button>
 						</div>
 					</div>

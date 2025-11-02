@@ -13,6 +13,9 @@ import {
 	query,
 	where,
 	addDoc,
+	onSnapshot,
+	orderBy,
+	limit,
 } from "firebase/firestore"
 import { toast } from "react-stacked-toast"
 import Wallet from "../components/Wallet"
@@ -29,16 +32,30 @@ import {
 	FaCog,
 	FaEnvelope,
 	FaPlus,
+	FaMinus,
 	FaMapMarkerAlt,
 	FaCalendarAlt,
 	FaBookmark,
 	FaGift,
+	FaBed,
+	FaBath,
+	FaHome,
+	FaUsers,
+	FaParking,
+	FaWifi,
+	FaUtensils,
+	FaStickyNote,
 } from "react-icons/fa"
 
 export default function DashboardGuest() {
 	const navigate = useNavigate()
 	const { currentUser, userData, logout } = useAuth()
 	const [searchQuery, setSearchQuery] = useState("")
+	// Advanced search filters
+	const [whereQuery, setWhereQuery] = useState("")
+	const [guests, setGuests] = useState(1)
+	const [checkIn, setCheckIn] = useState("")
+	const [checkOut, setCheckOut] = useState("")
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
 	const [activeCategory, setActiveCategory] = useState("home")
 	const [properties, setProperties] = useState([])
@@ -52,7 +69,7 @@ export default function DashboardGuest() {
 		wishlistItems: 0,
 	})
 	const [favorites, setFavorites] = useState([])
-	const [wishlist, setWishlist] = useState([])
+	const [wishes, setWishes] = useState([])
 	const [showFavoritesModal, setShowFavoritesModal] = useState(false)
 	const [favoriteProperties, setFavoriteProperties] = useState([])
 	const [favoritesCategory, setFavoritesCategory] = useState("all")
@@ -66,8 +83,11 @@ export default function DashboardGuest() {
 		previous: [],
 	})
 	const [showWishlistModal, setShowWishlistModal] = useState(false)
-	const [wishlistProperties, setWishlistProperties] = useState([])
-	const [wishlistCategory, setWishlistCategory] = useState("all")
+	const [bookingsForWishes, setBookingsForWishes] = useState([])
+	const [wishDrafts, setWishDrafts] = useState({})
+	const [showViewWishlistModal, setShowViewWishlistModal] = useState(false)
+	const [selectedWishlistToView, setSelectedWishlistToView] = useState(null)
+	const [selectedPropertyForWishlist, setSelectedPropertyForWishlist] = useState(null)
 	const [showPromosModal, setShowPromosModal] = useState(false)
 	const [showReviewModal, setShowReviewModal] = useState(false)
 	const [selectedBookingForReview, setSelectedBookingForReview] = useState(null)
@@ -83,6 +103,7 @@ export default function DashboardGuest() {
 		feedback: "",
 		suggestions: "",
 	})
+	const [unreadNotifications, setUnreadNotifications] = useState(0)
 
 	// Get user's display name
 	const displayName =
@@ -116,11 +137,34 @@ export default function DashboardGuest() {
 			await fetchProperties()
 			await fetchUserStats()
 			await fetchUserFavorites()
-			await fetchUserWishlist()
+			// wishes loaded on demand
 			await fetchRecentSearches()
 		}
 		fetchData()
 		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [currentUser])
+
+	// Fetch unread notifications count
+	useEffect(() => {
+		if (!currentUser?.uid) return
+
+		const notificationsQuery = query(
+			collection(db, "notifications"),
+			where("userId", "==", currentUser.uid),
+			where("read", "==", false)
+		)
+
+		const unsubscribe = onSnapshot(
+			notificationsQuery,
+			(snapshot) => {
+				setUnreadNotifications(snapshot.size)
+			},
+			(error) => {
+				console.error("Error fetching notifications:", error)
+			}
+		)
+
+		return () => unsubscribe()
 	}, [currentUser])
 
 	// Filter properties by category
@@ -251,19 +295,22 @@ export default function DashboardGuest() {
 		}
 	}
 
-	const fetchUserWishlist = async () => {
-		if (!currentUser?.uid) return
-
-		try {
-			const userDoc = await getDoc(doc(db, "users", currentUser.uid))
-			if (userDoc.exists()) {
-				const data = userDoc.data()
-				setWishlist(data.wishlist || [])
-			}
-		} catch (error) {
-			console.error("Error fetching wishlist:", error)
-		}
-	}
+const fetchUserWishes = async () => {
+    if (!currentUser?.uid) return
+    try {
+        const userDoc = await getDoc(doc(db, "users", currentUser.uid))
+        if (userDoc.exists()) {
+            const data = userDoc.data()
+            const existing = Array.isArray(data.wishes) ? data.wishes : []
+            setWishes(existing)
+            const drafts = {}
+            existing.forEach((w) => (drafts[w.propertyId] = w.text || ""))
+            setWishDrafts(drafts)
+        }
+    } catch (error) {
+        console.error("Error fetching wishes:", error)
+    }
+}
 
 	const toggleFavorite = async (propertyId) => {
 		if (!currentUser?.uid) {
@@ -358,8 +405,12 @@ export default function DashboardGuest() {
 			if (userDoc.exists()) {
 				const data = userDoc.data()
 				const searches = data.recentSearches || []
+				// Filter out empty or whitespace-only searches
+				const validSearches = searches.filter(
+					(s) => s.query && s.query.trim().length > 0
+				)
 				// Get the last 5 searches and sort by timestamp descending
-				const sortedSearches = searches
+				const sortedSearches = validSearches
 					.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
 					.slice(0, 5)
 				setRecentSearches(sortedSearches)
@@ -371,10 +422,12 @@ export default function DashboardGuest() {
 
 	const handleSearch = async (e) => {
 		e.preventDefault()
-		if (!searchQuery.trim()) return
+		// Build combined query: prefer explicit whereQuery, fallback to searchQuery
+		const combinedQuery = (whereQuery || searchQuery).trim()
+		if (!combinedQuery) return
 
-		// Save search to Firebase
-		if (currentUser?.uid) {
+		// Save search to Firebase - only save non-empty queries
+		if (currentUser?.uid && combinedQuery && combinedQuery.length > 0) {
 			try {
 				const userDocRef = doc(db, "users", currentUser.uid)
 				const userDoc = await getDoc(userDocRef)
@@ -385,7 +438,7 @@ export default function DashboardGuest() {
 
 					// Check if the exact same query already exists (case-sensitive)
 					const existingIndex = searches.findIndex(
-						(s) => s.query === searchQuery.trim()
+						(s) => s.query === combinedQuery
 					)
 
 					if (existingIndex !== -1) {
@@ -395,7 +448,7 @@ export default function DashboardGuest() {
 
 					// Add the new/updated search at the end
 					searches.push({
-						query: searchQuery.trim(),
+						query: combinedQuery,
 						timestamp: new Date().toISOString(),
 					})
 
@@ -412,8 +465,13 @@ export default function DashboardGuest() {
 			}
 		}
 
-		// Navigate to search page
-		navigate("/search", { state: { query: searchQuery.trim() } })
+		// Navigate to search page with params
+		const params = new URLSearchParams()
+		params.set("q", combinedQuery)
+		if (guests) params.set("guests", String(guests))
+		if (checkIn) params.set("checkIn", checkIn)
+		if (checkOut) params.set("checkOut", checkOut)
+		navigate(`/search?${params.toString()}`)
 	}
 
 	const handleRecentSearchClick = (query) => {
@@ -428,14 +486,12 @@ export default function DashboardGuest() {
 			navigate("/")
 			localStorage.clear()
 			sessionStorage.clear()
-			history.push("/")
 			history.go(0)
 			window.location.reload()
 			window.location.href = "/"
 			window.location.reload()
 		} catch (error) {
-			console.error("Error logging out:", error)
-			toast.error("Failed to logout")
+			console.error("Error logging out dashboard:", error)
 		}
 	}
 
@@ -524,10 +580,29 @@ export default function DashboardGuest() {
 				return checkOutDate < today
 			})
 
+			// Deduplicate previous bookings by propertyId - keep only one booking per property
+			// Prefer the most recent booking (latest checkOutDate) for each property
+			const uniquePreviousProperties = new Map()
+			previous.forEach((booking) => {
+				const existing = uniquePreviousProperties.get(booking.propertyId)
+				if (!existing) {
+					uniquePreviousProperties.set(booking.propertyId, booking)
+				} else {
+					// Keep the booking with the most recent checkOutDate
+					const existingDate = new Date(existing.checkOutDate)
+					const currentDate = new Date(booking.checkOutDate)
+					if (currentDate > existingDate) {
+						uniquePreviousProperties.set(booking.propertyId, booking)
+					}
+				}
+			})
+			const uniquePrevious = Array.from(uniquePreviousProperties.values())
+
 			console.log("🔍 Upcoming bookings:", upcoming.length)
 			console.log("🔍 Previous bookings:", previous.length)
+			console.log("🔍 Unique previous bookings:", uniquePrevious.length)
 
-			setBookingsList({ upcoming, previous })
+			setBookingsList({ upcoming, previous: uniquePrevious })
 			console.log("🔍 Bookings list state updated")
 		} catch (error) {
 			console.error("❌ Error fetching bookings:", error)
@@ -536,26 +611,101 @@ export default function DashboardGuest() {
 	}
 
 	// Fetch wishlist properties
-	const handleShowWishlist = async () => {
-		console.log("🔍 handleShowWishlist called")
-		console.log("🔍 Current wishlist:", wishlist)
-		console.log("🔍 Total properties available:", properties.length)
-
-		setIsMenuOpen(false) // Close dropdown menu
-		setShowWishlistModal(true)
-		console.log("🔍 Wishlist modal state set to true")
-
-		if (wishlist.length > 0) {
-			const wishlistProps = properties.filter((prop) =>
-				wishlist.includes(prop.id)
-			)
-			console.log("🔍 Wishlist properties found:", wishlistProps.length)
-			setWishlistProperties(wishlistProps)
-		} else {
-			console.log("🔍 Wishlist is empty")
-			setWishlistProperties([])
+	const handleViewWishlist = async (wishlist, booking) => {
+		setSelectedWishlistToView(wishlist)
+		try {
+			// Fetch property details
+			const propertyDoc = await getDoc(doc(db, "properties", wishlist.propertyId))
+			if (propertyDoc.exists()) {
+				setSelectedPropertyForWishlist({ id: propertyDoc.id, ...propertyDoc.data() })
+			} else {
+				// Use booking data if property not found
+				setSelectedPropertyForWishlist({
+					id: wishlist.propertyId,
+					title: booking.propertyTitle || "Property",
+					images: booking.propertyImage ? [booking.propertyImage] : [],
+					location: booking.propertyLocation || {},
+				})
+			}
+			setShowViewWishlistModal(true)
+		} catch (error) {
+			console.error("Error fetching property for wishlist:", error)
+			// Use booking data as fallback
+			setSelectedPropertyForWishlist({
+				id: wishlist.propertyId,
+				title: booking.propertyTitle || "Property",
+				images: booking.propertyImage ? [booking.propertyImage] : [],
+				location: booking.propertyLocation || {},
+			})
+			setShowViewWishlistModal(true)
 		}
 	}
+
+	const handleShowWishlist = async () => {
+    setIsMenuOpen(false)
+    setShowWishlistModal(true)
+    await fetchUserWishes()
+    try {
+        const bookingsQueryRef = query(
+            collection(db, "bookings"),
+            where("guestId", "==", currentUser.uid)
+        )
+        const bookingsSnapshot = await getDocs(bookingsQueryRef)
+        const raw = bookingsSnapshot.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data(),
+        }))
+        
+        // Filter to only show previous bookings (completed bookings)
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const previousBookings = raw.filter((booking) => {
+            const checkOutDate = new Date(booking.checkOutDate)
+            checkOutDate.setHours(0, 0, 0, 0)
+            return checkOutDate < today
+        })
+        
+        const withImages = await Promise.all(
+            previousBookings.map(async (b) => {
+                try {
+                    const propertyDoc = await getDoc(doc(db, "properties", b.propertyId))
+                    const prop = propertyDoc.exists() ? propertyDoc.data() : {}
+                    return {
+                        ...b,
+                        propertyTitle: b.propertyTitle || prop.title,
+                        propertyImage: prop.images?.[0] || null,
+                    }
+                } catch {
+                    return b
+                }
+            })
+        )
+        
+        // Deduplicate by propertyId - keep only one booking per property
+        // Prefer the most recent booking (latest checkOutDate) for each property
+        const uniqueProperties = new Map()
+        withImages.forEach((booking) => {
+            const existing = uniqueProperties.get(booking.propertyId)
+            if (!existing) {
+                uniqueProperties.set(booking.propertyId, booking)
+            } else {
+                // Keep the booking with the most recent checkOutDate
+                const existingDate = new Date(existing.checkOutDate)
+                const currentDate = new Date(booking.checkOutDate)
+                if (currentDate > existingDate) {
+                    uniqueProperties.set(booking.propertyId, booking)
+                }
+            }
+        })
+        
+        // Convert Map to Array
+        const uniqueBookings = Array.from(uniqueProperties.values())
+        setBookingsForWishes(uniqueBookings)
+    } catch (e) {
+        console.error("Error loading bookings for wishes:", e)
+        setBookingsForWishes([])
+    }
+}
 
 	// Quick actions handlers
 	const handleSearchStays = () => {
@@ -563,10 +713,6 @@ export default function DashboardGuest() {
 		if (searchInput) {
 			searchInput.focus()
 		}
-	}
-
-	const handleExploreMap = () => {
-		toast("Map view coming soon!", { type: "info" })
 	}
 
 	// Open review modal
@@ -657,6 +803,78 @@ export default function DashboardGuest() {
 		return "Listing"
 	}
 
+	const saveWish = async (propertyId, wish) => {
+		if (!currentUser?.uid) {
+			toast.error("Please login to save a wish")
+			return
+		}
+
+		try {
+			const userDocRef = doc(db, "users", currentUser.uid)
+			const userDoc = await getDoc(userDocRef)
+
+			if (userDoc.exists()) {
+				const data = userDoc.data()
+				const existingWishes = Array.isArray(data.wishes) ? data.wishes : []
+				const existingWish = existingWishes.find((w) => w.propertyId === propertyId)
+
+				if (existingWish) {
+					// Update existing wish
+					const updatedWishes = existingWishes.map((w) =>
+						w.propertyId === propertyId ? { ...w, ...wish } : w
+					)
+					await updateDoc(userDocRef, { wishes: updatedWishes })
+					setWishes(updatedWishes)
+					toast.success("Wish updated successfully!")
+				} else {
+					// Add new wish
+					const newWish = {
+						propertyId: propertyId,
+						beds: wish.beds,
+						bathrooms: wish.bathrooms,
+						guests: wish.guests,
+						text: wish.text,
+						createdAt: new Date().toISOString(),
+					}
+					await updateDoc(userDocRef, { wishes: arrayUnion(newWish) })
+					setWishes([...wishes, newWish])
+					toast.success("Wish added successfully!")
+				}
+				await fetchUserWishes() // Refresh user document
+			}
+		} catch (error) {
+			console.error("Error saving wish:", error)
+			toast.error("Failed to save wish")
+		}
+	}
+
+	const deleteWish = async (propertyId) => {
+		if (!currentUser?.uid) {
+			toast.error("Please login to delete a wish")
+			return
+		}
+
+		try {
+			const userDocRef = doc(db, "users", currentUser.uid)
+			const userDoc = await getDoc(userDocRef)
+
+			if (userDoc.exists()) {
+				const data = userDoc.data()
+				const existingWishes = Array.isArray(data.wishes) ? data.wishes : []
+				const updatedWishes = existingWishes.filter(
+					(w) => w.propertyId !== propertyId
+				)
+				await updateDoc(userDocRef, { wishes: updatedWishes })
+				setWishes(updatedWishes)
+				toast.success("Wish removed successfully!")
+				await fetchUserWishes() // Refresh user document
+			}
+		} catch (error) {
+			console.error("Error deleting wish:", error)
+			toast.error("Failed to delete wish")
+		}
+	}
+
 	return (
 		<div className="dashboard-guest-container">
 			{/* Top Navigation Bar */}
@@ -673,17 +891,23 @@ export default function DashboardGuest() {
 					<input
 						type="text"
 						placeholder="Search destinations, hotels, experiences..."
-						value={searchQuery}
-						onChange={(e) => setSearchQuery(e.target.value)}
+						value={whereQuery}
+						onChange={(e) => setWhereQuery(e.target.value)}
 					/>
 				</form>
 
 				{/* Right Section */}
 				<div className="navbar-right">
 					{/* Messages */}
-					<button className="icon-button messages-btn" title="Messages">
+					<button
+						className="icon-button messages-btn"
+						title="Messages"
+						onClick={() => navigate("/messages")}
+					>
 						<FaEnvelope />
-						<span className="badge">0</span>
+						{unreadNotifications > 0 && (
+							<span className="badge">{unreadNotifications}</span>
+						)}
 					</button>
 
 					{/* Favorites */}
@@ -706,8 +930,8 @@ export default function DashboardGuest() {
 						>
 							<FaBars className="menu-icon" />
 							<div className="user-avatar">
-								{currentUser?.photoURL ? (
-									<img src={currentUser.photoURL} alt={displayName} />
+								{userData?.photoURL || currentUser?.photoURL ? (
+									<img src={userData?.photoURL || currentUser.photoURL} alt={displayName} />
 								) : (
 									<div className="avatar-initials">
 										{getInitials(displayName)}
@@ -721,8 +945,8 @@ export default function DashboardGuest() {
 							<div className="user-dropdown">
 								<div className="dropdown-header">
 									<div className="dropdown-avatar">
-										{currentUser?.photoURL ? (
-											<img src={currentUser.photoURL} alt={displayName} />
+										{userData?.photoURL || currentUser?.photoURL ? (
+											<img src={userData?.photoURL || currentUser.photoURL} alt={displayName} />
 										) : (
 											<div className="avatar-initials-large">
 												{getInitials(displayName)}
@@ -744,16 +968,15 @@ export default function DashboardGuest() {
 									<FaUser />
 									<span>My Profile</span>
 								</button>
-								<button
-									className="dropdown-item"
-									onClick={() => {
-										console.log("🔍 Wishlist dropdown clicked")
-										handleShowWishlist()
-									}}
-								>
-									<FaBookmark />
-									<span>Wishlist</span>
-								</button>
+					<button
+						className="dropdown-item"
+						onClick={() => {
+							handleShowWishlist()
+						}}
+					>
+						<FaBookmark />
+						<span>Wishlist</span>
+					</button>
 								<div className="dropdown-theme-section">
 									<span className="theme-label">Theme</span>
 									<div className="theme-buttons">
@@ -800,10 +1023,6 @@ export default function DashboardGuest() {
 							<FaSearch />
 							<span>Search Stays</span>
 						</button>
-						<button className="action-btn" onClick={handleExploreMap}>
-							<FaMapMarkerAlt />
-							<span>Explore Map</span>
-						</button>
 						<button className="action-btn" onClick={handleShowWishlist}>
 							<FaBookmark />
 							<span>Wishlist</span>
@@ -828,7 +1047,7 @@ export default function DashboardGuest() {
 						<div className="stat-icon">📋</div>
 						<div className="stat-info">
 							<div className="stat-number">{userStats.totalBookings}</div>
-							<div className="stat-label">Previous Bookings</div>
+							<div className="quick-stat-label">Previous Bookings</div>
 						</div>
 					</div>
 					<div
@@ -839,7 +1058,7 @@ export default function DashboardGuest() {
 						<div className="stat-icon">✈️</div>
 						<div className="stat-info">
 							<div className="stat-number">{userStats.upcomingTrips}</div>
-							<div className="stat-label">Upcoming Trips</div>
+							<div className="quick-stat-label">Upcoming Trips</div>
 						</div>
 					</div>
 					<div
@@ -852,14 +1071,14 @@ export default function DashboardGuest() {
 							<div className="stat-number">
 								₱{userStats.eWallet.toLocaleString()}
 							</div>
-							<div className="stat-label">E-Wallet</div>
+							<div className="quick-stat-label">E-Wallet</div>
 						</div>
 					</div>
 				</div>
 
 				{/* Promotional Banner */}
 				<section className="promo-banner">
-					<div className="promo-content">
+					<div className="promo-content-guest">
 						<div className="promo-text">
 							<h3>✨ Special Weekend Offer!</h3>
 							<p>Get up to 30% off on selected properties this weekend</p>
@@ -998,19 +1217,19 @@ export default function DashboardGuest() {
 												{property.category === "home" && property.capacity && (
 													<div className="listing-details">
 														<div className="detail-item">
-															<span className="detail-icon">🛏️</span>
+															<span className="listing-icon">🛏️</span>
 															<span className="detail-text">
 																{property.capacity.beds} beds
 															</span>
 														</div>
 														<div className="detail-item">
-															<span className="detail-icon">🛁</span>
+															<span className="listing-icon">🛁</span>
 															<span className="detail-text">
 																{property.capacity.bathrooms} bath
 															</span>
 														</div>
 														<div className="detail-item">
-															<span className="detail-icon">👥</span>
+															<span className="listing-icon">👥</span>
 															<span className="detail-text">
 																{property.capacity.guests} guests
 															</span>
@@ -1023,13 +1242,13 @@ export default function DashboardGuest() {
 													property.duration && (
 														<div className="listing-details">
 															<div className="detail-item">
-																<span className="detail-icon">⏰</span>
+																<span className="listing-icon">⏰</span>
 																<span className="detail-text">
 																	{property.duration.hours}h
 																</span>
 															</div>
 															<div className="detail-item">
-																<span className="detail-icon">👥</span>
+																<span className="listing-icon">👥</span>
 																<span className="detail-text">
 																	{property.capacity.minGuests}-
 																	{property.capacity.maxGuests} guests
@@ -1042,7 +1261,7 @@ export default function DashboardGuest() {
 												{property.category === "service" && (
 													<div className="listing-details">
 														<div className="detail-item">
-															<span className="detail-icon">📍</span>
+															<span className="listing-icon">📍</span>
 															<span className="detail-text">
 																{property.location.serviceable
 																	? "Multiple Locations"
@@ -1054,7 +1273,7 @@ export default function DashboardGuest() {
 
 												<div className="listing-footer">
 													<div className="listing-price">
-														<span className="price-amount">
+														<span className="listing-price-amount">
 															{formatPrice(
 																property.pricing?.basePrice ||
 																	property.pricing?.price ||
@@ -1070,28 +1289,16 @@ export default function DashboardGuest() {
 																: ""}
 														</span>
 													</div>
-													<div className="listing-actions">
-														<button
-															className="view-btn"
-															onClick={() =>
-																navigate(`/property/${property.id}`)
-															}
-														>
-															View Details
-														</button>
-														<button
-															className={`wishlist-btn-card ${
-																wishlist.includes(property.id) ? "active" : ""
-															}`}
-															onClick={(e) => {
-																e.stopPropagation()
-																toggleWishlist(property.id)
-															}}
-															title="Add to Wishlist"
-														>
-															<FaBookmark />
-														</button>
-													</div>
+								<div className="listing-actions">
+									<button
+										className="view-btn"
+										onClick={() =>
+											navigate(`/property/${property.id}`)
+										}
+									>
+										View Details
+									</button>
+								</div>
 												</div>
 											</div>
 										</div>
@@ -1727,325 +1934,77 @@ export default function DashboardGuest() {
 							</button>
 						</div>
 
-						{wishlistProperties.length === 0 ? (
-							<div className="empty-wishlist">
-								<FaBookmark className="empty-icon" />
-								<h3>Your wishlist is empty</h3>
-								<p>Start adding properties you love!</p>
-							</div>
-						) : (
-							<>
-								{/* Category Filter Buttons */}
-								<div className="wishlist-category-filters">
-									<button
-										className={`filter-btn ${
-											wishlistCategory === "all" ? "active" : ""
-										}`}
-										onClick={() => setWishlistCategory("all")}
-									>
-										<span className="filter-icon">🌟</span>
-										<span className="filter-label">All</span>
-										<span className="filter-count">
-											{wishlistProperties.length}
-										</span>
-									</button>
-									<button
-										className={`filter-btn ${
-											wishlistCategory === "home" ? "active" : ""
-										}`}
-										onClick={() => setWishlistCategory("home")}
-									>
-										<span className="filter-icon">🏠</span>
-										<span className="filter-label">Homes</span>
-										<span className="filter-count">
-											{
-												wishlistProperties.filter((p) => p.category === "home")
-													.length
-											}
-										</span>
-									</button>
-									<button
-										className={`filter-btn ${
-											wishlistCategory === "experience" ? "active" : ""
-										}`}
-										onClick={() => setWishlistCategory("experience")}
-									>
-										<span className="filter-icon">✨</span>
-										<span className="filter-label">Experiences</span>
-										<span className="filter-count">
-											{
-												wishlistProperties.filter(
-													(p) => p.category === "experience"
-												).length
-											}
-										</span>
-									</button>
-									<button
-										className={`filter-btn ${
-											wishlistCategory === "service" ? "active" : ""
-										}`}
-										onClick={() => setWishlistCategory("service")}
-									>
-										<span className="filter-icon">🛎️</span>
-										<span className="filter-label">Services</span>
-										<span className="filter-count">
-											{
-												wishlistProperties.filter(
-													(p) => p.category === "service"
-												).length
-											}
-										</span>
-									</button>
+						<div className="wishlist-modal-body">
+							{bookingsForWishes && bookingsForWishes.length > 0 ? (
+								<div className="wishlist-grid">
+									{bookingsForWishes.map((b) => {
+										const existing = (wishes || []).find((w) => w.propertyId === b.propertyId)
+										const draft = wishDrafts?.[b.propertyId] || {}
+										const bedsVal = draft.beds ?? existing?.beds ?? ""
+										const bathsVal = draft.bathrooms ?? existing?.bathrooms ?? ""
+										const guestsVal = draft.guests ?? existing?.guests ?? ""
+										return (
+											<div key={b.id} className="wishlist-card">
+												<div
+													className="wishlist-image"
+													style={{ backgroundImage: `url(${b.propertyImage || housePlaceholder})` }}
+												></div>
+												<div className="wishlist-info">
+													<h4 className="wishlist-title">{b.propertyTitle || "Property"}</h4>
+													<p className="wishlist-location"><FaCalendarAlt />{new Date(b.checkInDate).toLocaleDateString()} - {new Date(b.checkOutDate).toLocaleDateString()}</p>
+
+													<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginBottom: 8 }}>
+														{b.category === "home" && (
+															<>
+																<div>
+																	<label style={{ fontSize: 12, fontWeight: 600, color: "#555" }}>Beds</label>
+																	<input type="number" min="0" value={bedsVal}
+																		onChange={(e) => setWishDrafts({ ...wishDrafts, [b.propertyId]: { ...(wishDrafts?.[b.propertyId] || {}), beds: parseInt(e.target.value || "0", 10) } })} />
+																</div>
+																<div>
+																	<label style={{ fontSize: 12, fontWeight: 600, color: "#555" }}>Bathrooms</label>
+																	<input type="number" min="0" value={bathsVal}
+																		onChange={(e) => setWishDrafts({ ...wishDrafts, [b.propertyId]: { ...(wishDrafts?.[b.propertyId] || {}), bathrooms: parseInt(e.target.value || "0", 10) } })} />
+																</div>
+																<div>
+																	<label style={{ fontSize: 12, fontWeight: 600, color: "#555" }}>Guests</label>
+																	<input type="number" min="0" value={guestsVal}
+																		onChange={(e) => setWishDrafts({ ...wishDrafts, [b.propertyId]: { ...(wishDrafts?.[b.propertyId] || {}), guests: parseInt(e.target.value || "0", 10) } })} />
+																</div>
+															</>
+														)}
+													</div>
+
+													<div className="review-actions" style={{ marginTop: 8 }}>
+														{existing?.isCreated === true ? (
+															<button
+																className="submit-review-btn"
+																onClick={() => handleViewWishlist(existing, b)}
+															>
+																<FaBookmark /> View Wishlist
+															</button>
+														) : (
+															<button
+																className="submit-review-btn"
+																onClick={() => navigate(`/wishlist/new?propertyId=${b.propertyId}`, { state: { bookingId: b.id } })}
+															>
+																Create Wishlist
+															</button>
+														)}
+													</div>
+												</div>
+											</div>
+									)
+									})}
 								</div>
-
-								<div className="wishlist-modal-body">
-									{/* Homes Section */}
-									{(wishlistCategory === "all" ||
-										wishlistCategory === "home") &&
-										wishlistProperties.filter((p) => p.category === "home")
-											.length > 0 && (
-											<div className="wishlist-category-section">
-												<h3 className="wishlist-category-title">
-													<span className="category-icon">🏠</span> Homes (
-													{
-														wishlistProperties.filter(
-															(p) => p.category === "home"
-														).length
-													}
-													)
-												</h3>
-												<div className="wishlist-grid">
-													{wishlistProperties
-														.filter((p) => p.category === "home")
-														.map((property) => (
-															<div key={property.id} className="wishlist-card">
-																<div
-																	className="wishlist-image"
-																	style={{
-																		backgroundImage: `url(${
-																			property.images?.[0] || housePlaceholder
-																		})`,
-																	}}
-																>
-																	<button
-																		className="remove-wishlist-btn"
-																		onClick={() => toggleWishlist(property.id)}
-																		title="Remove from wishlist"
-																	>
-																		<FaBookmark />
-																	</button>
-																</div>
-																<div className="wishlist-info">
-																	<h4 className="wishlist-title">
-																		{property.title}
-																	</h4>
-																	<p className="wishlist-location">
-																		<FaMapMarkerAlt />
-																		{property.location?.city},{" "}
-																		{property.location?.province}
-																	</p>
-																	<div className="wishlist-rating">
-																		<span>⭐</span>
-																		<span>{property.rating}</span>
-																		<span className="review-count">
-																			({property.reviewsCount})
-																		</span>
-																	</div>
-																	<div className="wishlist-price">
-																		{formatPrice(
-																			property.pricing?.basePrice || 0,
-																			property.pricing?.currency
-																		)}
-																		<span className="price-period">
-																			{property.category === "home"
-																				? "/ night"
-																				: property.category === "experience"
-																				? "/ person"
-																				: ""}
-																		</span>
-																	</div>
-																	<button
-																		className="view-details-btn"
-																		onClick={() => {
-																			navigate(`/property/${property.id}`)
-																			setShowWishlistModal(false)
-																		}}
-																	>
-																		View Details
-																	</button>
-																</div>
-															</div>
-														))}
-												</div>
-											</div>
-										)}
-
-									{/* Experiences Section */}
-									{(wishlistCategory === "all" ||
-										wishlistCategory === "experience") &&
-										wishlistProperties.filter(
-											(p) => p.category === "experience"
-										).length > 0 && (
-											<div className="wishlist-category-section">
-												<h3 className="wishlist-category-title">
-													<span className="category-icon">✨</span> Experiences
-													(
-													{
-														wishlistProperties.filter(
-															(p) => p.category === "experience"
-														).length
-													}
-													)
-												</h3>
-												<div className="wishlist-grid">
-													{wishlistProperties
-														.filter((p) => p.category === "experience")
-														.map((property) => (
-															<div key={property.id} className="wishlist-card">
-																<div
-																	className="wishlist-image"
-																	style={{
-																		backgroundImage: `url(${
-																			property.images?.[0] || housePlaceholder
-																		})`,
-																	}}
-																>
-																	<button
-																		className="remove-wishlist-btn"
-																		onClick={() => toggleWishlist(property.id)}
-																		title="Remove from wishlist"
-																	>
-																		<FaBookmark />
-																	</button>
-																</div>
-																<div className="wishlist-info">
-																	<h4 className="wishlist-title">
-																		{property.title}
-																	</h4>
-																	<p className="wishlist-location">
-																		<FaMapMarkerAlt />
-																		{property.location?.city},{" "}
-																		{property.location?.province}
-																	</p>
-																	<div className="wishlist-rating">
-																		<span>⭐</span>
-																		<span>{property.rating}</span>
-																		<span className="review-count">
-																			({property.reviewsCount})
-																		</span>
-																	</div>
-																	<div className="wishlist-price">
-																		{formatPrice(
-																			property.pricing?.basePrice || 0,
-																			property.pricing?.currency
-																		)}
-																		<span className="price-period">
-																			{property.category === "home"
-																				? "/ night"
-																				: property.category === "experience"
-																				? "/ person"
-																				: ""}
-																		</span>
-																	</div>
-																	<button
-																		className="view-details-btn"
-																		onClick={() => {
-																			navigate(`/property/${property.id}`)
-																			setShowWishlistModal(false)
-																		}}
-																	>
-																		View Details
-																	</button>
-																</div>
-															</div>
-														))}
-												</div>
-											</div>
-										)}
-
-									{/* Services Section */}
-									{(wishlistCategory === "all" ||
-										wishlistCategory === "service") &&
-										wishlistProperties.filter((p) => p.category === "service")
-											.length > 0 && (
-											<div className="wishlist-category-section">
-												<h3 className="wishlist-category-title">
-													<span className="category-icon">🛎️</span> Services (
-													{
-														wishlistProperties.filter(
-															(p) => p.category === "service"
-														).length
-													}
-													)
-												</h3>
-												<div className="wishlist-grid">
-													{wishlistProperties
-														.filter((p) => p.category === "service")
-														.map((property) => (
-															<div key={property.id} className="wishlist-card">
-																<div
-																	className="wishlist-image"
-																	style={{
-																		backgroundImage: `url(${
-																			property.images?.[0] || housePlaceholder
-																		})`,
-																	}}
-																>
-																	<button
-																		className="remove-wishlist-btn"
-																		onClick={() => toggleWishlist(property.id)}
-																		title="Remove from wishlist"
-																	>
-																		<FaBookmark />
-																	</button>
-																</div>
-																<div className="wishlist-info">
-																	<h4 className="wishlist-title">
-																		{property.title}
-																	</h4>
-																	<p className="wishlist-location">
-																		<FaMapMarkerAlt />
-																		{property.location?.city},{" "}
-																		{property.location?.province}
-																	</p>
-																	<div className="wishlist-rating">
-																		<span>⭐</span>
-																		<span>{property.rating}</span>
-																		<span className="review-count">
-																			({property.reviewsCount})
-																		</span>
-																	</div>
-																	<div className="wishlist-price">
-																		{formatPrice(
-																			property.pricing?.basePrice || 0,
-																			property.pricing?.currency
-																		)}
-																		<span className="price-period">
-																			{property.category === "home"
-																				? "/ night"
-																				: property.category === "experience"
-																				? "/ person"
-																				: ""}
-																		</span>
-																	</div>
-																	<button
-																		className="view-details-btn"
-																		onClick={() => {
-																			navigate(`/property/${property.id}`)
-																			setShowWishlistModal(false)
-																		}}
-																	>
-																		View Details
-																	</button>
-																</div>
-															</div>
-														))}
-												</div>
-											</div>
-										)}
+							) : (
+								<div className="empty-wishlist">
+									<FaBookmark className="empty-icon" />
+									<h3>No bookings to add to Wishlist</h3>
+									<p>Book a property to leave your improvement wishlist.</p>
 								</div>
-							</>
-						)}
+							)}
+						</div>
 					</div>
 				</div>
 			)}
@@ -2289,6 +2248,154 @@ export default function DashboardGuest() {
 									</div>
 								</div>
 							)}
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* View Wishlist Modal */}
+			{showViewWishlistModal && selectedWishlistToView && selectedPropertyForWishlist && (
+				<div
+					className="modal-overlay wishlist-view-modal-overlay"
+					onClick={() => setShowViewWishlistModal(false)}
+				>
+					<div
+						className="modal-content wishlist-view-modal-content"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="wishlist-modal-header">
+							<h2>
+								<FaBookmark style={{ color: "var(--primary)" }} /> My Wishlist
+							</h2>
+							<button
+								className="close-modal-btn"
+								onClick={() => setShowViewWishlistModal(false)}
+							>
+								×
+							</button>
+						</div>
+
+						<div className="wishlist-view-body">
+							{/* Property Info */}
+							<div className="wishlist-property-header">
+								<img
+									src={selectedPropertyForWishlist.images?.[0] || housePlaceholder}
+									alt={selectedPropertyForWishlist.title}
+									className="wishlist-property-image"
+								/>
+								<div className="wishlist-property-info">
+									<h3>{selectedPropertyForWishlist.title}</h3>
+									{selectedPropertyForWishlist.location && (
+										<div className="wishlist-location">
+											<FaMapMarkerAlt />
+											<span>
+												{selectedPropertyForWishlist.location.city}, {selectedPropertyForWishlist.location.province}
+											</span>
+										</div>
+									)}
+								</div>
+							</div>
+
+							{/* Wishlist Details */}
+							<div className="wishlist-details-section">
+								<h4>Your Wishes</h4>
+								<div className="wishlist-details-grid">
+									{selectedWishlistToView.beds !== undefined && selectedWishlistToView.beds !== null && (
+										<div className="wishlist-detail-item">
+											<FaBed className="detail-icon" />
+											<div>
+												<span className="detail-label">Beds</span>
+												<span className="detail-value">{selectedWishlistToView.beds}</span>
+											</div>
+										</div>
+									)}
+									{selectedWishlistToView.bathrooms !== undefined && selectedWishlistToView.bathrooms !== null && (
+										<div className="wishlist-detail-item">
+											<FaBath className="detail-icon" />
+											<div>
+												<span className="detail-label">Bathrooms</span>
+												<span className="detail-value">{selectedWishlistToView.bathrooms}</span>
+											</div>
+										</div>
+									)}
+									{selectedWishlistToView.bedrooms !== undefined && selectedWishlistToView.bedrooms !== null && (
+										<div className="wishlist-detail-item">
+											<FaHome className="detail-icon" />
+											<div>
+												<span className="detail-label">Bedrooms</span>
+												<span className="detail-value">{selectedWishlistToView.bedrooms}</span>
+											</div>
+										</div>
+									)}
+									{selectedWishlistToView.guests !== undefined && selectedWishlistToView.guests !== null && (
+										<div className="wishlist-detail-item">
+											<FaUsers className="detail-icon" />
+											<div>
+												<span className="detail-label">Guests</span>
+												<span className="detail-value">{selectedWishlistToView.guests}</span>
+											</div>
+										</div>
+									)}
+									{selectedWishlistToView.parkingSpaces !== undefined && selectedWishlistToView.parkingSpaces !== null && (
+										<div className="wishlist-detail-item">
+											<FaParking className="detail-icon" />
+											<div>
+												<span className="detail-label">Parking Spaces</span>
+												<span className="detail-value">{selectedWishlistToView.parkingSpaces}</span>
+											</div>
+										</div>
+									)}
+									{selectedWishlistToView.wifiSpeed !== undefined && selectedWishlistToView.wifiSpeed !== null && selectedWishlistToView.wifiSpeed > 0 && (
+										<div className="wishlist-detail-item">
+											<FaWifi className="detail-icon" />
+											<div>
+												<span className="detail-label">Wi-Fi Speed</span>
+												<span className="detail-value">{selectedWishlistToView.wifiSpeed} Mbps</span>
+											</div>
+										</div>
+									)}
+								</div>
+
+								{selectedWishlistToView.breakfastIncluded && (
+									<div className="wishlist-offer-item">
+										<FaUtensils className="offer-icon" />
+										<span>Breakfast Included</span>
+									</div>
+								)}
+
+								{selectedWishlistToView.notes && (
+									<div className="wishlist-notes">
+										<h5>
+											<FaStickyNote /> Additional Notes
+										</h5>
+										<p>{selectedWishlistToView.notes}</p>
+									</div>
+								)}
+
+								{selectedWishlistToView.createdAt && (
+									<div className="wishlist-date">
+										Created: {new Date(selectedWishlistToView.createdAt).toLocaleDateString()}
+									</div>
+								)}
+							</div>
+						</div>
+
+						<div className="wishlist-modal-footer">
+							<button
+								className="btn-close-modal"
+								onClick={() => setShowViewWishlistModal(false)}
+							>
+								Close
+							</button>
+							<button
+								className="btn-edit-wishlist"
+								onClick={() => {
+									setShowViewWishlistModal(false)
+									navigate(`/wishlist/new?propertyId=${selectedWishlistToView.propertyId}`)
+								}}
+							>
+								Edit Wishlist
+							</button>
 						</div>
 					</div>
 				</div>

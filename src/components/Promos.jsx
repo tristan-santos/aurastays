@@ -4,7 +4,7 @@ import { db } from "./firebaseConfig"
 import { collection, getDocs, query, where } from "firebase/firestore"
 import "../css/Promos.css"
 
-export default function Promos({ isOpen, onClose }) {
+export default function Promos({ isOpen, onClose, userId = null }) {
 	const [copiedCode, setCopiedCode] = useState(null)
 	const [promos, setPromos] = useState([])
 	const [isLoading, setIsLoading] = useState(true)
@@ -13,11 +13,77 @@ export default function Promos({ isOpen, onClose }) {
 		if (isOpen) {
 			fetchPromos()
 		}
-	}, [isOpen])
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [isOpen, userId])
 
 	const fetchPromos = async () => {
 		setIsLoading(true)
 		try {
+			// If userId is provided, only show promos created by that user (for hosts)
+			// If userId is null, show all non-admin promos (for guests)
+			
+			// If userId is provided, filter by createdBy directly in the query
+			if (userId) {
+				const promosQuery = query(
+					collection(db, "promos"),
+					where("createdBy", "==", userId)
+				)
+				const promosSnapshot = await getDocs(promosQuery)
+				
+				const now = new Date()
+				const promosData = promosSnapshot.docs
+					.map((doc) => ({
+						id: doc.id,
+						...doc.data(),
+					}))
+					.filter((promo) => {
+						// Must be active
+						if (!promo.isActive) return false
+						
+						// Filter out expired promos
+						if (promo.validUntil) {
+							const expiryDate = new Date(promo.validUntil)
+							if (expiryDate < now) return false
+						}
+						
+						// Filter out promos that haven't started yet
+						if (promo.validFrom) {
+							const startDate = new Date(promo.validFrom)
+							if (startDate > now) return false
+						}
+						
+						// Filter out promos that reached their usage limit
+						if (
+							promo.usageLimit > 0 &&
+							(promo.usageCount || 0) >= promo.usageLimit
+						) {
+							return false
+						}
+						
+						return true
+					})
+				
+				setPromos(promosData)
+				setIsLoading(false)
+				return
+			}
+
+			// For guests: get admin user ID to filter out admin-created promos
+			let adminUserId = null
+			try {
+				const adminEmail = "adminAurastays@aurastays.com"
+				const usersQuery = query(
+					collection(db, "users"),
+					where("email", "==", adminEmail)
+				)
+				const usersSnapshot = await getDocs(usersQuery)
+				if (!usersSnapshot.empty) {
+					adminUserId = usersSnapshot.docs[0].id
+				}
+			} catch (adminError) {
+				console.error("Error fetching admin user ID:", adminError)
+			}
+
 			// Try to fetch all promos first, then filter
 			const promosSnapshot = await getDocs(collection(db, "promos"))
 
@@ -34,6 +100,12 @@ export default function Promos({ isOpen, onClose }) {
 					}
 				})
 				.filter((promo) => {
+					// Filter out admin-created promos (for guests)
+					if (adminUserId && promo.createdBy === adminUserId) {
+						console.log(`Promo ${promo.code} was created by admin, excluding`)
+						return false
+					}
+
 					// Must be active
 					if (!promo.isActive) {
 						console.log(`Promo ${promo.code} is not active`)

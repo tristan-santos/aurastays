@@ -70,6 +70,8 @@ const AdminDashboard = () => {
 		walletWithdrawalFee: 1, // percentage
 		cancellationWindowHours: 48,
 		minPropertyRating: 3.0,
+		cleaningFee: 500, // fixed amount in pesos (default cleaning fee per property)
+		serviceFeePerProperty: 200, // fixed amount in pesos (service fee per property listing)
 	})
 	const [recentUsers, setRecentUsers] = useState([])
 	const [reportModal, setReportModal] = useState({
@@ -97,12 +99,25 @@ const AdminDashboard = () => {
 	const [isCreatingPromo, setIsCreatingPromo] = useState(false)
 	const [promos, setPromos] = useState([])
 	const [promoFilter, setPromoFilter] = useState("all") // 'all', 'active', 'inactive', 'expired', 'scheduled'
+	const [walletBalance, setWalletBalance] = useState(0)
+	const [walletTransactions, setWalletTransactions] = useState([])
+	const [loadingWallet, setLoadingWallet] = useState(false)
+	const [sidebarOpen, setSidebarOpen] = useState(true)
+	const [adminPaypalEmail, setAdminPaypalEmail] = useState("")
+	const [showPaypalModal, setShowPaypalModal] = useState(false)
+	const [paypalEmailInput, setPaypalEmailInput] = useState("")
 
 	useEffect(() => {
 		fetchAdminData()
 		fetchPlatformPolicies()
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
+
+	useEffect(() => {
+		if (activeTab === "wallet") {
+			fetchWalletData()
+		}
+	}, [activeTab])
 
 	const fetchAdminData = async () => {
 		try {
@@ -421,11 +436,129 @@ const AdminDashboard = () => {
 					walletWithdrawalFee: policiesData.walletWithdrawalFee || 1,
 					cancellationWindowHours: policiesData.cancellationWindowHours || 48,
 					minPropertyRating: policiesData.minPropertyRating || 3.0,
+					cleaningFee: policiesData.cleaningFee || 500,
+					serviceFeePerProperty: policiesData.serviceFeePerProperty || 200,
 				})
 			}
 		} catch (err) {
 			console.error("Error fetching policies:", err)
 			// Keep default values if fetch fails
+		}
+	}
+
+	const fetchWalletData = async () => {
+		try {
+			setLoadingWallet(true)
+			const adminEmail = "adminAurastays@aurastays.com"
+
+			// Get admin user document
+			const { query, where } = await import("firebase/firestore")
+			const usersCollection = collection(db, "users")
+			const adminQuery = query(
+				usersCollection,
+				where("email", "==", adminEmail)
+			)
+			const adminSnapshot = await getDocs(adminQuery)
+
+			if (!adminSnapshot.empty) {
+				const adminDoc = adminSnapshot.docs[0]
+				const adminData = adminDoc.data()
+				setWalletBalance(adminData?.walletBalance || 0)
+				setAdminPaypalEmail(adminData?.paypalEmail || "")
+				setPaypalEmailInput(adminData?.paypalEmail || "")
+
+				// Fetch wallet transactions for admin
+				const txQuery = query(
+					collection(db, "walletTransactions"),
+					where("userId", "==", adminDoc.id)
+				)
+				const txSnapshot = await getDocs(txQuery)
+				const transactions = txSnapshot.docs.map((doc) => ({
+					id: doc.id,
+					...doc.data(),
+				}))
+
+				// Sort by date, newest first
+				transactions.sort((a, b) => {
+					const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0
+					const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0
+					return timeB - timeA
+				})
+
+				setWalletTransactions(transactions)
+			} else {
+				toast.error("Admin account not found")
+			}
+		} catch (err) {
+			console.error("Error fetching wallet data:", err)
+			toast.error("Failed to load wallet data")
+		} finally {
+			setLoadingWallet(false)
+		}
+	}
+
+	const handleConnectPaypal = async () => {
+		if (!paypalEmailInput || !paypalEmailInput.includes("@")) {
+			toast.error("Please enter a valid PayPal email")
+			return
+		}
+
+		try {
+			const adminEmail = "adminAurastays@aurastays.com"
+			const { query, where } = await import("firebase/firestore")
+			const usersCollection = collection(db, "users")
+			const adminQuery = query(
+				usersCollection,
+				where("email", "==", adminEmail)
+			)
+			const adminSnapshot = await getDocs(adminQuery)
+
+			if (!adminSnapshot.empty) {
+				const adminDoc = adminSnapshot.docs[0]
+				const adminRef = doc(db, "users", adminDoc.id)
+
+				await updateDoc(adminRef, {
+					paypalEmail: paypalEmailInput,
+					updatedAt: new Date(),
+				})
+
+				setAdminPaypalEmail(paypalEmailInput)
+				setShowPaypalModal(false)
+				toast.success("PayPal account connected successfully!")
+			}
+		} catch (error) {
+			console.error("Error connecting PayPal:", error)
+			toast.error("Failed to connect PayPal account")
+		}
+	}
+
+	const handleDisconnectPaypal = async () => {
+		try {
+			const adminEmail = "adminAurastays@aurastays.com"
+			const { query, where } = await import("firebase/firestore")
+			const usersCollection = collection(db, "users")
+			const adminQuery = query(
+				usersCollection,
+				where("email", "==", adminEmail)
+			)
+			const adminSnapshot = await getDocs(adminQuery)
+
+			if (!adminSnapshot.empty) {
+				const adminDoc = adminSnapshot.docs[0]
+				const adminRef = doc(db, "users", adminDoc.id)
+
+				await updateDoc(adminRef, {
+					paypalEmail: "",
+					updatedAt: new Date(),
+				})
+
+				setAdminPaypalEmail("")
+				setPaypalEmailInput("")
+				toast.success("PayPal account disconnected")
+			}
+		} catch (error) {
+			console.error("Error disconnecting PayPal:", error)
+			toast.error("Failed to disconnect PayPal account")
 		}
 	}
 
@@ -1413,7 +1546,15 @@ const AdminDashboard = () => {
 		<div className="admin-dashboard">
 			<header className="admin-header">
 				<div className="admin-header-content">
-					<h1>📊 Admin Dashboard</h1>
+					<div className="admin-header-left">
+						<button
+							className="sidebar-toggle"
+							onClick={() => setSidebarOpen(!sidebarOpen)}
+						>
+							<span className="hamburger-icon">{sidebarOpen ? "✕" : "☰"}</span>
+						</button>
+						<h1>📊 Admin Dashboard</h1>
+					</div>
 					<div className="admin-user-info">
 						<span>Welcome, {userData?.displayName || "Admin"}</span>
 						<button
@@ -1438,55 +1579,76 @@ const AdminDashboard = () => {
 						</button>
 					</div>
 				</div>
-
-				{/* Navigation Tabs */}
-				<div className="admin-tabs">
-					<button
-						className={`tab-btn ${activeTab === "dashboard" ? "active" : ""}`}
-						onClick={() => setActiveTab("dashboard")}
-					>
-						<span className="tab-icon">📊</span>
-						<span>Dashboard</span>
-					</button>
-					<button
-						className={`tab-btn ${activeTab === "policies" ? "active" : ""}`}
-						onClick={() => setActiveTab("policies")}
-					>
-						<span className="tab-icon">📋</span>
-						<span>Policies & Compliance</span>
-					</button>
-					<button
-						className={`tab-btn ${activeTab === "terms" ? "active" : ""}`}
-						onClick={() => setActiveTab("terms")}
-					>
-						<span className="tab-icon">📜</span>
-						<span>Terms & Conditions</span>
-					</button>
-					<button
-						className={`tab-btn ${activeTab === "privacy" ? "active" : ""}`}
-						onClick={() => setActiveTab("privacy")}
-					>
-						<span className="tab-icon">🔒</span>
-						<span>Privacy Policy</span>
-					</button>
-					<button
-						className={`tab-btn ${activeTab === "reports" ? "active" : ""}`}
-						onClick={() => setActiveTab("reports")}
-					>
-						<span className="tab-icon">📄</span>
-						<span>Generate Reports</span>
-					</button>
-					<button
-						className={`tab-btn ${activeTab === "promos" ? "active" : ""}`}
-						onClick={() => setActiveTab("promos")}
-					>
-						<span className="tab-icon">🎁</span>
-						<span>Promos</span>
-					</button>
-				</div>
 			</header>
 
-			<main className="admin-main">
+			{/* Sidebar Navigation */}
+			<aside className={`admin-sidebar ${sidebarOpen ? "open" : "closed"}`}>
+				<nav className="sidebar-nav">
+					<button
+						className={`sidebar-item ${
+							activeTab === "dashboard" ? "active" : ""
+						}`}
+						onClick={() => setActiveTab("dashboard")}
+					>
+						<span className="sidebar-icon">📊</span>
+						<span className="sidebar-text">Dashboard</span>
+					</button>
+					<button
+						className={`sidebar-item ${
+							activeTab === "policies" ? "active" : ""
+						}`}
+						onClick={() => setActiveTab("policies")}
+					>
+						<span className="sidebar-icon">📋</span>
+						<span className="sidebar-text">Policies & Compliance</span>
+					</button>
+					<button
+						className={`sidebar-item ${activeTab === "terms" ? "active" : ""}`}
+						onClick={() => setActiveTab("terms")}
+					>
+						<span className="sidebar-icon">📜</span>
+						<span className="sidebar-text">Terms & Conditions</span>
+					</button>
+					<button
+						className={`sidebar-item ${
+							activeTab === "privacy" ? "active" : ""
+						}`}
+						onClick={() => setActiveTab("privacy")}
+					>
+						<span className="sidebar-icon">🔒</span>
+						<span className="sidebar-text">Privacy Policy</span>
+					</button>
+					<button
+						className={`sidebar-item ${
+							activeTab === "reports" ? "active" : ""
+						}`}
+						onClick={() => setActiveTab("reports")}
+					>
+						<span className="sidebar-icon">📄</span>
+						<span className="sidebar-text">Generate Reports</span>
+					</button>
+					<button
+						className={`sidebar-item ${activeTab === "promos" ? "active" : ""}`}
+						onClick={() => setActiveTab("promos")}
+					>
+						<span className="sidebar-icon">🎁</span>
+						<span className="sidebar-text">Promos</span>
+					</button>
+					<button
+						className={`sidebar-item ${activeTab === "wallet" ? "active" : ""}`}
+						onClick={() => setActiveTab("wallet")}
+					>
+						<span className="sidebar-icon">💰</span>
+						<span className="sidebar-text">E-Wallet</span>
+					</button>
+				</nav>
+			</aside>
+
+			<main
+				className={`admin-main ${
+					sidebarOpen ? "sidebar-open" : "sidebar-closed"
+				}`}
+			>
 				{/* Dashboard Content */}
 				{activeTab === "dashboard" && (
 					<>
@@ -4259,6 +4421,313 @@ const AdminDashboard = () => {
 								</div>
 							</div>
 						</div>
+					</div>
+				)}
+
+				{/* E-Wallet Tab */}
+				{activeTab === "wallet" && (
+					<div className="content-section wallet-section">
+						<div className="section-header">
+							<div>
+								<h2>💰 Admin E-Wallet</h2>
+								<p>Manage admin wallet balance and view transaction history</p>
+							</div>
+						</div>
+
+						{loadingWallet ? (
+							<div className="loading-state">
+								<div className="spinner"></div>
+								<p>Loading wallet data...</p>
+							</div>
+						) : (
+							<>
+								{/* Wallet Balance Card */}
+								<div className="wallet-balance-card">
+									<div className="balance-header">
+										<div className="balance-icon">💳</div>
+										<div className="balance-info">
+											<p className="balance-label">Available Balance</p>
+											<h1 className="balance-amount">
+												₱
+												{walletBalance.toLocaleString("en-PH", {
+													minimumFractionDigits: 2,
+													maximumFractionDigits: 2,
+												})}
+											</h1>
+										</div>
+									</div>
+									<div className="balance-stats">
+										<div className="stat-item">
+											<span className="stat-label">Total Transactions</span>
+											<span className="stat-value">
+												{walletTransactions.length}
+											</span>
+										</div>
+										<div className="stat-item">
+											<span className="stat-label">This Month</span>
+											<span className="stat-value">
+												{
+													walletTransactions.filter((tx) => {
+														const txDate =
+															tx.createdAt?.toDate?.() || new Date()
+														const thisMonth = new Date()
+														return (
+															txDate.getMonth() === thisMonth.getMonth() &&
+															txDate.getFullYear() === thisMonth.getFullYear()
+														)
+													}).length
+												}
+											</span>
+										</div>
+									</div>
+								</div>
+
+								{/* PayPal Connection Card */}
+								<div className="paypal-connection-card">
+									<h3>💳 PayPal Account</h3>
+									{adminPaypalEmail ? (
+										<div className="paypal-connected">
+											<div className="paypal-info">
+												<div className="paypal-logo">💳</div>
+												<div>
+													<p className="paypal-status">✅ Connected</p>
+													<p className="paypal-email">{adminPaypalEmail}</p>
+													<p className="paypal-note">
+														This PayPal account is used for processing guest
+														withdrawals
+													</p>
+												</div>
+											</div>
+											<button
+												className="disconnect-paypal-btn"
+												onClick={handleDisconnectPaypal}
+											>
+												Disconnect
+											</button>
+										</div>
+									) : (
+										<div className="paypal-disconnected">
+											<div className="paypal-warning">
+												<span className="warning-icon">⚠️</span>
+												<div>
+													<p className="warning-title">PayPal Not Connected</p>
+													<p className="warning-text">
+														Connect your PayPal account to process guest
+														withdrawals
+													</p>
+												</div>
+											</div>
+											<button
+												className="connect-paypal-btn"
+												onClick={() => setShowPaypalModal(true)}
+											>
+												Connect PayPal
+											</button>
+										</div>
+									)}
+								</div>
+
+								{/* Transaction History */}
+								<div className="transactions-section">
+									<h3>📊 Transaction History</h3>
+
+									{walletTransactions.length === 0 ? (
+										<div className="empty-state">
+											<div className="empty-icon">📭</div>
+											<p>No transactions yet</p>
+										</div>
+									) : (
+										<div className="transactions-table-wrapper">
+											<table className="transactions-table">
+												<thead>
+													<tr>
+														<th>Date & Time</th>
+														<th>Type</th>
+														<th>Description</th>
+														<th>Amount</th>
+														<th>Balance</th>
+														<th>Status</th>
+													</tr>
+												</thead>
+												<tbody>
+													{walletTransactions.map((tx) => {
+														const txDate =
+															tx.createdAt?.toDate?.() || new Date()
+														const isIncoming = [
+															"booking_received",
+															"top_up",
+														].includes(tx.type)
+														const isOutgoing = [
+															"withdrawal_payout",
+															"payment",
+														].includes(tx.type)
+
+														return (
+															<tr key={tx.id}>
+																<td>
+																	<div className="tx-date">
+																		<div>
+																			{txDate.toLocaleDateString("en-PH")}
+																		</div>
+																		<div className="tx-time">
+																			{txDate.toLocaleTimeString("en-PH", {
+																				hour: "2-digit",
+																				minute: "2-digit",
+																			})}
+																		</div>
+																	</div>
+																</td>
+																<td>
+																	<span className={`tx-type ${tx.type}`}>
+																		{tx.type === "booking_received" &&
+																			"📥 Booking"}
+																		{tx.type === "withdrawal_payout" &&
+																			"📤 Payout"}
+																		{tx.type === "top_up" && "➕ Top Up"}
+																		{tx.type === "payment" && "💳 Payment"}
+																		{![
+																			"booking_received",
+																			"withdrawal_payout",
+																			"top_up",
+																			"payment",
+																		].includes(tx.type) && `📝 ${tx.type}`}
+																	</span>
+																</td>
+																<td>
+																	<div className="tx-description">
+																		{tx.propertyTitle && (
+																			<div className="property-title">
+																				{tx.propertyTitle}
+																			</div>
+																		)}
+																		{tx.recipientEmail && (
+																			<div className="recipient">
+																				To: {tx.recipientEmail}
+																			</div>
+																		)}
+																		{tx.paypalEmail && (
+																			<div className="recipient">
+																				From: {tx.paypalEmail}
+																			</div>
+																		)}
+																		{tx.fee && (
+																			<div className="fee">
+																				Fee: ₱{tx.fee.toFixed(2)}
+																			</div>
+																		)}
+																	</div>
+																</td>
+																<td>
+																	<span
+																		className={`tx-amount ${
+																			isIncoming
+																				? "positive"
+																				: isOutgoing
+																				? "negative"
+																				: ""
+																		}`}
+																	>
+																		{isIncoming && "+"}
+																		{isOutgoing && "-"}₱
+																		{(tx.amount || 0).toLocaleString("en-PH", {
+																			minimumFractionDigits: 2,
+																			maximumFractionDigits: 2,
+																		})}
+																	</span>
+																</td>
+																<td>
+																	₱
+																	{(tx.balanceAfter || 0).toLocaleString(
+																		"en-PH",
+																		{
+																			minimumFractionDigits: 2,
+																			maximumFractionDigits: 2,
+																		}
+																	)}
+																</td>
+																<td>
+																	<span className={`status-badge ${tx.status}`}>
+																		{tx.status === "completed" && "✅"}
+																		{tx.status === "pending" && "⏳"}
+																		{tx.status === "failed" && "❌"}{" "}
+																		{tx.status || "N/A"}
+																	</span>
+																</td>
+															</tr>
+														)
+													})}
+												</tbody>
+											</table>
+										</div>
+									)}
+								</div>
+							</>
+						)}
+
+						{/* PayPal Connection Modal */}
+						{showPaypalModal && (
+							<div
+								className="modal-overlay"
+								onClick={() => setShowPaypalModal(false)}
+							>
+								<div
+									className="paypal-modal"
+									onClick={(e) => e.stopPropagation()}
+								>
+									<div className="modal-header">
+										<h3>💳 Connect PayPal Account</h3>
+										<button
+											className="close-modal-btn"
+											onClick={() => setShowPaypalModal(false)}
+										>
+											✕
+										</button>
+									</div>
+
+									<div className="modal-body">
+										<div className="paypal-modal-info">
+											<p className="info-text">
+												Connect your PayPal account to process guest withdrawal
+												requests. This email will be used to send payments when
+												guests withdraw funds.
+											</p>
+											<div className="sandbox-notice">
+												⚠️ Sandbox Mode - For Testing Only
+											</div>
+										</div>
+
+										<div className="form-group">
+											<label htmlFor="paypal-email-admin">
+												PayPal Email Address
+											</label>
+											<input
+												id="paypal-email-admin"
+												type="email"
+												className="paypal-email-input"
+												placeholder="admin@paypal.com"
+												value={paypalEmailInput}
+												onChange={(e) => setPaypalEmailInput(e.target.value)}
+											/>
+										</div>
+
+										<div className="modal-actions">
+											<button
+												className="cancel-btn"
+												onClick={() => setShowPaypalModal(false)}
+											>
+												Cancel
+											</button>
+											<button
+												className="connect-btn"
+												onClick={handleConnectPaypal}
+											>
+												Connect PayPal
+											</button>
+										</div>
+									</div>
+								</div>
+							</div>
+						)}
 					</div>
 				)}
 			</main>

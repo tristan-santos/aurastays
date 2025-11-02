@@ -9,6 +9,9 @@ import {
 	updateDoc,
 	arrayUnion,
 	getDoc,
+	query,
+	where,
+	onSnapshot,
 } from "firebase/firestore"
 import { toast } from "react-stacked-toast"
 import "../css/Search.css"
@@ -27,6 +30,9 @@ import {
 	FaFilter,
 	FaTimes,
 	FaSlidersH,
+	FaCalendarAlt,
+	FaPlus,
+	FaMinus,
 } from "react-icons/fa"
 
 export default function Search() {
@@ -39,7 +45,8 @@ export default function Search() {
 	const [filteredProperties, setFilteredProperties] = useState([])
 	const [isLoading, setIsLoading] = useState(true)
 	const [favorites, setFavorites] = useState([])
-	const [wishlist, setWishlist] = useState([])
+	// Wishlist UI removed on search page
+	// const [wishlist, setWishlist] = useState([])
 	const [searchSuggestions, setSearchSuggestions] = useState([])
 	const [showSuggestions, setShowSuggestions] = useState(false)
 	const [recentSearches, setRecentSearches] = useState([])
@@ -50,6 +57,16 @@ export default function Search() {
 	const [selectedRating, setSelectedRating] = useState(0)
 	const [sortBy, setSortBy] = useState("relevance")
 	const [showFilters, setShowFilters] = useState(false)
+	const [showQuickFilters, setShowQuickFilters] = useState(false)
+	// Calendar states (modal like booking page)
+	const [showDateModal, setShowDateModal] = useState(false)
+	const [selectingCheckIn, setSelectingCheckIn] = useState(true)
+	const [currentMonth, setCurrentMonth] = useState(new Date())
+	// Advanced search params
+	const [guests, setGuests] = useState(0)
+	const [checkIn, setCheckIn] = useState("")
+	const [checkOut, setCheckOut] = useState("")
+	const [unreadNotifications, setUnreadNotifications] = useState(0)
 
 	// Get user's display name
 	const displayName =
@@ -74,6 +91,10 @@ export default function Search() {
 		const category = params.get("category") || "all"
 		setSearchQuery(query)
 		setSelectedCategory(category)
+		const guestsParam = parseInt(params.get("guests") || "0")
+		setGuests(Number.isFinite(guestsParam) ? guestsParam : 0)
+		setCheckIn(params.get("checkIn") || "")
+		setCheckOut(params.get("checkOut") || "")
 	}, [location])
 
 	// Fetch properties and user data
@@ -81,11 +102,34 @@ export default function Search() {
 		const fetchData = async () => {
 			await fetchProperties()
 			await fetchUserFavorites()
-			await fetchUserWishlist()
+			// wishlist removed from search page
 			await fetchRecentSearches()
 		}
 		fetchData()
 		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [currentUser])
+
+	// Fetch unread notifications count
+	useEffect(() => {
+		if (!currentUser?.uid) return
+
+		const notificationsQuery = query(
+			collection(db, "notifications"),
+			where("userId", "==", currentUser.uid),
+			where("read", "==", false)
+		)
+
+		const unsubscribe = onSnapshot(
+			notificationsQuery,
+			(snapshot) => {
+				setUnreadNotifications(snapshot.size)
+			},
+			(error) => {
+				console.error("Error fetching notifications:", error)
+			}
+		)
+
+		return () => unsubscribe()
 	}, [currentUser])
 
 	// Generate search suggestions
@@ -143,6 +187,14 @@ export default function Search() {
 				filtered = filtered.filter((p) => p.category === selectedCategory)
 			}
 
+			// Guests filter (homes/experiences with capacity)
+			if (guests && guests > 0) {
+				filtered = filtered.filter((p) => {
+					const capGuests = p?.capacity?.guests ?? p?.capacity?.maxGuests
+					return typeof capGuests === "number" ? capGuests >= guests : true
+				})
+			}
+
 			// Price filter
 			filtered = filtered.filter((p) => {
 				const price = p.pricing?.basePrice || p.pricing?.price || 0
@@ -190,6 +242,9 @@ export default function Search() {
 		priceRange,
 		selectedRating,
 		sortBy,
+		guests,
+		checkIn,
+		checkOut,
 	])
 
 	const fetchProperties = async () => {
@@ -226,19 +281,19 @@ export default function Search() {
 		}
 	}
 
-	const fetchUserWishlist = async () => {
-		if (!currentUser?.uid) return
-
-		try {
-			const userDoc = await getDoc(doc(db, "users", currentUser.uid))
-			if (userDoc.exists()) {
-				const data = userDoc.data()
-				setWishlist(data.wishlist || [])
-			}
-		} catch (error) {
-			console.error("Error fetching wishlist:", error)
-		}
-	}
+	// const fetchUserWishlist = async () => {
+	// 	if (!currentUser?.uid) return
+	//
+	// 	try {
+	// 		const userDoc = await getDoc(doc(db, "users", currentUser.uid))
+	// 		if (userDoc.exists()) {
+	// 			const data = userDoc.data()
+	// 			setWishlist(data.wishlist || [])
+	// 		}
+	// 	} catch (error) {
+	// 		console.error("Error fetching wishlist:", error)
+	// 	}
+	// }
 
 	const fetchRecentSearches = async () => {
 		if (!currentUser?.uid) return
@@ -248,7 +303,11 @@ export default function Search() {
 			if (userDoc.exists()) {
 				const data = userDoc.data()
 				const searches = data.recentSearches || []
-				setRecentSearches(searches.slice(-5).reverse()) // Get last 5, most recent first
+				// Filter out empty or whitespace-only searches
+				const validSearches = searches.filter(
+					(s) => s.query && s.query.trim().length > 0
+				)
+				setRecentSearches(validSearches.slice(-5).reverse()) // Get last 5, most recent first
 			}
 		} catch (error) {
 			console.error("Error fetching recent searches:", error)
@@ -257,12 +316,13 @@ export default function Search() {
 
 	const handleSearch = async (e) => {
 		e.preventDefault()
-		if (!searchQuery.trim()) return
+		const trimmedQuery = searchQuery.trim()
+		if (!trimmedQuery || trimmedQuery.length === 0) return
 
 		setShowSuggestions(false)
 
-		// Save search to Firebase
-		if (currentUser?.uid) {
+		// Save search to Firebase - only save non-empty queries
+		if (currentUser?.uid && trimmedQuery && trimmedQuery.length > 0) {
 			try {
 				const userDocRef = doc(db, "users", currentUser.uid)
 				const userDoc = await getDoc(userDocRef)
@@ -273,7 +333,7 @@ export default function Search() {
 
 					// Check if the exact same query already exists (case-sensitive)
 					const existingIndex = searches.findIndex(
-						(s) => s.query === searchQuery.trim()
+						(s) => s.query === trimmedQuery
 					)
 
 					if (existingIndex !== -1) {
@@ -283,7 +343,7 @@ export default function Search() {
 
 					// Add the new/updated search at the end
 					searches.push({
-						query: searchQuery.trim(),
+						query: trimmedQuery,
 						timestamp: new Date().toISOString(),
 					})
 
@@ -300,7 +360,7 @@ export default function Search() {
 		}
 
 		// Update URL
-		navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`, {
+		navigate(`/search?q=${encodeURIComponent(trimmedQuery)}`, {
 			replace: true,
 		})
 	}
@@ -326,8 +386,7 @@ export default function Search() {
 			toast.success("Logged out successfully")
 			navigate("/")
 		} catch (error) {
-			console.error("Error logging out:", error)
-			toast.error("Failed to logout")
+			console.error("Error logging out in search:", error)
 		}
 	}
 
@@ -360,34 +419,7 @@ export default function Search() {
 		}
 	}
 
-	const toggleWishlist = async (propertyId) => {
-		if (!currentUser?.uid) {
-			toast.error("Please login to add to wishlist")
-			return
-		}
-
-		try {
-			const userDocRef = doc(db, "users", currentUser.uid)
-			const isInWishlist = wishlist.includes(propertyId)
-
-			if (isInWishlist) {
-				await updateDoc(userDocRef, {
-					wishlist: wishlist.filter((id) => id !== propertyId),
-				})
-				setWishlist(wishlist.filter((id) => id !== propertyId))
-				toast.success("Removed from wishlist")
-			} else {
-				await updateDoc(userDocRef, {
-					wishlist: arrayUnion(propertyId),
-				})
-				setWishlist([...wishlist, propertyId])
-				toast.success("Added to wishlist")
-			}
-		} catch (error) {
-			console.error("Error toggling wishlist:", error)
-			toast.error("Failed to update wishlist")
-		}
-	}
+	// Wishlist removed from search cards; keeping UI lean
 
 	const formatPrice = (price, currency = "PHP") => {
 		if (currency === "PHP") {
@@ -412,6 +444,79 @@ export default function Search() {
 		setPriceRange([0, 50000])
 		setSelectedRating(0)
 		setSortBy("relevance")
+		setGuests(0)
+		setCheckIn("")
+		setCheckOut("")
+	}
+
+	const applyQuickFilters = () => {
+		const params = new URLSearchParams(location.search)
+		if (searchQuery.trim()) params.set("q", searchQuery.trim())
+		else params.delete("q")
+		if (guests && guests > 0) params.set("guests", String(guests))
+		else params.delete("guests")
+		if (checkIn) params.set("checkIn", checkIn)
+		else params.delete("checkIn")
+		if (checkOut) params.set("checkOut", checkOut)
+		else params.delete("checkOut")
+		navigate(`/search?${params.toString()}`, { replace: true })
+		setShowQuickFilters(false)
+	}
+
+	// Calendar helpers (reuse booking calendar behavior/styles)
+	const getTodayDate = () => {
+		const today = new Date()
+		return today.toISOString().split("T")[0]
+	}
+
+	const generateCalendarDays = () => {
+		const year = currentMonth.getFullYear()
+		const month = currentMonth.getMonth()
+		const firstDay = new Date(year, month, 1).getDay()
+		const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+		const days = []
+		for (let i = 0; i < firstDay; i++) days.push(null)
+		for (let day = 1; day <= daysInMonth; day++) {
+			const dateString = `${year}-${String(month + 1).padStart(
+				2,
+				"0"
+			)}-${String(day).padStart(2, "0")}`
+			days.push({
+				day,
+				dateString,
+				isBooked: false,
+				isPast: new Date(dateString) < new Date(getTodayDate()),
+			})
+		}
+		return days
+	}
+
+	const previousMonth = () => {
+		setCurrentMonth(
+			new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1)
+		)
+	}
+
+	const nextMonth = () => {
+		setCurrentMonth(
+			new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)
+		)
+	}
+
+	const handleCalendarDayClick = (dateString, isBooked) => {
+		if (isBooked) return
+		if (selectingCheckIn) {
+			setCheckIn(dateString)
+			setCheckOut("")
+			setSelectingCheckIn(false)
+		} else {
+			const inDate = new Date(checkIn)
+			const outDate = new Date(dateString)
+			if (outDate <= inDate) return
+			setCheckOut(dateString)
+			setSelectingCheckIn(true)
+		}
 	}
 
 	return (
@@ -482,9 +587,15 @@ export default function Search() {
 				{/* Right Section */}
 				<div className="navbar-right">
 					{/* Messages */}
-					<button className="icon-button messages-btn" title="Messages">
+					<button
+						className="icon-button messages-btn"
+						title="Messages"
+						onClick={() => navigate("/messages")}
+					>
 						<FaEnvelope />
-						<span className="badge">0</span>
+						{unreadNotifications > 0 && (
+							<span className="badge">{unreadNotifications}</span>
+						)}
 					</button>
 
 					{/* Favorites */}
@@ -507,8 +618,8 @@ export default function Search() {
 						>
 							<FaBars className="menu-icon" />
 							<div className="user-avatar">
-								{currentUser?.photoURL ? (
-									<img src={currentUser.photoURL} alt={displayName} />
+								{userData?.photoURL || currentUser?.photoURL ? (
+									<img src={userData?.photoURL || currentUser.photoURL} alt={displayName} />
 								) : (
 									<div className="avatar-initials">
 										{getInitials(displayName)}
@@ -522,8 +633,8 @@ export default function Search() {
 							<div className="user-dropdown">
 								<div className="dropdown-header">
 									<div className="dropdown-avatar">
-										{currentUser?.photoURL ? (
-											<img src={currentUser.photoURL} alt={displayName} />
+										{userData?.photoURL || currentUser?.photoURL ? (
+											<img src={userData?.photoURL || currentUser.photoURL} alt={displayName} />
 										) : (
 											<div className="avatar-initials-large">
 												{getInitials(displayName)}
@@ -702,6 +813,12 @@ export default function Search() {
 
 						<div className="results-controls">
 							<button
+								className="quick-filter-btn"
+								onClick={() => setShowQuickFilters(!showQuickFilters)}
+							>
+								Where · Who · Dates
+							</button>
+							<button
 								className="mobile-filter-btn"
 								onClick={() => setShowFilters(!showFilters)}
 							>
@@ -722,6 +839,235 @@ export default function Search() {
 							</select>
 						</div>
 					</div>
+
+					{/* Inline Quick Filters */}
+					{showQuickFilters && (
+						<div className="guest-searchbar">
+							{/* Where segment */}
+							<div className="gsb-segment gsb-where">
+								<div className="gsb-label">
+									<FaMapMarkerAlt /> <span>Where</span>
+								</div>
+								<input
+									type="text"
+									placeholder="Search destination or property"
+									value={searchQuery}
+									onChange={(e) => setSearchQuery(e.target.value)}
+									className="gsb-input"
+								/>
+							</div>
+							<div className="gsb-divider"></div>
+							{/* Who segment */}
+							<div className="gsb-segment gsb-who">
+								<div className="gsb-label">
+									<FaUser /> <span>Who</span>
+								</div>
+								<div className="gsb-stepper">
+									<button
+										type="button"
+										className="stepper-btn"
+										onClick={() => setGuests(Math.max(1, (guests || 1) - 1))}
+										aria-label="Decrease guests"
+									>
+										<FaMinus />
+									</button>
+									<span className="stepper-value">{guests || 1}</span>
+									<button
+										type="button"
+										className="stepper-btn"
+										onClick={() => setGuests((guests || 1) + 1)}
+										aria-label="Increase guests"
+									>
+										<FaPlus />
+									</button>
+								</div>
+							</div>
+							<div className="gsb-divider"></div>
+							{/* Dates segment */}
+							<div className="gsb-segment gsb-dates">
+								<button
+									type="button"
+									className="gsb-date-toggle"
+									onClick={() => setShowDateModal(true)}
+								>
+									<div className="gsb-label">
+										<FaCalendarAlt /> <span>Dates</span>
+									</div>
+									<div className="gsb-date-value">
+										{checkIn && checkOut
+											? `${new Date(checkIn).toLocaleDateString()} → ${new Date(
+													checkOut
+											  ).toLocaleDateString()}`
+											: "Select dates"}
+									</div>
+								</button>
+							</div>
+							{/* Action segment */}
+							<div className="gsb-actions">
+								<button className="gsb-search-btn" onClick={applyQuickFilters}>
+									<FaSearch />
+									<span>Search</span>
+								</button>
+								<button
+									type="button"
+									className="gsb-clear-btn"
+									onClick={() => {
+										setSearchQuery("")
+										setGuests(1)
+										setCheckIn("")
+										setCheckOut("")
+										setShowQuickFilters(false)
+									}}
+								>
+									Clear
+								</button>
+							</div>
+						</div>
+					)}
+
+					{/* Date Picker Modal (booking-style) */}
+					{showDateModal && (
+						<div
+							className="date-picker-modal-overlay"
+							onClick={() => setShowDateModal(false)}
+						>
+							<div
+								className="date-picker-modal-content"
+								onClick={(e) => e.stopPropagation()}
+							>
+								<button
+									className="close-date-modal"
+									onClick={() => setShowDateModal(false)}
+								>
+									<FaTimes />
+								</button>
+								<h2>Select Your Dates</h2>
+								<div className="modal-date-info">
+									<div className="selected-dates-display">
+										{checkIn && (
+											<div className="selected-date-item check-in">
+												<span className="date-type">Check-in:</span>
+												<span className="date-text">
+													{new Date(checkIn).toLocaleDateString()}
+												</span>
+											</div>
+										)}
+										{checkOut && (
+											<div className="selected-date-item check-out">
+												<span className="date-type">Check-out:</span>
+												<span className="date-text">
+													{new Date(checkOut).toLocaleDateString()}
+												</span>
+											</div>
+										)}
+										{!checkIn && !checkOut && (
+											<p className="instruction-text">
+												{selectingCheckIn
+													? "Click on a date to select check-in"
+													: "Click on a date to select check-out"}
+											</p>
+										)}
+									</div>
+								</div>
+
+								<div className="modal-calendar">
+									<div className="month-view">
+										<div className="month-header">
+											<button onClick={previousMonth} className="month-nav-btn">
+												◀
+											</button>
+											<h3>
+												{currentMonth.toLocaleString("default", {
+													month: "long",
+													year: "numeric",
+												})}
+											</h3>
+											<button onClick={nextMonth} className="month-nav-btn">
+												▶
+											</button>
+										</div>
+										<div className="calendar-days">
+											{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+												(day) => (
+													<div key={day} className="day-label">
+														{day}
+													</div>
+												)
+											)}
+											{generateCalendarDays().map((dayData, index) =>
+												dayData ? (
+													<div
+														key={index}
+														className={`calendar-day ${
+															dayData.isBooked
+																? "booked"
+																: dayData.isPast
+																? "past"
+																: "available"
+														} ${
+															dayData.dateString === checkIn
+																? "selected-check-in"
+																: ""
+														} ${
+															dayData.dateString === checkOut
+																? "selected-check-out"
+																: ""
+														}`}
+														onClick={() =>
+															handleCalendarDayClick(
+																dayData.dateString,
+																dayData.isBooked
+															)
+														}
+														title={
+															dayData.isBooked
+																? "Already booked"
+																: dayData.isPast
+																? "Past date"
+																: "Available"
+														}
+													>
+														{dayData.day}
+													</div>
+												) : (
+													<div key={index} className="calendar-day empty"></div>
+												)
+											)}
+										</div>
+									</div>
+									<div className="calendar-legend">
+										<div className="legend-item">
+											<span className="legend-color available"></span>Available
+										</div>
+										<div className="legend-item">
+											<span className="legend-color past"></span>Past
+										</div>
+										<div className="legend-item">
+											<span className="legend-color booked"></span>Booked
+										</div>
+									</div>
+									<div className="qf-actions" style={{ marginTop: "0.75rem" }}>
+										<button
+											className="qf-apply-btn"
+											onClick={() => setShowDateModal(false)}
+										>
+											Done
+										</button>
+										<button
+											className="qf-cancel-btn"
+											onClick={() => {
+												setCheckIn("")
+												setCheckOut("")
+												setShowDateModal(false)
+											}}
+										>
+											Clear Dates
+										</button>
+									</div>
+								</div>
+							</div>
+						</div>
+					)}
 
 					{/* Results Grid */}
 					{isLoading ? (
@@ -829,7 +1175,7 @@ export default function Search() {
 
 										<div className="property-footer">
 											<div className="property-price">
-												<span className="price-amount">
+												<span className="property-price-amount">
 													{formatPrice(
 														property.pricing?.basePrice ||
 															property.pricing?.price ||
@@ -851,18 +1197,6 @@ export default function Search() {
 													onClick={() => navigate(`/property/${property.id}`)}
 												>
 													View Details
-												</button>
-												<button
-													className={`wishlist-btn-card ${
-														wishlist.includes(property.id) ? "active" : ""
-													}`}
-													onClick={(e) => {
-														e.stopPropagation()
-														toggleWishlist(property.id)
-													}}
-													title="Add to Wishlist"
-												>
-													<FaBookmark />
 												</button>
 											</div>
 										</div>

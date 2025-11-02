@@ -786,6 +786,7 @@
 	padding: 12px 40px;
 	font-size: 14px;
 	border-radius: 8px;
+	background-color: white !important;
 }
 
 .mapboxgl-ctrl-geocoder--icon-search {
@@ -794,6 +795,30 @@
 
 .mapboxgl-ctrl-geocoder--button {
 	background: transparent;
+}
+
+.mapboxgl-ctrl-geocoder--suggestions {
+	background: white !important;
+	border-radius: 8px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.mapboxgl-ctrl-geocoder--suggestion {
+	background: white !important;
+}
+
+.mapboxgl-ctrl-geocoder--suggestion:hover {
+	background: #f8f9fa !important;
+}
+
+.mapboxgl-ctrl-geocoder--suggestion-title {
+	background: white !important;
+	color: #212529;
+}
+
+.mapboxgl-ctrl-geocoder--suggestion-address {
+	background: white !important;
+	color: #6c757d;
 }
 
 /* Mapbox Marker Popup */
@@ -1043,6 +1068,65 @@
 .connect-btn:hover {
 	transform: translateY(-2px);
 	box-shadow: 0 4px 12px rgba(0, 60, 135, 0.3);
+}
+
+.connect-btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.connect-btn:disabled:hover {
+	transform: none;
+	box-shadow: none;
+}
+
+.cancel-button {
+	background: #e9ecef;
+	color: #495057;
+}
+
+.cancel-button:hover {
+	background: #dee2e6;
+}
+
+.cancel-button:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+/* Password Input Container */
+.password-input-container {
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.password-input-container input {
+	padding-right: 45px;
+}
+
+.password-input-container img {
+	position: absolute;
+	right: 12px;
+	width: 20px;
+	height: 20px;
+	opacity: 0.6;
+	transition: opacity 0.3s ease;
+}
+
+.password-input-container img:hover {
+	opacity: 1;
+}
+
+.password-info {
+	margin-bottom: 1.5rem;
+}
+
+.input-hint {
+	display: block;
+	margin-top: 0.5rem;
+	font-size: 0.85rem;
+	color: #6c757d;
 }
 
 /* Stats Section */
@@ -1433,4 +1517,123 @@ input:checked + .slider:before {
 	.map-modal-header h3 {
 		font-size: 1.2rem;
 	}
+}
+
+/* Dark Mode Styles */
+[data-theme="dark"] .profile-container {
+	background: #1a1a1a;
+	color: #ffffff;
+}
+
+[data-theme="dark"] .profile-header {
+	background: #2d2d2d;
+	border-color: #404040;
+}
+
+[data-theme="dark"] .profile-header h1 {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .profile-header p {
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .tab-content {
+	background: #2d2d2d;
+	border-color: #404040;
+}
+
+[data-theme="dark"] .section-header h3 {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .info-item label {
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .info-item p {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .edit-input,
+[data-theme="dark"] .edit-textarea,
+[data-theme="dark"] .date-select {
+	background: #1a1a1a;
+	border-color: #404040;
+	color: #ffffff;
+}
+
+[data-theme="dark"] .edit-input:focus,
+[data-theme="dark"] .edit-textarea:focus,
+[data-theme="dark"] .date-select:focus {
+	border-color: var(--primary);
+	background: #1a1a1a;
+	color: #ffffff;
+}
+
+[data-theme="dark"] .paypal-modal-content {
+	background: #2d2d2d;
+	border-color: #404040;
+}
+
+[data-theme="dark"] .modal-header {
+	border-color: #404040;
+}
+
+[data-theme="dark"] .modal-header h3 {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .modal-body {
+	background: #2d2d2d;
+}
+
+[data-theme="dark"] .info-text {
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .form-group label {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .input-hint {
+	color: #888888;
+}
+
+[data-theme="dark"] .password-info {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .cancel-button {
+	background: #404040;
+	color: #ffffff;
+}
+
+[data-theme="dark"] .cancel-button:hover {
+	background: #505050;
+}
+
+[data-theme="dark"] .close-modal-btn {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .stat-box {
+	background: #1a1a1a;
+	border-color: #404040;
+}
+
+[data-theme="dark"] .stat-label {
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .security-item {
+	border-color: #404040;
+}
+
+[data-theme="dark"] .security-item h4 {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .security-item p {
+	color: #b0b0b0;
 }

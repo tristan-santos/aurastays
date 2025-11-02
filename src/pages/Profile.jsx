@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
-import { db } from "../components/firebaseConfig"
-import { doc, getDoc, updateDoc } from "firebase/firestore"
+import { db, auth } from "../components/firebaseConfig"
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from "firebase/firestore"
+import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth"
 import { toast } from "react-stacked-toast"
 import "../css/Profile.css"
 import {
@@ -23,6 +24,8 @@ import {
 	FaTimes,
 	FaMapMarkedAlt,
 } from "react-icons/fa"
+import viewIcon from "../assets/icons/view.png"
+import hideIcon from "../assets/icons/hide.png"
 
 export default function Profile() {
 	const navigate = useNavigate()
@@ -78,6 +81,18 @@ export default function Profile() {
 	const [paypalConnected, setPaypalConnected] = useState(false)
 	const [showPaypalModal, setShowPaypalModal] = useState(false)
 	const [paypalEmail, setPaypalEmail] = useState("")
+
+	// Password reset state
+	const [showPasswordModal, setShowPasswordModal] = useState(false)
+	const [passwordData, setPasswordData] = useState({
+		currentPassword: "",
+		newPassword: "",
+		confirmPassword: "",
+	})
+	const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+	const [showNewPassword, setShowNewPassword] = useState(false)
+	const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+	const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
 
 	// Profile picture state
 	const [uploadingPhoto, setUploadingPhoto] = useState(false)
@@ -145,6 +160,73 @@ export default function Profile() {
 		}
 	}, [])
 
+	// Fetch user stats dynamically from Firebase
+	const fetchUserStats = async () => {
+		if (!currentUser?.uid) return
+
+		try {
+			let totalBookings = 0
+			let reviewsWritten = 0
+			let wishlistItems = 0
+			let totalSpent = 0
+
+			// Fetch bookings to calculate total bookings and total spent
+			try {
+				const bookingsQuery = query(
+					collection(db, "bookings"),
+					where("guestId", "==", currentUser.uid)
+				)
+				const bookingsSnapshot = await getDocs(bookingsQuery)
+				const bookings = bookingsSnapshot.docs.map((doc) => doc.data())
+				
+				totalBookings = bookings.length
+				
+				// Calculate total spent from all bookings
+				totalSpent = bookings.reduce((sum, booking) => {
+					return sum + (booking.pricing?.total || 0)
+				}, 0)
+			} catch (bookingError) {
+				console.log("Bookings collection may not exist yet:", bookingError)
+			}
+
+			// Fetch reviews to calculate reviews written
+			try {
+				const reviewsQuery = query(
+					collection(db, "reviews"),
+					where("reviewerId", "==", currentUser.uid)
+				)
+				const reviewsSnapshot = await getDocs(reviewsQuery)
+				reviewsWritten = reviewsSnapshot.docs.length
+			} catch (reviewError) {
+				console.log("Reviews collection may not exist yet:", reviewError)
+			}
+
+			// Fetch wishlist items from user document
+			try {
+				const userDocRef = doc(db, "users", currentUser.uid)
+				const userDoc = await getDoc(userDocRef)
+				if (userDoc.exists()) {
+					const userData = userDoc.data()
+					const wishes = userData.wishes || []
+					wishlistItems = Array.isArray(wishes) ? wishes.length : 0
+				}
+			} catch (wishlistError) {
+				console.log("Error fetching wishlist items:", wishlistError)
+			}
+
+			// Update profile data with calculated stats
+			setProfileData((prev) => ({
+				...prev,
+				totalBookings,
+				reviewsWritten,
+				wishlistItems,
+				totalSpent,
+			}))
+		} catch (error) {
+			console.error("Error fetching user stats:", error)
+		}
+	}
+
 	// Fetch user profile data from Firestore
 	useEffect(() => {
 		const fetchProfileData = async () => {
@@ -171,10 +253,10 @@ export default function Profile() {
 						emailUpdates:
 							data.emailUpdates !== undefined ? data.emailUpdates : true,
 						paypalEmail: data.paypalEmail || "",
-						totalBookings: data.totalBookings || 0,
-						reviewsWritten: data.reviewsWritten || 0,
-						wishlistItems: data.wishlistItems || 0,
-						totalSpent: data.totalSpent || 0,
+						totalBookings: 0, // Will be updated by fetchUserStats
+						reviewsWritten: 0, // Will be updated by fetchUserStats
+						wishlistItems: 0, // Will be updated by fetchUserStats
+						totalSpent: 0, // Will be updated by fetchUserStats
 					}
 					setProfileData(fetchedData)
 
@@ -202,6 +284,9 @@ export default function Profile() {
 					setPaypalConnected(!!data.paypalEmail)
 					setPaypalEmail(data.paypalEmail || "")
 					setProfilePhotoUrl(data.photoURL || currentUser?.photoURL || "")
+
+					// Fetch user stats after profile data is loaded
+					await fetchUserStats()
 				}
 			} catch (error) {
 				console.error("Error fetching profile data:", error)
@@ -733,6 +818,79 @@ export default function Profile() {
 		}
 	}
 
+	// Handle password reset
+	const handlePasswordReset = async () => {
+		if (!currentUser) {
+			toast.error("You must be logged in to change your password")
+			return
+		}
+
+		// Validation
+		if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+			toast.error("Please fill in all fields")
+			return
+		}
+
+		if (passwordData.newPassword.length < 6) {
+			toast.error("New password must be at least 6 characters long")
+			return
+		}
+
+		if (passwordData.newPassword !== passwordData.confirmPassword) {
+			toast.error("New password and confirm password do not match")
+			return
+		}
+
+		if (passwordData.currentPassword === passwordData.newPassword) {
+			toast.error("New password must be different from current password")
+			return
+		}
+
+		setIsUpdatingPassword(true)
+
+		try {
+			// Re-authenticate user with current password
+			const credential = EmailAuthProvider.credential(
+				currentUser.email,
+				passwordData.currentPassword
+			)
+			await reauthenticateWithCredential(currentUser, credential)
+
+			// Update password
+			await updatePassword(currentUser, passwordData.newPassword)
+
+			// Create notification for password change
+			try {
+				const { createPasswordChangeNotification } = await import("../utils/notifications")
+				await createPasswordChangeNotification(currentUser.uid)
+			} catch (notifError) {
+				console.error("Error creating password change notification:", notifError)
+				// Don't fail the password change if notification fails
+			}
+
+			toast.success("Password updated successfully!")
+			
+			// Reset form and close modal
+			setPasswordData({
+				currentPassword: "",
+				newPassword: "",
+				confirmPassword: "",
+			})
+			setShowPasswordModal(false)
+		} catch (error) {
+			console.error("Error updating password:", error)
+			if (error.code === "auth/wrong-password") {
+				toast.error("Current password is incorrect")
+			} else if (error.code === "auth/weak-password") {
+				toast.error("New password is too weak")
+			} else {
+				toast.error(error.message || "Failed to update password")
+			}
+		} finally {
+			setIsUpdatingPassword(false)
+		}
+	}
+
 	// Initialize Mapbox for view modal
 	useEffect(() => {
 		if (showMapModal && window.mapboxgl && profileData.location) {
@@ -837,7 +995,7 @@ export default function Profile() {
 				<h1>My Profile</h1>
 				<button
 					className="backButton"
-					onClick={() => navigate("/dashboardGuest")}
+					onClick={() => navigate(userType === "host" ? "/dashboardHost" : "/dashboardGuest")}
 				>
 					<span>Back to Dashboard</span>
 					<FaArrowLeft style={{ transform: "rotate(180deg)" }} />
@@ -1267,16 +1425,31 @@ export default function Profile() {
 									<div className="stat-box">
 										<div className="stat-number">
 											{profileData.currency === "PHP (₱)"
-												? `₱${profileData.totalSpent.toFixed(2)}`
+												? `₱${profileData.totalSpent.toLocaleString(undefined, {
+														minimumFractionDigits: 2,
+														maximumFractionDigits: 2,
+												  })}`
 												: profileData.currency === "USD ($)"
-												? `$${profileData.totalSpent.toFixed(2)}`
+												? `$${profileData.totalSpent.toLocaleString(undefined, {
+														minimumFractionDigits: 2,
+														maximumFractionDigits: 2,
+												  })}`
 												: profileData.currency === "EUR (€)"
-												? `€${profileData.totalSpent.toFixed(2)}`
+												? `€${profileData.totalSpent.toLocaleString(undefined, {
+														minimumFractionDigits: 2,
+														maximumFractionDigits: 2,
+												  })}`
 												: profileData.currency === "GBP (£)"
-												? `£${profileData.totalSpent.toFixed(2)}`
+												? `£${profileData.totalSpent.toLocaleString(undefined, {
+														minimumFractionDigits: 2,
+														maximumFractionDigits: 2,
+												  })}`
 												: profileData.currency === "JPY (¥)"
-												? `¥${Math.round(profileData.totalSpent)}`
-												: `₱${profileData.totalSpent.toFixed(2)}`}
+												? `¥${Math.round(profileData.totalSpent).toLocaleString()}`
+												: `₱${profileData.totalSpent.toLocaleString(undefined, {
+														minimumFractionDigits: 2,
+														maximumFractionDigits: 2,
+												  })}`}
 										</div>
 										<div className="stat-label">Total Spent</div>
 									</div>
@@ -1302,7 +1475,12 @@ export default function Profile() {
 											<p>Last changed 30 days ago</p>
 										</div>
 									</div>
-									<button className="action-btn-small">Change</button>
+									<button 
+										className="action-btn-small"
+										onClick={() => setShowPasswordModal(true)}
+									>
+										Change
+									</button>
 								</div>
 
 								<div className="security-item">
@@ -1509,6 +1687,148 @@ export default function Profile() {
 								</button>
 								<button className="connect-btn" onClick={handleConnectPaypal}>
 									Connect PayPal
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Password Reset Modal */}
+			{showPasswordModal && (
+				<div
+					className="map-modal-overlay"
+					onClick={() => setShowPasswordModal(false)}
+				>
+					<div
+						className="paypal-modal-content"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="modal-header">
+							<h3>
+								<FaShieldAlt /> Change Password
+							</h3>
+							<button
+								className="close-modal-btn"
+								onClick={() => setShowPasswordModal(false)}
+							>
+								<FaTimes />
+							</button>
+						</div>
+
+						<div className="modal-body">
+							<div className="password-info">
+								<p className="info-text">
+									Enter your current password and choose a new password. Make sure it's at least 6 characters long.
+								</p>
+							</div>
+
+							<div className="form-group">
+								<label htmlFor="current-password">Current Password</label>
+								<div className="password-input-container">
+									<input
+										id="current-password"
+										type={showCurrentPassword ? "text" : "password"}
+										className="edit-input"
+										value={passwordData.currentPassword}
+										onChange={(e) =>
+											setPasswordData({
+												...passwordData,
+												currentPassword: e.target.value,
+											})
+										}
+										placeholder="Enter your current password"
+									/>
+									<img
+										src={showCurrentPassword ? viewIcon : hideIcon}
+										alt="Toggle password visibility"
+										onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+										style={{ cursor: "pointer" }}
+									/>
+								</div>
+							</div>
+
+							<div className="form-group">
+								<label htmlFor="new-password">New Password</label>
+								<div className="password-input-container">
+									<input
+										id="new-password"
+										type={showNewPassword ? "text" : "password"}
+										className="edit-input"
+										value={passwordData.newPassword}
+										onChange={(e) =>
+											setPasswordData({
+												...passwordData,
+												newPassword: e.target.value,
+											})
+										}
+										placeholder="Enter your new password"
+									/>
+									<img
+										src={showNewPassword ? viewIcon : hideIcon}
+										alt="Toggle password visibility"
+										onClick={() => setShowNewPassword(!showNewPassword)}
+										style={{ cursor: "pointer" }}
+									/>
+								</div>
+								<small className="input-hint">
+									Password must be at least 6 characters long
+								</small>
+							</div>
+
+							<div className="form-group">
+								<label htmlFor="confirm-password">Confirm New Password</label>
+								<div className="password-input-container">
+									<input
+										id="confirm-password"
+										type={showConfirmPassword ? "text" : "password"}
+										className="edit-input"
+										value={passwordData.confirmPassword}
+										onChange={(e) =>
+											setPasswordData({
+												...passwordData,
+												confirmPassword: e.target.value,
+											})
+										}
+										placeholder="Confirm your new password"
+									/>
+									<img
+										src={showConfirmPassword ? viewIcon : hideIcon}
+										alt="Toggle password visibility"
+										onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+										style={{ cursor: "pointer" }}
+									/>
+								</div>
+							</div>
+
+							<div className="modal-actions">
+								<button
+									className="cancel-button"
+									onClick={() => {
+										setShowPasswordModal(false)
+										setPasswordData({
+											currentPassword: "",
+											newPassword: "",
+											confirmPassword: "",
+										})
+									}}
+									disabled={isUpdatingPassword}
+								>
+									Cancel
+								</button>
+								<button
+									className="connect-btn"
+									onClick={handlePasswordReset}
+									disabled={isUpdatingPassword}
+								>
+									{isUpdatingPassword ? (
+										<>
+											<span className="loading-spinner-small"></span>
+											Updating...
+										</>
+									) : (
+										"Update Password"
+									)}
 								</button>
 							</div>
 						</div>

@@ -13,6 +13,13 @@ import AdminDashboard from "./pages/AdminDashboard"
 import Profile from "./pages/Profile"
 import Search from "./pages/Search"
 import PropertyDetails from "./pages/PropertyDetails"
+import WishlistCreate from "./pages/WishlistCreate"
+import Messages from "./pages/Messages"
+import HostMessages from "./pages/HostMessages"
+import PropertyListingWizard from "./pages/PropertyListingWizard"
+import HostBookingsDashboard from "./pages/HostBookingsDashboard"
+import HostSubscription from "./pages/HostSubscription"
+import HostPoints from "./pages/HostPoints"
 
 function App() {
 	return (
@@ -30,6 +37,16 @@ function App() {
 					<Route path="/profile" element={<Profile />} />
 					<Route path="/search" element={<Search />} />
 					<Route path="/property/:propertyId" element={<PropertyDetails />} />
+					<Route path="/wishlist/new" element={<WishlistCreate />} />
+					<Route path="/messages" element={<Messages />} />
+					<Route path="/hostMessage" element={<HostMessages />} />
+					<Route
+						path="/host/list-property"
+						element={<PropertyListingWizard />}
+					/>
+					<Route path="/host/bookings" element={<HostBookingsDashboard />} />
+					<Route path="/host/subscription" element={<HostSubscription />} />
+					<Route path="/host/points" element={<HostPoints />} />
 
 					{/* 404 Route */}
 					<Route path="*" element={<NotFound />} />

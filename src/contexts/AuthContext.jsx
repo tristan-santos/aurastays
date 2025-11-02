@@ -56,7 +56,6 @@ export const AuthProvider = ({ children }) => {
 							setCurrentUser(null)
 							setUserData(null)
 							setIsAuthenticated(false)
-							toast.error("Account not found. Please sign up first.")
 						}
 					}
 				} catch (error) {

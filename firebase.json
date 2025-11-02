@@ -6,6 +6,7 @@
 		"indexes": "firestore.indexes.json"
 	},
 	"hosting": {
+		"site": "aurastays",
 		"public": "dist",
 		"ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
 		"rewrites": [

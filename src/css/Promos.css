@@ -440,3 +440,105 @@
 		padding: 16px;
 	}
 }
+
+/* ==================== DARK MODE ==================== */
+[data-theme="dark"] .promo-modal-content {
+	background: #2d2d2d;
+	color: #ffffff;
+}
+
+[data-theme="dark"] .promo-modal-header {
+	background: linear-gradient(135deg, #415f94 0%, #2d4770 100%);
+	color: white;
+}
+
+[data-theme="dark"] .promo-modal-body {
+	background: #2d2d2d;
+	color: #ffffff;
+}
+
+[data-theme="dark"] .promo-info-banner {
+	background: linear-gradient(135deg, #3d2e1a 0%, #2d2415 100%);
+	border-color: #f39c12;
+}
+
+[data-theme="dark"] .promo-info-banner p {
+	color: #ffc966;
+}
+
+[data-theme="dark"] .promo-card {
+	background: #1a1a1a;
+	border-color: #404040;
+	color: #ffffff;
+}
+
+[data-theme="dark"] .promo-card:hover {
+	border-color: var(--primary);
+}
+
+[data-theme="dark"] .promo-title {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .promo-description {
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .promo-details {
+	background: #2d2d2d;
+	border-color: #404040;
+}
+
+[data-theme="dark"] .detail-label {
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .detail-value {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .promo-code-section {
+	border-top-color: #404040;
+}
+
+[data-theme="dark"] .promo-code-box {
+	background: linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%);
+	border-color: #415f94;
+}
+
+[data-theme="dark"] .promo-code {
+	color: #7db3ff;
+}
+
+[data-theme="dark"] .promo-footer-note {
+	background: #2d2d2d;
+	border-left-color: #415f94;
+}
+
+[data-theme="dark"] .promo-footer-note p {
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .promo-category {
+	color: #999;
+}
+
+[data-theme="dark"] .promo-modal-body::-webkit-scrollbar-track {
+	background: #1a1a1a;
+}
+
+[data-theme="dark"] .promo-loading p {
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .no-promos {
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .no-promos h3 {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .no-promos p {
+	color: #b0b0b0;
+}

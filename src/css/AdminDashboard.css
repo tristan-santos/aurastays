@@ -45,12 +45,44 @@
 }
 
 .admin-header-content {
-	max-width: 1400px;
+	max-width: 100%;
 	margin: 0 auto;
 	padding: 0 2rem;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
+}
+
+.admin-header-left {
+	display: flex;
+	align-items: center;
+	gap: 1.5rem;
+}
+
+.sidebar-toggle {
+	background: rgba(255, 255, 255, 0.2);
+	border: none;
+	color: white;
+	padding: 0.75rem;
+	border-radius: 8px;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	font-size: 1.5rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 50px;
+	height: 50px;
+}
+
+.sidebar-toggle:hover {
+	background: rgba(255, 255, 255, 0.3);
+	transform: scale(1.05);
+}
+
+.hamburger-icon {
+	display: block;
+	font-size: 1.5rem;
 }
 
 .admin-header h1 {
@@ -101,11 +133,115 @@
 	transform: translateY(-2px);
 }
 
+/* Sidebar */
+.admin-sidebar {
+	position: fixed;
+	left: 0;
+	top: 90px;
+	width: 280px;
+	height: calc(100vh - 90px);
+	background: white;
+	box-shadow: 4px 0 12px rgba(0, 0, 0, 0.1);
+	transition: transform 0.3s ease;
+	z-index: 99;
+	overflow-y: auto;
+}
+
+.admin-sidebar::-webkit-scrollbar {
+	width: 6px;
+}
+
+.admin-sidebar::-webkit-scrollbar-track {
+	background: #f1f1f1;
+}
+
+.admin-sidebar::-webkit-scrollbar-thumb {
+	background: var(--primary);
+	border-radius: 3px;
+}
+
+.admin-sidebar::-webkit-scrollbar-thumb:hover {
+	background: var(--secondary);
+}
+
+.admin-sidebar.closed {
+	transform: translateX(-100%);
+}
+
+.sidebar-nav {
+	display: flex;
+	flex-direction: column;
+	padding: 1.5rem 0;
+}
+
+.sidebar-item {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	padding: 1rem 1.5rem;
+	background: transparent;
+	border: none;
+	border-left: 4px solid transparent;
+	color: #333;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	font-size: 0.95rem;
+	text-align: left;
+	width: 100%;
+}
+
+.sidebar-item:hover {
+	background: #f8f9fa;
+	border-left-color: var(--secondary);
+	transform: translateX(4px);
+}
+
+.sidebar-item.active {
+	background: linear-gradient(90deg, rgba(65, 95, 148, 0.1), transparent);
+	border-left-color: var(--primary);
+	color: var(--primary);
+	font-weight: 600;
+}
+
+.sidebar-icon {
+	font-size: 1.5rem;
+	min-width: 30px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.sidebar-text {
+	flex: 1;
+}
+
 /* Main Content */
 .admin-main {
 	max-width: 1400px;
 	margin: 0 auto;
 	padding: 2rem;
+	transition: margin-left 0.3s ease;
+}
+
+.admin-main.sidebar-open {
+	margin-left: 280px;
+}
+
+.admin-main.sidebar-closed {
+	margin-left: 0;
+}
+
+/* Sidebar overlay for mobile */
+.sidebar-overlay {
+	display: none;
+	position: fixed;
+	top: 90px;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.5);
+	z-index: 98;
 }
 
 /* Bento Grid Layout */
@@ -597,49 +733,7 @@
 /* ====================== */
 /* Tab Navigation Styles  */
 /* ====================== */
-
-.admin-tabs {
-	max-width: 1400px;
-	margin: 1.5rem auto 0;
-	padding: 0 2rem;
-	display: flex;
-	gap: 0.5rem;
-	border-top: 2px solid rgba(255, 255, 255, 0.2);
-	padding-top: 1rem;
-	flex-wrap: wrap;
-}
-
-.tab-btn {
-	display: flex;
-	align-items: center;
-	gap: 0.5rem;
-	padding: 0.75rem 1.5rem;
-	background: rgba(255, 255, 255, 0.1);
-	color: white;
-	border: 2px solid transparent;
-	border-radius: 8px;
-	font-weight: 600;
-	cursor: pointer;
-	transition: all 0.3s ease;
-	font-size: 0.95rem;
-}
-
-.tab-btn:hover {
-	background: rgba(255, 255, 255, 0.2);
-	transform: translateY(-2px);
-}
-
-.tab-btn.active {
-	background: white;
-	color: var(--primary);
-	border-color: white;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.tab-icon {
-	font-size: 1.2rem;
-}
-
+/* Old tabs removed - now using sidebar */
 /* ========================= */
 /* Content Section Styles    */
 /* ========================= */
@@ -1103,27 +1197,50 @@
 }
 
 /* ========================= */
-/* Tab Responsive Styles     */
+/* Responsive Styles         */
 /* ========================= */
 
+@media (max-width: 1024px) {
+	.admin-sidebar {
+		width: 250px;
+	}
+
+	.admin-main.sidebar-open {
+		margin-left: 250px;
+	}
+
+	.sidebar-item {
+		padding: 0.875rem 1.25rem;
+		font-size: 0.9rem;
+	}
+}
+
 @media (max-width: 768px) {
-	.admin-tabs {
-		padding: 0 1rem;
+	.admin-header h1 {
+		font-size: 1.5rem;
 	}
 
-	.tab-btn {
-		flex: 1 1 calc(50% - 0.25rem);
-		justify-content: center;
-		padding: 0.625rem 1rem;
-		font-size: 0.85rem;
-	}
-
-	.tab-btn span:last-child {
+	.admin-user-info span {
 		display: none;
 	}
 
-	.tab-icon {
-		font-size: 1.5rem;
+	.admin-sidebar {
+		top: 80px;
+		height: calc(100vh - 80px);
+		z-index: 1000;
+	}
+
+	.admin-sidebar.closed {
+		transform: translateX(-100%);
+	}
+
+	.admin-sidebar.open {
+		box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+	}
+
+	.admin-main.sidebar-open,
+	.admin-main.sidebar-closed {
+		margin-left: 0;
 	}
 
 	.content-section {
@@ -2145,5 +2262,574 @@
 	.create-promo-btn {
 		width: 100%;
 		justify-content: center;
+	}
+}
+
+/* ==================== WALLET SECTION ==================== */
+.wallet-section {
+	max-width: 1400px;
+	margin: 0 auto;
+	padding: 2rem;
+}
+
+.wallet-balance-card {
+	background: linear-gradient(135deg, var(--primary), var(--secondary));
+	border-radius: 20px;
+	padding: 2.5rem;
+	margin-bottom: 2rem;
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+	color: white;
+}
+
+.balance-header {
+	display: flex;
+	align-items: center;
+	gap: 1.5rem;
+	margin-bottom: 2rem;
+}
+
+.balance-icon {
+	font-size: 3.5rem;
+	background: rgba(255, 255, 255, 0.2);
+	padding: 1.5rem;
+	border-radius: 50%;
+	backdrop-filter: blur(10px);
+}
+
+.balance-info {
+	flex: 1;
+}
+
+.balance-label {
+	font-size: 0.95rem;
+	opacity: 0.9;
+	margin-bottom: 0.5rem;
+	text-transform: uppercase;
+	letter-spacing: 1px;
+}
+
+.balance-amount {
+	font-size: 3rem;
+	font-weight: 700;
+	margin: 0;
+	text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.balance-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 1.5rem;
+	padding-top: 1.5rem;
+	border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.stat-item {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.stat-label {
+	font-size: 0.85rem;
+	opacity: 0.9;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.stat-value {
+	font-size: 1.8rem;
+	font-weight: 600;
+}
+
+.transactions-section {
+	background: white;
+	border-radius: 15px;
+	padding: 2rem;
+	box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.transactions-section h3 {
+	margin-bottom: 1.5rem;
+	color: var(--primary);
+	font-size: 1.5rem;
+}
+
+.transactions-table-wrapper {
+	overflow-x: auto;
+	border-radius: 10px;
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.transactions-table {
+	width: 100%;
+	border-collapse: collapse;
+	background: white;
+}
+
+.transactions-table thead {
+	background: linear-gradient(135deg, var(--primary), var(--secondary));
+	color: white;
+}
+
+.transactions-table th {
+	padding: 1rem;
+	text-align: left;
+	font-weight: 600;
+	font-size: 0.9rem;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.transactions-table tbody tr {
+	border-bottom: 1px solid #f0f0f0;
+	transition: background-color 0.2s ease;
+}
+
+.transactions-table tbody tr:hover {
+	background-color: #f8f9fa;
+}
+
+.transactions-table td {
+	padding: 1rem;
+	color: #333;
+}
+
+.tx-date {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.tx-time {
+	font-size: 0.85rem;
+	color: #666;
+}
+
+.tx-type {
+	display: inline-block;
+	padding: 0.4rem 0.8rem;
+	border-radius: 20px;
+	font-size: 0.85rem;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.tx-type.booking_received {
+	background: #d4edda;
+	color: #155724;
+}
+
+.tx-type.withdrawal_payout {
+	background: #fff3cd;
+	color: #856404;
+}
+
+.tx-type.top_up {
+	background: #cfe2ff;
+	color: #084298;
+}
+
+.tx-type.payment {
+	background: #f8d7da;
+	color: #842029;
+}
+
+.tx-description {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.property-title {
+	font-weight: 500;
+	color: #333;
+}
+
+.recipient,
+.fee {
+	font-size: 0.85rem;
+	color: #666;
+}
+
+.tx-amount {
+	font-weight: 600;
+	font-size: 1.05rem;
+}
+
+.tx-amount.positive {
+	color: #28a745;
+}
+
+.tx-amount.negative {
+	color: #dc3545;
+}
+
+.status-badge.completed {
+	color: #28a745;
+	background: #d4edda;
+	padding: 0.3rem 0.8rem;
+	border-radius: 15px;
+	font-size: 0.85rem;
+	font-weight: 500;
+}
+
+.status-badge.pending {
+	color: #ffc107;
+	background: #fff3cd;
+	padding: 0.3rem 0.8rem;
+	border-radius: 15px;
+	font-size: 0.85rem;
+	font-weight: 500;
+}
+
+.status-badge.failed {
+	color: #dc3545;
+	background: #f8d7da;
+	padding: 0.3rem 0.8rem;
+	border-radius: 15px;
+	font-size: 0.85rem;
+	font-weight: 500;
+}
+
+.loading-state {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 4rem 2rem;
+	gap: 1rem;
+}
+
+.spinner {
+	width: 50px;
+	height: 50px;
+	border: 4px solid #f3f3f3;
+	border-top: 4px solid var(--primary);
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
+.empty-state {
+	text-align: center;
+	padding: 3rem 2rem;
+	color: #666;
+}
+
+.empty-icon {
+	font-size: 4rem;
+	margin-bottom: 1rem;
+	opacity: 0.5;
+}
+
+.empty-state p {
+	font-size: 1.1rem;
+	color: #999;
+}
+
+/* PayPal Connection Card */
+.paypal-connection-card {
+	background: white;
+	border-radius: 15px;
+	padding: 2rem;
+	margin-bottom: 2rem;
+	box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.paypal-connection-card h3 {
+	margin-bottom: 1.5rem;
+	color: var(--primary);
+	font-size: 1.3rem;
+}
+
+.paypal-connected {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 1.5rem;
+	background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+	border-radius: 12px;
+	border-left: 4px solid #0070ba;
+}
+
+.paypal-info {
+	display: flex;
+	align-items: center;
+	gap: 1.5rem;
+}
+
+.paypal-logo {
+	font-size: 3rem;
+}
+
+.paypal-status {
+	font-weight: 600;
+	color: #28a745;
+	margin: 0 0 0.5rem 0;
+}
+
+.paypal-email {
+	font-size: 1.1rem;
+	font-weight: 500;
+	color: #333;
+	margin: 0;
+}
+
+.paypal-note {
+	font-size: 0.9rem;
+	color: #666;
+	margin: 0.5rem 0 0 0;
+}
+
+.disconnect-paypal-btn {
+	padding: 0.75rem 1.5rem;
+	background: #dc3545;
+	color: white;
+	border: none;
+	border-radius: 8px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.3s ease;
+}
+
+.disconnect-paypal-btn:hover {
+	background: #c82333;
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
+
+.paypal-disconnected {
+	padding: 1.5rem;
+	background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+	border-radius: 12px;
+	border-left: 4px solid #ffc107;
+}
+
+.paypal-warning {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	margin-bottom: 1.5rem;
+}
+
+.warning-icon {
+	font-size: 2.5rem;
+}
+
+.warning-title {
+	font-weight: 600;
+	color: #856404;
+	margin: 0 0 0.5rem 0;
+}
+
+.warning-text {
+	color: #856404;
+	margin: 0;
+}
+
+.connect-paypal-btn {
+	padding: 0.75rem 1.5rem;
+	background: #0070ba;
+	color: white;
+	border: none;
+	border-radius: 8px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.3s ease;
+}
+
+.connect-paypal-btn:hover {
+	background: #005a94;
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(0, 112, 186, 0.3);
+}
+
+/* PayPal Modal */
+.modal-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1000;
+}
+
+.paypal-modal {
+	background: white;
+	border-radius: 15px;
+	max-width: 500px;
+	width: 90%;
+	box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 1.5rem;
+	border-bottom: 1px solid #e0e0e0;
+}
+
+.modal-header h3 {
+	margin: 0;
+	color: var(--primary);
+	font-size: 1.3rem;
+}
+
+.close-modal-btn {
+	background: none;
+	border: none;
+	font-size: 1.5rem;
+	color: #666;
+	cursor: pointer;
+	transition: color 0.3s ease;
+}
+
+.close-modal-btn:hover {
+	color: #333;
+}
+
+.modal-body {
+	padding: 2rem;
+}
+
+.paypal-modal-info {
+	margin-bottom: 2rem;
+}
+
+.info-text {
+	color: #666;
+	line-height: 1.6;
+	margin-bottom: 1rem;
+}
+
+.sandbox-notice {
+	background: #fff3cd;
+	color: #856404;
+	padding: 0.75rem 1rem;
+	border-radius: 8px;
+	font-size: 0.9rem;
+	font-weight: 500;
+}
+
+.form-group {
+	margin-bottom: 1.5rem;
+}
+
+.form-group label {
+	display: block;
+	margin-bottom: 0.5rem;
+	font-weight: 600;
+	color: #333;
+}
+
+.paypal-email-input {
+	width: 100%;
+	padding: 0.75rem;
+	border: 2px solid #e0e0e0;
+	border-radius: 8px;
+	font-size: 1rem;
+	transition: border-color 0.3s ease;
+}
+
+.paypal-email-input:focus {
+	outline: none;
+	border-color: var(--primary);
+}
+
+.modal-actions {
+	display: flex;
+	gap: 1rem;
+	justify-content: flex-end;
+}
+
+.cancel-btn,
+.connect-btn {
+	padding: 0.75rem 1.5rem;
+	border: none;
+	border-radius: 8px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.3s ease;
+}
+
+.cancel-btn {
+	background: #f0f0f0;
+	color: #333;
+}
+
+.cancel-btn:hover {
+	background: #e0e0e0;
+}
+
+.connect-btn {
+	background: #0070ba;
+	color: white;
+}
+
+.connect-btn:hover {
+	background: #005a94;
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(0, 112, 186, 0.3);
+}
+
+/* Responsive Wallet Design */
+@media (max-width: 1024px) {
+	.balance-amount {
+		font-size: 2.5rem;
+	}
+
+	.transactions-table {
+		font-size: 0.9rem;
+	}
+
+	.transactions-table th,
+	.transactions-table td {
+		padding: 0.75rem 0.5rem;
+	}
+}
+
+@media (max-width: 768px) {
+	.wallet-balance-card {
+		padding: 1.5rem;
+	}
+
+	.balance-header {
+		flex-direction: column;
+		text-align: center;
+	}
+
+	.balance-icon {
+		font-size: 3rem;
+		padding: 1rem;
+	}
+
+	.balance-amount {
+		font-size: 2rem;
+	}
+
+	.balance-stats {
+		grid-template-columns: 1fr;
+	}
+
+	.transactions-table-wrapper {
+		overflow-x: scroll;
+	}
+
+	.transactions-table {
+		min-width: 800px;
+	}
+
+	.paypal-connected {
+		flex-direction: column;
+		gap: 1rem;
+		text-align: center;
+	}
+
+	.paypal-info {
+		flex-direction: column;
 	}
 }

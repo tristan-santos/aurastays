@@ -224,6 +224,27 @@ export default function Wallet() {
 			})
 
 			setWalletBalance(newBalance)
+
+			// Create notification for top-up
+			try {
+				const { createTopUpNotification } = await import("../utils/notifications")
+				// Ensure amount is a number
+				const amountNum = typeof amount === "number" ? amount : parseFloat(amount)
+				if (!isNaN(amountNum)) {
+					await createTopUpNotification(currentUser.uid, amountNum)
+					console.log(`✅ Top-up notification created for ₱${amountNum}`)
+				} else {
+					console.error("Invalid amount for notification:", amount)
+				}
+			} catch (notifError) {
+				console.error("Error creating top-up notification:", notifError)
+				console.error("Notification error details:", {
+					userId: currentUser.uid,
+					amount: amount,
+					error: notifError.message,
+				})
+				// Don't fail the top-up if notification fails
+			}
 		} catch (error) {
 			console.error("Error updating wallet:", error)
 			throw error
@@ -302,10 +323,47 @@ export default function Wallet() {
 				throw new Error("Please enter a valid PayPal email")
 			}
 
+			// Get admin account
+			const adminEmail = "adminAurastays@aurastays.com"
+			const {
+				query: firestoreQuery,
+				where,
+				getDocs,
+			} = await import("firebase/firestore")
+			const adminQuery = firestoreQuery(
+				collection(db, "users"),
+				where("email", "==", adminEmail)
+			)
+			const adminSnapshot = await getDocs(adminQuery)
+
+			if (adminSnapshot.empty) {
+				throw new Error("Admin account not found. Please contact support.")
+			}
+
+			const adminDoc = adminSnapshot.docs[0]
+			const adminRef = doc(db, "users", adminDoc.id)
+			const adminData = adminDoc.data()
+			const adminCurrentBalance = adminData?.walletBalance || 0
+
+			// Check if admin has sufficient funds for payout
+			if (adminCurrentBalance < amount) {
+				throw new Error(
+					"Insufficient admin funds for withdrawal. Please contact support."
+				)
+			}
+
+			// Deduct from guest wallet
 			await updateDoc(userRef, {
 				walletBalance: newBalance,
 			})
 
+			// Deduct from admin wallet
+			const adminNewBalance = adminCurrentBalance - amount
+			await updateDoc(adminRef, {
+				walletBalance: adminNewBalance,
+			})
+
+			// Record guest withdrawal transaction
 			await addDoc(collection(db, "walletTransactions"), {
 				userId: currentUser.uid,
 				type: "withdrawal",
@@ -316,6 +374,24 @@ export default function Wallet() {
 				paypalEmail: email,
 				balanceBefore: currentBalance,
 				balanceAfter: newBalance,
+				processedBy: "admin",
+				adminId: adminDoc.id,
+				status: "completed",
+				createdAt: serverTimestamp(),
+			})
+
+			// Record admin payout transaction
+			await addDoc(collection(db, "walletTransactions"), {
+				userId: adminDoc.id,
+				type: "withdrawal_payout",
+				amount: amount,
+				fee: fee,
+				amountPaidOut: amountAfterFee,
+				paymentMethod: "paypal",
+				recipientEmail: email,
+				recipientId: currentUser.uid,
+				balanceBefore: adminCurrentBalance,
+				balanceAfter: adminNewBalance,
 				status: "completed",
 				createdAt: serverTimestamp(),
 			})

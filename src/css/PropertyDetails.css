@@ -249,7 +249,8 @@
 .amenities-section,
 .availability-section,
 .reviews-section,
-.location-section {
+.location-section,
+.booking-history-section {
 	background: white;
 	padding: 2rem;
 	border-radius: 12px;
@@ -260,7 +261,8 @@
 .amenities-section h2,
 .availability-section h2,
 .reviews-section h2,
-.location-section h2 {
+.location-section h2,
+.booking-history-section h2 {
 	color: var(--primary);
 	margin-bottom: 1.5rem;
 	font-size: 1.5rem;
@@ -869,6 +871,220 @@
 	border-radius: 12px;
 	overflow: hidden;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Booking History Section */
+.booking-history-section {
+	margin-top: 2rem;
+}
+
+.booking-history-loading {
+	text-align: center;
+	padding: 2rem;
+	color: #666;
+}
+
+.booking-history-list {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
+.booking-history-item {
+	padding: 1.5rem;
+	border: 2px solid #e9ecef;
+	border-radius: 12px;
+	transition: all 0.3s ease;
+	background: #f8f9fa;
+}
+
+.booking-history-item:hover {
+	border-color: var(--primary);
+	box-shadow: 0 4px 12px rgba(65, 95, 148, 0.1);
+	transform: translateY(-2px);
+}
+
+.booking-history-item.booking-cancelled {
+	border-color: #c62828;
+	border-width: 2px;
+	background: #fff5f5;
+}
+
+.booking-history-item.booking-cancelled:hover {
+	border-color: #c62828;
+	box-shadow: 0 4px 12px rgba(198, 40, 40, 0.2);
+}
+
+.booking-history-dates {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	margin-bottom: 1rem;
+	flex-wrap: wrap;
+}
+
+.booking-date-info {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	flex: 1;
+	min-width: 150px;
+}
+
+.date-icon {
+	color: var(--primary);
+	font-size: 1.25rem;
+	flex-shrink: 0;
+}
+
+.booking-date-info > div {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.date-label {
+	font-size: 0.75rem;
+	color: #6c757d;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.date-value {
+	font-size: 1rem;
+	color: #212529;
+	font-weight: 700;
+}
+
+.date-separator {
+	color: var(--primary);
+	font-weight: 700;
+	font-size: 1.25rem;
+	margin: 0 0.5rem;
+}
+
+.booking-history-details {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1.5rem;
+	margin-bottom: 1rem;
+	padding-top: 1rem;
+	border-top: 1px solid #e9ecef;
+}
+
+.booking-detail-item {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.booking-detail-item .detail-label {
+	font-size: 0.75rem;
+	color: #6c757d;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.booking-detail-item .detail-value {
+	font-size: 0.95rem;
+	color: #212529;
+	font-weight: 600;
+}
+
+.booking-status-badge {
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+
+.status-badge {
+	padding: 0.5rem 1rem;
+	border-radius: 20px;
+	font-size: 0.875rem;
+	font-weight: 600;
+	text-transform: capitalize;
+}
+
+.status-badge.status-past,
+.status-badge.status-completed {
+	background: #e8f5e9;
+	color: #2e7d32;
+}
+
+.status-badge.status-current {
+	background: #fff3e0;
+	color: #e65100;
+}
+
+.status-badge.status-upcoming {
+	background: #e3f2fd;
+	color: #1565c0;
+}
+
+.status-badge.status-pending {
+	background: #f3e5f5;
+	color: #6a1b9a;
+}
+
+.status-badge.status-confirmed {
+	background: #e8f5e9;
+	color: #2e7d32;
+}
+
+.status-badge.status-cancelled {
+	background: #ffebee;
+	color: #c62828;
+}
+
+.booking-history-empty {
+	text-align: center;
+	padding: 3rem 2rem;
+	color: #6c757d;
+}
+
+.booking-history-empty .empty-icon {
+	font-size: 3rem;
+	color: #dee2e6;
+	margin-bottom: 1rem;
+}
+
+.booking-history-empty p {
+	margin: 0.5rem 0;
+	font-size: 1rem;
+}
+
+.booking-history-empty .login-prompt {
+	color: var(--primary);
+	font-weight: 600;
+	margin-top: 1rem;
+}
+
+@media (max-width: 768px) {
+	.booking-history-section {
+		padding: 1.5rem;
+		margin-top: 1.5rem;
+	}
+
+	.booking-history-dates {
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.booking-date-info {
+		width: 100%;
+	}
+
+	.date-separator {
+		transform: rotate(90deg);
+		margin: 0.5rem 0;
+	}
+
+	.booking-history-details {
+		flex-direction: column;
+		gap: 1rem;
+	}
 }
 
 /* Right Column - Booking Card */
@@ -1862,4 +2078,492 @@
 	color: #666;
 	margin-top: 4px;
 	font-weight: 500;
+}
+
+/* ==================== DARK MODE ==================== */
+[data-theme="dark"] .date-picker-modal-overlay {
+	background: rgba(0, 0, 0, 0.8);
+}
+
+[data-theme="dark"] .date-picker-modal-content {
+	background: #2d2d2d;
+	color: #ffffff;
+	border-color: #404040;
+}
+
+[data-theme="dark"] .date-picker-modal-content h2 {
+	color: var(--primary);
+}
+
+[data-theme="dark"] .close-date-modal {
+	background: #1a1a1a;
+	color: #ffffff;
+}
+
+[data-theme="dark"] .close-date-modal:hover {
+	background: #1a1a1a;
+	color: #ffffff;
+}
+
+[data-theme="dark"] .modal-date-info {
+	background: #1a1a1a;
+	border-left-color: var(--primary);
+	color: #ffffff;
+}
+
+[data-theme="dark"] .selected-date-item .date-type {
+	color: var(--primary);
+}
+
+[data-theme="dark"] .selected-date-item .date-text {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .selected-date-item.check-in {
+	background: rgba(102, 187, 106, 0.2);
+	color: #ffffff;
+}
+
+[data-theme="dark"] .selected-date-item.check-out {
+	background: rgba(66, 165, 245, 0.2);
+	color: #ffffff;
+}
+
+[data-theme="dark"] .instruction-text {
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .modal-calendar {
+	background: #2d2d2d;
+}
+
+[data-theme="dark"] .modal-calendar .month-view {
+	background: #1a1a1a;
+	border-color: #404040;
+}
+
+[data-theme="dark"] .month-view {
+	background: #1a1a1a;
+	border-color: #404040;
+}
+
+[data-theme="dark"] .month-header h3 {
+	color: var(--primary);
+}
+
+[data-theme="dark"] .month-nav-btn {
+	background: #2d2d2d;
+	border-color: var(--primary);
+	color: var(--primary);
+}
+
+[data-theme="dark"] .month-nav-btn:hover {
+	background: var(--primary);
+	color: white;
+}
+
+[data-theme="dark"] .day-label {
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .calendar-day.available {
+	background: rgba(102, 187, 106, 0.2);
+	color: #66bb6a;
+	border: 1px solid rgba(102, 187, 106, 0.3);
+}
+
+[data-theme="dark"] .calendar-day.available:hover {
+	background: rgba(102, 187, 106, 0.3);
+}
+
+[data-theme="dark"] .calendar-day.past {
+	background: rgba(255, 193, 7, 0.2);
+	color: #ffc107;
+	border-color: rgba(255, 193, 7, 0.3);
+}
+
+[data-theme="dark"] .calendar-day.past:hover {
+	background: rgba(255, 193, 7, 0.3);
+}
+
+[data-theme="dark"] .calendar-day.booked {
+	background: rgba(244, 67, 54, 0.2);
+	color: #f44336;
+	border-color: rgba(244, 67, 54, 0.3);
+}
+
+[data-theme="dark"] .calendar-day.selected {
+	background: var(--primary);
+	color: white;
+}
+
+[data-theme="dark"] .calendar-day.selected-check-in {
+	background: #66bb6a !important;
+	color: white !important;
+	border-color: #43a047 !important;
+}
+
+[data-theme="dark"] .calendar-day.selected-check-out {
+	background: #42a5f5 !important;
+	color: white !important;
+	border-color: #1e88e5 !important;
+}
+
+[data-theme="dark"] .calendar-day.empty {
+	background: transparent;
+}
+
+[data-theme="dark"] .calendar-legend {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .legend-item {
+	color: #ffffff;
+}
+
+/* Wallet Payment Modal */
+.wallet-payment-modal-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.6);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 10000;
+	backdrop-filter: blur(4px);
+}
+
+.wallet-payment-modal-content {
+	background: white;
+	border-radius: 16px;
+	max-width: 550px;
+	width: 90%;
+	max-height: 90vh;
+	overflow-y: auto;
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+	animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+	from {
+		opacity: 0;
+		transform: translateY(-20px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.wallet-payment-modal-header {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	padding: 1.5rem;
+	border-bottom: 1px solid #e9ecef;
+	position: relative;
+}
+
+.wallet-icon-wrapper {
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: white;
+	font-size: 1.5rem;
+	flex-shrink: 0;
+}
+
+.wallet-payment-modal-header h3 {
+	margin: 0;
+	font-size: 1.5rem;
+	font-weight: 700;
+	color: #212529;
+	flex: 1;
+}
+
+.close-wallet-modal {
+	position: absolute;
+	top: 1rem;
+	right: 1rem;
+	background: #f8f9fa;
+	border: none;
+	border-radius: 50%;
+	width: 36px;
+	height: 36px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	color: #6c757d;
+	transition: all 0.2s ease;
+	font-size: 1.1rem;
+}
+
+.close-wallet-modal:hover {
+	background: #e9ecef;
+	color: #212529;
+}
+
+.wallet-payment-modal-body {
+	padding: 1.5rem;
+}
+
+.wallet-payment-info {
+	display: flex;
+	flex-direction: column;
+	gap: 1.5rem;
+}
+
+.wallet-payment-message {
+	margin: 0;
+	font-size: 1rem;
+	color: #495057;
+	line-height: 1.6;
+	text-align: center;
+}
+
+.wallet-payment-summary {
+	background: #f8f9fa;
+	border-radius: 12px;
+	padding: 1.5rem;
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
+.summary-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.75rem 0;
+	border-bottom: 1px solid #e9ecef;
+}
+
+.summary-row:last-child {
+	border-bottom: none;
+}
+
+.summary-row.total-row {
+	border-top: 2px solid #dee2e6;
+	padding-top: 1rem;
+	margin-top: 0.5rem;
+}
+
+.summary-row.balance-row {
+	border-top: 1px solid #dee2e6;
+	padding-top: 1rem;
+	margin-top: 0.5rem;
+}
+
+.summary-row.balance-after-row {
+	border-top: 2px solid var(--primary);
+	padding-top: 1rem;
+	margin-top: 0.5rem;
+	background: rgba(97, 191, 156, 0.1);
+	border-radius: 8px;
+	padding: 1rem;
+}
+
+.summary-label {
+	font-size: 0.95rem;
+	color: #6c757d;
+	font-weight: 500;
+}
+
+.summary-value {
+	font-size: 0.95rem;
+	color: #212529;
+	font-weight: 600;
+	text-align: right;
+}
+
+.summary-value.total-amount {
+	font-size: 1.25rem;
+	color: var(--primary);
+	font-weight: 700;
+}
+
+.summary-value.balance-amount {
+	color: #28a745;
+	font-weight: 700;
+}
+
+.summary-value.balance-after-amount {
+	color: var(--primary);
+	font-weight: 700;
+	font-size: 1.1rem;
+}
+
+.wallet-payment-modal-footer {
+	display: flex;
+	gap: 1rem;
+	padding: 1.5rem;
+	border-top: 1px solid #e9ecef;
+}
+
+.wallet-modal-cancel-btn,
+.wallet-modal-confirm-btn {
+	flex: 1;
+	padding: 0.875rem 1.5rem;
+	border: none;
+	border-radius: 10px;
+	font-size: 1rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+}
+
+.wallet-modal-cancel-btn {
+	background: #f8f9fa;
+	color: #6c757d;
+	border: 1px solid #dee2e6;
+}
+
+.wallet-modal-cancel-btn:hover {
+	background: #e9ecef;
+	color: #495057;
+}
+
+.wallet-modal-confirm-btn {
+	background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+	color: white;
+}
+
+.wallet-modal-confirm-btn:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(97, 191, 156, 0.4);
+}
+
+.wallet-modal-confirm-btn:active {
+	transform: translateY(0);
+}
+
+/* Dark Mode Styles for Wallet Payment Modal */
+[data-theme="dark"] .wallet-payment-modal-overlay {
+	background: rgba(0, 0, 0, 0.8);
+}
+
+[data-theme="dark"] .wallet-payment-modal-content {
+	background: #1a1a1a;
+	border: 1px solid #404040;
+}
+
+[data-theme="dark"] .wallet-payment-modal-header {
+	border-color: #404040;
+}
+
+[data-theme="dark"] .wallet-payment-modal-header h3 {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .close-wallet-modal {
+	background: #2d2d2d;
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .close-wallet-modal:hover {
+	background: #404040;
+	color: #ffffff;
+}
+
+[data-theme="dark"] .wallet-payment-message {
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .wallet-payment-summary {
+	background: #2d2d2d;
+	border-color: #404040;
+}
+
+[data-theme="dark"] .summary-row {
+	border-color: #404040;
+}
+
+[data-theme="dark"] .summary-row.total-row {
+	border-color: #404040;
+}
+
+[data-theme="dark"] .summary-row.balance-row {
+	border-color: #404040;
+}
+
+[data-theme="dark"] .summary-row.balance-after-row {
+	border-color: var(--primary);
+	background: rgba(97, 191, 156, 0.15);
+}
+
+[data-theme="dark"] .summary-label {
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .summary-value {
+	color: #ffffff;
+}
+
+[data-theme="dark"] .summary-value.total-amount {
+	color: var(--primary);
+}
+
+[data-theme="dark"] .summary-value.balance-amount {
+	color: #66bb6a;
+}
+
+[data-theme="dark"] .summary-value.balance-after-amount {
+	color: var(--primary);
+}
+
+[data-theme="dark"] .wallet-payment-modal-footer {
+	border-color: #404040;
+}
+
+[data-theme="dark"] .wallet-modal-cancel-btn {
+	background: #2d2d2d;
+	border-color: #404040;
+	color: #b0b0b0;
+}
+
+[data-theme="dark"] .wallet-modal-cancel-btn:hover {
+	background: #404040;
+	color: #ffffff;
+}
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+	.wallet-payment-modal-content {
+		width: 95%;
+		max-width: none;
+	}
+
+	.wallet-payment-modal-header {
+		padding: 1.25rem;
+	}
+
+	.wallet-payment-modal-header h3 {
+		font-size: 1.25rem;
+	}
+
+	.wallet-payment-modal-body {
+		padding: 1.25rem;
+	}
+
+	.wallet-payment-modal-footer {
+		flex-direction: column;
+		padding: 1.25rem;
+	}
+
+	.wallet-modal-cancel-btn,
+	.wallet-modal-confirm-btn {
+		width: 100%;
+	}
 }

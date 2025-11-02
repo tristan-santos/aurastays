@@ -1,0 +1,623 @@
+.host-points-container {
+	min-height: 100vh;
+	background: linear-gradient(135deg, #f7f9fc 0%, #e9ecef 100%);
+	padding: 2rem 1rem;
+}
+
+/* Header */
+.points-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 2rem;
+	max-width: 1200px;
+	margin-left: auto;
+	margin-right: auto;
+	padding: 0 1rem;
+}
+
+.host-points-back-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.75rem 1.5rem;
+	background: white;
+	border: 2px solid #e9ecef;
+	border-radius: 12px;
+	color: var(--primary);
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	font-size: 1rem;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.host-points-back-button:hover {
+	background: var(--primary);
+	color: white;
+	border-color: var(--primary);
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(97, 191, 156, 0.3);
+}
+
+.header-logo {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.header-logo img {
+	height: 40px;
+	width: auto;
+}
+
+.logo-text {
+	font-size: 1.5rem;
+	font-weight: 700;
+	color: var(--primary);
+}
+
+/* Main Content */
+.points-main-content {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 0 1rem;
+}
+
+/* Points Overview */
+.points-overview-section {
+	margin-bottom: 3rem;
+}
+
+.points-title {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	color: var(--primary);
+	font-size: 2.5rem;
+	margin-bottom: 2rem;
+}
+
+.title-icon {
+	font-size: 2.5rem;
+	color: #fbbf24;
+}
+
+/* Points Balance Card */
+.points-balance-card {
+	background: linear-gradient(135deg, var(--primary), var(--secondary));
+	color: white;
+	border-radius: 20px;
+	padding: 3rem;
+	margin-bottom: 2rem;
+	box-shadow: 0 8px 24px rgba(97, 191, 156, 0.3);
+}
+
+.balance-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 2rem;
+}
+
+.balance-header h2 {
+	margin: 0;
+	font-size: 1.5rem;
+	font-weight: 600;
+}
+
+.tier-badge {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.5rem 1rem;
+	background: rgba(255, 255, 255, 0.2);
+	border: 2px solid;
+	border-radius: 20px;
+	font-weight: 700;
+	font-size: 0.9rem;
+	backdrop-filter: blur(10px);
+}
+
+.balance-amount {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	margin-bottom: 2rem;
+}
+
+.balance-amount span {
+	font-size: 4rem;
+	font-weight: 800;
+	letter-spacing: -2px;
+}
+
+.coins-icon {
+	font-size: 3rem;
+	color: #fbbf24;
+}
+
+.balance-stats {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 1.5rem;
+	padding-top: 2rem;
+	border-top: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.stat-item {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+}
+
+.stat-label {
+	font-size: 0.85rem;
+	opacity: 0.95;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	font-weight: 600;
+	color: white;
+}
+
+.stat-value {
+	font-size: 1.75rem;
+	font-weight: 800;
+	letter-spacing: -0.5px;
+	color: white;
+}
+
+/* How to Earn Points */
+.earn-points-section {
+	background: white;
+	border-radius: 16px;
+	padding: 2rem;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.earn-points-section h3 {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	color: var(--primary);
+	font-size: 1.8rem;
+	margin-bottom: 1.5rem;
+}
+
+.earn-points-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 1.5rem;
+}
+
+.earn-point-card {
+	text-align: center;
+	padding: 1.5rem;
+	background: #f8f9fa;
+	border-radius: 12px;
+	transition: all 0.3s ease;
+}
+
+.earn-point-card:hover {
+	transform: translateY(-4px);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.earn-icon {
+	font-size: 2.5rem;
+	margin-bottom: 0.75rem;
+}
+
+.earn-point-card h4 {
+	color: var(--primary);
+	font-size: 1.1rem;
+	margin-bottom: 0.5rem;
+}
+
+.earn-point-card p {
+	color: #666;
+	font-size: 0.9rem;
+	margin: 0;
+}
+
+/* Monthly Goals Section */
+.monthly-goals-section {
+	margin-top: 2.5rem;
+	padding-top: 2rem;
+	border-top: 2px solid #f0f0f0;
+}
+
+.monthly-goals-section h4 {
+	color: var(--primary);
+	font-size: 1.5rem;
+	margin-bottom: 1.5rem;
+}
+
+.goals-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+	gap: 1.5rem;
+	margin-bottom: 1.5rem;
+}
+
+.goal-item {
+	background: #f8f9fa;
+	border-radius: 12px;
+	padding: 1.5rem;
+	border: 2px solid #e9ecef;
+}
+
+.goal-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 1rem;
+}
+
+.goal-label {
+	font-weight: 600;
+	color: var(--primary);
+	font-size: 1.1rem;
+}
+
+.goal-progress {
+	font-weight: 700;
+	color: #333;
+	font-size: 1.1rem;
+}
+
+.goal-bar {
+	width: 100%;
+	height: 12px;
+	background: #e9ecef;
+	border-radius: 20px;
+	overflow: hidden;
+	margin-bottom: 0.75rem;
+}
+
+.goal-bar-fill {
+	height: 100%;
+	background: linear-gradient(90deg, var(--primary), var(--secondary));
+	border-radius: 20px;
+	transition: width 0.5s ease;
+}
+
+.goal-completed {
+	display: inline-block;
+	color: var(--primary);
+	font-weight: 700;
+	font-size: 0.9rem;
+}
+
+.monthly-goal-bonus {
+	background: linear-gradient(135deg, var(--primary), var(--secondary));
+	color: white;
+	padding: 1rem 1.5rem;
+	border-radius: 12px;
+	font-weight: 700;
+	font-size: 1.1rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	margin-top: 1rem;
+	box-shadow: 0 4px 12px rgba(97, 191, 156, 0.3);
+}
+
+/* Rewards Section */
+.rewards-section {
+	margin-bottom: 3rem;
+}
+
+.section-title {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	color: var(--primary);
+	font-size: 2rem;
+	margin-bottom: 2rem;
+}
+
+.rewards-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	gap: 2rem;
+}
+
+.reward-card {
+	background: white;
+	border-radius: 16px;
+	padding: 2rem;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	transition: all 0.3s ease;
+	border: 2px solid #e9ecef;
+}
+
+.reward-card:hover {
+	transform: translateY(-8px);
+	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+	border-color: var(--primary);
+}
+
+.reward-icon {
+	font-size: 3rem;
+	margin-bottom: 1rem;
+}
+
+.reward-card h3 {
+	color: var(--primary);
+	font-size: 1.5rem;
+	margin-bottom: 0.5rem;
+}
+
+.reward-card p {
+	color: #666;
+	font-size: 0.95rem;
+	margin-bottom: 1.5rem;
+	line-height: 1.6;
+}
+
+.reward-cost {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	color: var(--primary);
+	font-size: 1.2rem;
+	font-weight: 700;
+	margin-bottom: 1.5rem;
+}
+
+.redeem-button {
+	width: 100%;
+	padding: 0.875rem 1.5rem;
+	background: linear-gradient(135deg, var(--primary), var(--secondary));
+	color: white;
+	border: none;
+	border-radius: 12px;
+	font-size: 1rem;
+	font-weight: 700;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+}
+
+.redeem-button:hover:not(.disabled) {
+	transform: translateY(-2px);
+	box-shadow: 0 8px 20px rgba(97, 191, 156, 0.4);
+}
+
+.redeem-button.disabled {
+	background: #e9ecef;
+	color: #999;
+	cursor: not-allowed;
+	opacity: 0.6;
+}
+
+/* Transactions Section */
+.transactions-section {
+	margin-bottom: 3rem;
+}
+
+.transactions-list {
+	background: white;
+	border-radius: 16px;
+	padding: 1.5rem;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.transaction-item {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	padding: 1.25rem;
+	border-bottom: 1px solid #f0f0f0;
+	transition: all 0.2s ease;
+}
+
+.transaction-item:last-child {
+	border-bottom: none;
+}
+
+.transaction-item:hover {
+	background: #f8f9fa;
+	border-radius: 8px;
+}
+
+.transaction-icon {
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 1.25rem;
+	flex-shrink: 0;
+}
+
+.earn-icon {
+	color: var(--primary);
+	background: rgba(97, 191, 156, 0.1);
+}
+
+.redeem-icon {
+	color: #e74c3c;
+	background: rgba(231, 76, 60, 0.1);
+}
+
+.transaction-details {
+	flex: 1;
+}
+
+.transaction-details h4 {
+	margin: 0 0 0.25rem 0;
+	color: #333;
+	font-size: 1rem;
+}
+
+.transaction-details p {
+	margin: 0;
+	color: #999;
+	font-size: 0.85rem;
+}
+
+.transaction-amount {
+	font-size: 1.25rem;
+	font-weight: 700;
+	flex-shrink: 0;
+}
+
+.transaction-amount.earn {
+	color: var(--primary);
+}
+
+.transaction-amount.redeem {
+	color: #e74c3c;
+}
+
+/* Redeemed Rewards */
+.redeemed-rewards-section {
+	margin-bottom: 3rem;
+}
+
+.redeemed-rewards-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+	gap: 1.5rem;
+}
+
+.redeemed-reward-card {
+	background: white;
+	border-radius: 12px;
+	padding: 1.5rem;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+	border: 2px solid #e9ecef;
+	position: relative;
+}
+
+.reward-status-badge {
+	position: absolute;
+	top: 1rem;
+	right: 1rem;
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	padding: 0.25rem 0.75rem;
+	background: var(--primary);
+	color: white;
+	border-radius: 20px;
+	font-size: 0.75rem;
+	font-weight: 600;
+}
+
+.redeemed-reward-card h4 {
+	color: var(--primary);
+	font-size: 1.1rem;
+	margin-bottom: 0.5rem;
+}
+
+.redeemed-reward-card p {
+	color: #666;
+	font-size: 0.85rem;
+	margin-bottom: 0.75rem;
+}
+
+.reward-points-spent {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	color: #999;
+	font-size: 0.9rem;
+}
+
+/* Empty State */
+.empty-state {
+	text-align: center;
+	padding: 4rem 2rem;
+	color: #999;
+}
+
+.empty-icon {
+	font-size: 4rem;
+	margin-bottom: 1rem;
+	opacity: 0.5;
+}
+
+.empty-state p {
+	font-size: 1.2rem;
+	margin-bottom: 0.5rem;
+	color: #666;
+}
+
+.empty-state span {
+	font-size: 0.9rem;
+}
+
+/* Loading State */
+.loading-state {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	min-height: 100vh;
+	gap: 1rem;
+}
+
+.spinner {
+	width: 60px;
+	height: 60px;
+	border: 4px solid #f3f3f3;
+	border-top: 4px solid var(--primary);
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+	0% {
+		transform: rotate(0deg);
+	}
+	100% {
+		transform: rotate(360deg);
+	}
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+	.points-header {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 1rem;
+	}
+
+	.points-title {
+		font-size: 2rem;
+	}
+
+	.balance-amount span {
+		font-size: 3rem;
+	}
+
+	.balance-stats {
+		grid-template-columns: 1fr;
+	}
+
+	.rewards-grid,
+	.redeemed-rewards-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.earn-points-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+
+	.transaction-item {
+		flex-wrap: wrap;
+	}
+}
+
