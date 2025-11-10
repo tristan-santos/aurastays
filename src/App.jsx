@@ -17,9 +17,11 @@ import WishlistCreate from "./pages/WishlistCreate"
 import Messages from "./pages/Messages"
 import HostMessages from "./pages/HostMessages"
 import PropertyListingWizard from "./pages/PropertyListingWizard"
-import HostBookingsDashboard from "./pages/HostBookingsDashboard"
+import HostBookings from "./pages/HostBookings"
+import PropertyBookings from "./pages/PropertyBookings"
 import HostSubscription from "./pages/HostSubscription"
 import HostPoints from "./pages/HostPoints"
+import HostAllListings from "./pages/HostAllListings"
 
 function App() {
 	return (
@@ -44,9 +46,11 @@ function App() {
 						path="/host/list-property"
 						element={<PropertyListingWizard />}
 					/>
-					<Route path="/host/bookings" element={<HostBookingsDashboard />} />
+					<Route path="/host/bookings" element={<HostBookings />} />
+					<Route path="/propertyBookings/:propertyId" element={<PropertyBookings />} />
 					<Route path="/host/subscription" element={<HostSubscription />} />
 					<Route path="/host/points" element={<HostPoints />} />
+					<Route path="/host/all-listings" element={<HostAllListings />} />
 
 					{/* 404 Route */}
 					<Route path="*" element={<NotFound />} />

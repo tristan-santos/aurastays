@@ -474,6 +474,19 @@
 	box-shadow: 0 4px 15px rgba(97, 191, 156, 0.3);
 }
 
+.category-create-btn.disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+	background: #ccc;
+	pointer-events: auto;
+}
+
+.category-create-btn.disabled:hover {
+	transform: none;
+	box-shadow: none;
+	background: #ccc;
+}
+
 .category-create-btn:hover {
 	transform: translateY(-2px);
 	box-shadow: 0 6px 20px rgba(97, 191, 156, 0.4);
@@ -483,6 +496,22 @@
 	background: white;
 	color: var(--primary);
 	border: 2px solid var(--primary);
+}
+
+.category-drafts-btn.disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+	background: #ccc;
+	color: #666;
+	border-color: #ccc;
+	pointer-events: auto;
+}
+
+.category-drafts-btn.disabled:hover {
+	transform: none;
+	box-shadow: none;
+	background: #ccc;
+	color: #666;
 }
 
 .category-drafts-btn:hover {

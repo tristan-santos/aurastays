@@ -12,6 +12,10 @@ import {
 	query,
 	where,
 	getDocs,
+	orderBy,
+	addDoc,
+	deleteDoc,
+	serverTimestamp,
 } from "firebase/firestore"
 import { toast } from "react-stacked-toast"
 import emailjs from "@emailjs/browser"
@@ -24,6 +28,7 @@ import {
 	FaMapMarkerAlt,
 	FaUser,
 	FaCalendarAlt,
+	FaCalendarCheck,
 	FaBookmark,
 	FaFacebook,
 	FaTwitter,
@@ -37,6 +42,10 @@ import {
 	FaMedal,
 	FaClock,
 	FaWallet,
+	FaTag,
+	FaGift,
+	FaHistory,
+	FaUsers,
 } from "react-icons/fa"
 import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
@@ -62,6 +71,7 @@ export default function PropertyDetails() {
 	const [showAllPhotos, setShowAllPhotos] = useState(false)
 	const [showWalletPaymentModal, setShowWalletPaymentModal] = useState(false)
 	const [bookedDates, setBookedDates] = useState([])
+	const [propertyBlockedDates, setPropertyBlockedDates] = useState([])
 	const [currentMonth, setCurrentMonth] = useState(new Date())
 	const [showDatePickerModal, setShowDatePickerModal] = useState(false)
 	const [selectingCheckIn, setSelectingCheckIn] = useState(true)
@@ -91,6 +101,21 @@ export default function PropertyDetails() {
 	const [reviews, setReviews] = useState([])
 	const [userCompletedBookings, setUserCompletedBookings] = useState([])
 	const [showReviewModal, setShowReviewModal] = useState(false)
+	
+	// Host-specific states
+	const [propertyPromos, setPropertyPromos] = useState([])
+	const [propertyBookings, setPropertyBookings] = useState([])
+	const [isHost, setIsHost] = useState(false)
+	const [showManagePromosModal, setShowManagePromosModal] = useState(false)
+	const [showAllBookingsModal, setShowAllBookingsModal] = useState(false)
+	const [editingPromo, setEditingPromo] = useState(null)
+	const [editPromoDiscount, setEditPromoDiscount] = useState("")
+	const [editPromoDiscountType, setEditPromoDiscountType] = useState("percentage")
+	const [editPromoValidFrom, setEditPromoValidFrom] = useState("")
+	const [editPromoValidUntil, setEditPromoValidUntil] = useState("")
+	const [editPromoMinDays, setEditPromoMinDays] = useState("")
+	const [editPromoIsActive, setEditPromoIsActive] = useState(true)
+	const [isUpdatingPromo, setIsUpdatingPromo] = useState(false)
 	const [reviewFormData, setReviewFormData] = useState({
 		rating: 5,
 		comment: "",
@@ -124,6 +149,22 @@ export default function PropertyDetails() {
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [propertyId, currentUser])
+
+	// Update isHost when property changes and fetch host-specific data
+	useEffect(() => {
+		if (property && currentUser) {
+			const hostId = property.hostId || property.host?.hostId
+			const userIsHost = hostId === currentUser.uid
+			setIsHost(userIsHost)
+			
+			if (userIsHost) {
+				// Fetch property promos and booking history for host
+				fetchPropertyPromos(property.id)
+				fetchPropertyBookings(property.id)
+			}
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [property, currentUser])
 
 	// Load PayPal script
 	useEffect(() => {
@@ -227,16 +268,138 @@ export default function PropertyDetails() {
 
 	const fetchPropertyDetails = async () => {
 		try {
-			const propertyDoc = await getDoc(doc(db, "properties", propertyId))
+			console.log("🔍 Fetching property details...")
+			console.log("📋 Property ID from URL:", propertyId)
+			console.log("📋 Property ID type:", typeof propertyId)
+			
+			const propertyDocRef = doc(db, "properties", propertyId)
+			console.log("📄 Document reference:", propertyDocRef.path)
+			
+			const propertyDoc = await getDoc(propertyDocRef)
+			console.log("📄 Document exists:", propertyDoc.exists())
+			console.log("📄 Document ID:", propertyDoc.id)
+			
 			if (propertyDoc.exists()) {
-				setProperty({ id: propertyDoc.id, ...propertyDoc.data() })
+				const propertyData = propertyDoc.data()
+				// Load blocked dates if available on property document
+				const blocked = Array.isArray(propertyData?.blockedDates) ? propertyData.blockedDates : []
+				setPropertyBlockedDates(blocked)
+				console.log("✅ Property found!")
+				console.log("📋 Property data:", propertyData)
+				console.log("📋 Property title:", propertyData?.title)
+				console.log("📋 Property hostId:", propertyData?.hostId)
+				// Ensure Firestore document ID wins over any internal data.id
+				const propertyWithId = { ...propertyData, id: propertyDoc.id }
+				setProperty(propertyWithId)
 			} else {
+				console.error("❌ Property document does not exist!")
+				console.log("🔍 Attempting to find property with different methods...")
+				
+				// Try to find property by searching all properties
+				try {
+					const allPropertiesQuery = query(collection(db, "properties"))
+					const allPropertiesSnapshot = await getDocs(allPropertiesQuery)
+					console.log("📋 Total properties in database:", allPropertiesSnapshot.size)
+					
+					const allPropertyIds = allPropertiesSnapshot.docs.map(doc => ({
+						id: doc.id,
+						title: doc.data()?.title,
+						hostId: doc.data()?.hostId
+					}))
+					console.log("📋 All property IDs:", allPropertyIds)
+					
+					// Check if propertyId exists in any property's data.id field or document ID
+					const foundByDataId = allPropertiesSnapshot.docs.find(doc => {
+						const data = doc.data()
+						// Check both the custom id field and the Firestore document ID
+						return data.id === propertyId || doc.id === propertyId
+					})
+					
+					if (foundByDataId) {
+						console.log("✅ Found property by searching!")
+						console.log("📋 Custom ID in data:", foundByDataId.data()?.id)
+						console.log("📋 Firestore Document ID:", foundByDataId.id)
+						console.log("📋 Property title:", foundByDataId.data()?.title)
+						
+				const propertyData = foundByDataId.data()
+				// Remove the custom id field and use Firestore document ID
+				const { id: customId, ...dataWithoutId } = propertyData
+				const propertyWithId = { 
+					...dataWithoutId,
+					id: foundByDataId.id // Use Firestore document ID
+				}
+				// Load blocked dates if available on property document
+				const blocked = Array.isArray(propertyData?.blockedDates) ? propertyData.blockedDates : []
+				setPropertyBlockedDates(blocked)
+				setProperty(propertyWithId)
+				
+				// Check if current user is the host
+				const hostId = propertyWithId.hostId || propertyWithId.host?.hostId
+				const userIsHost = currentUser?.uid && hostId === currentUser.uid
+				setIsHost(userIsHost)
+				
+				if (userIsHost) {
+					// Fetch property promos and booking history for host
+					fetchPropertyPromos(foundByDataId.id)
+					fetchPropertyBookings(foundByDataId.id)
+				}
+				
+				// Update the URL to use the correct Firestore document ID
+				window.history.replaceState({}, '', `/property/${foundByDataId.id}`)
+				console.log("✅ Updated URL to use Firestore document ID")
+				return
+					} else {
+						console.log("❌ Property not found even after searching all properties")
+						console.log("📋 Searched for ID:", propertyId)
+					}
+				} catch (searchError) {
+					console.error("❌ Error searching for property:", searchError)
+				}
+				
 				toast.error("Property not found")
-				navigate("/dashboard-guest")
+				console.log("🔄 Navigating to dashboard...")
+				// Navigate based on user type or default to guest dashboard
+				if (currentUser?.uid) {
+					// Check if user is host by checking if they have properties
+					try {
+						const propertiesQuery = query(
+							collection(db, "properties"),
+							where("hostId", "==", currentUser.uid)
+						)
+						const propertiesSnapshot = await getDocs(propertiesQuery)
+						console.log("📋 User's properties count:", propertiesSnapshot.size)
+						if (!propertiesSnapshot.empty) {
+							console.log("🔄 Navigating to /dashboardHost")
+							navigate("/dashboardHost")
+						} else {
+							console.log("🔄 Navigating to /dashboardGuest")
+							navigate("/dashboardGuest")
+						}
+					} catch (navError) {
+						console.error("❌ Error checking user properties:", navError)
+						navigate("/dashboardGuest")
+					}
+				} else {
+					console.log("🔄 No user logged in, navigating to /dashboardGuest")
+					navigate("/dashboardGuest")
+				}
 			}
 		} catch (error) {
-			console.error("Error fetching property:", error)
+			console.error("❌ Error fetching property:", error)
+			console.error("❌ Error details:", {
+				message: error.message,
+				code: error.code,
+				stack: error.stack
+			})
 			toast.error("Failed to load property details")
+			// Navigate to appropriate dashboard on error
+			if (currentUser?.uid) {
+				console.log("🔄 Navigating to /dashboardGuest (error fallback)")
+				navigate("/dashboardGuest")
+			} else {
+				console.log("🔄 Navigating to / (error fallback)")
+				navigate("/")
+			}
 		} finally {
 			setLoading(false)
 		}
@@ -249,6 +412,8 @@ export default function PropertyDetails() {
 				query,
 				where,
 				getDocs: getDocsFirestore,
+				doc: docFirestore,
+				getDoc: getDocFirestore,
 			} = await import("firebase/firestore")
 			const bookingsRef = firestoreCollection(db, "bookings")
 			const q = query(bookingsRef, where("propertyId", "==", propertyId))
@@ -261,7 +426,20 @@ export default function PropertyDetails() {
 					dates.push(...(booking.bookedDates || []))
 				}
 			})
-			setBookedDates(dates)
+			// Merge with blocked dates from property
+			try {
+				const propRef = docFirestore(db, "properties", propertyId)
+				const propSnap = await getDocFirestore(propRef)
+				const blocked = propSnap.exists() && Array.isArray(propSnap.data()?.blockedDates)
+					? propSnap.data().blockedDates
+					: []
+				setPropertyBlockedDates(blocked)
+				const merged = Array.from(new Set([...(dates || []), ...blocked]))
+				setBookedDates(merged)
+			} catch (e) {
+				// If property fetch fails, still set booked dates
+				setBookedDates(dates)
+			}
 		} catch (error) {
 			console.error("Error fetching booked dates:", error)
 		}
@@ -423,6 +601,356 @@ export default function PropertyDetails() {
 			setUserCompletedBookings(unreviewedBookings)
 		} catch (error) {
 			console.error("Error checking user bookings:", error)
+		}
+	}
+
+	// Fetch property promos (for host view)
+	const fetchPropertyPromos = async (propId) => {
+		if (!currentUser?.uid) return
+		try {
+			const allPromos = []
+			
+			// 1. Fetch promos from the promos collection
+			try {
+				const promosQuery = query(
+					collection(db, "promos"),
+					where("createdBy", "==", currentUser.uid),
+					where("propertyId", "==", propId)
+				)
+				const promosSnapshot = await getDocs(promosQuery)
+				const promosFromCollection = promosSnapshot.docs.map((doc) => ({
+					id: doc.id,
+					...doc.data(),
+					source: 'promos_collection'
+				}))
+				allPromos.push(...promosFromCollection)
+			} catch (error) {
+				console.error("Error fetching promos from collection:", error)
+			}
+			
+			// 2. Get vouchers from property document
+			if (property && property.vouchers && property.vouchers.types && property.vouchers.types.length > 0) {
+				const voucherNames = {
+					early_bird: "Early Bird Promo",
+					christmas: "Christmas Special",
+					new_year: "New Year Special",
+					yearly: "Yearly Promo",
+					summer: "Summer Special",
+					anniversary: "Anniversary Promo",
+					weekend: "Weekend Special",
+					flash_sale: "Flash Sale"
+				}
+				
+				property.vouchers.types.forEach((voucherType) => {
+					const voucherDetails = property.vouchers.details?.[voucherType]
+					if (voucherDetails) {
+						const promoFromVoucher = {
+							id: `voucher_${propId}_${voucherType}`,
+							code: voucherType.toUpperCase().replace(/_/g, ''),
+							description: voucherNames[voucherType] || voucherType,
+							discountType: voucherDetails.discountType || 'percent',
+							discount: voucherDetails.discount || voucherDetails.discountValue || 0,
+							discountValue: parseFloat(voucherDetails.discount || voucherDetails.discountValue || 0),
+							validFrom: voucherDetails.startDate || null,
+							validUntil: voucherDetails.endDate || null,
+							isActive: voucherDetails.isActive !== undefined 
+					? (typeof voucherDetails.isActive === 'boolean' 
+						? voucherDetails.isActive 
+						: String(voucherDetails.isActive).toLowerCase() === 'true')
+					: true,
+							usageCount: 0,
+							propertyId: propId,
+							createdBy: currentUser.uid,
+							source: 'property_vouchers',
+							voucherType: voucherType // Add voucherType for easier access
+						}
+						allPromos.push(promoFromVoucher)
+					}
+				})
+			}
+			
+			setPropertyPromos(allPromos)
+		} catch (error) {
+			console.error("Error fetching property promos:", error)
+		}
+	}
+
+	// Start editing a property voucher
+	const handleStartEditVoucher = (promo) => {
+		if (promo.source === 'property_vouchers') {
+			// Close any currently editing voucher
+			if (editingPromo && editingPromo.id !== promo.id) {
+				handleCancelEdit()
+			}
+			setEditingPromo(promo)
+			setEditPromoDiscount(promo.discount || promo.discountValue || "20")
+			setEditPromoDiscountType(promo.discountType === "percent" ? "percentage" : (promo.discountType || "percentage"))
+			const voucherType = promo.voucherType || promo.id.split('_').slice(2).join('_')
+			if (voucherType === 'long_stay') {
+				setEditPromoMinDays(promo.minDays || promo.minimumDays || "")
+				setEditPromoValidFrom("")
+				setEditPromoValidUntil("")
+			} else {
+				setEditPromoValidFrom(promo.validFrom || promo.startDate || "")
+				setEditPromoValidUntil(promo.validUntil || promo.endDate || "")
+				setEditPromoMinDays("")
+			}
+			setEditPromoIsActive(promo.isActive !== undefined 
+				? (typeof promo.isActive === 'boolean' 
+					? promo.isActive 
+					: String(promo.isActive).toLowerCase() === 'true')
+				: true)
+		}
+	}
+
+	// Check if voucher is fixed-date (no date editing needed)
+	const isFixedDateVoucher = (voucherType) => {
+		const fixedDateVouchers = ['weekend', 'valentines', 'christmas', 'new_year', 'summer', 'anniversary']
+		return fixedDateVouchers.includes(voucherType)
+	}
+
+	// Cancel editing
+	const handleCancelEdit = () => {
+		setEditingPromo(null)
+		setEditPromoDiscount("")
+		setEditPromoValidFrom("")
+		setEditPromoValidUntil("")
+		setEditPromoMinDays("")
+	}
+
+	// Update property voucher
+	const handleUpdateVoucher = async () => {
+		console.log("🔍 [handleUpdateVoucher] Starting voucher update...")
+		console.log("🔍 [handleUpdateVoucher] editingPromo:", editingPromo)
+		console.log("🔍 [handleUpdateVoucher] property:", property)
+		console.log("🔍 [handleUpdateVoucher] propertyId from URL:", propertyId)
+		
+		if (!editingPromo) {
+			console.log("❌ [handleUpdateVoucher] No editingPromo found")
+			toast.error("Voucher information not available")
+			return
+		}
+		
+		// Prioritize propertyId from URL (Firestore document ID) over property.id (which might be a custom field)
+		// Use propertyId from URL params first, as it's the actual Firestore document ID
+		const propId = propertyId || property?.id
+		console.log("🔍 [handleUpdateVoucher] Using propId:", propId)
+		console.log("🔍 [handleUpdateVoucher] property?.id:", property?.id)
+		console.log("🔍 [handleUpdateVoucher] propertyId from params:", propertyId)
+		
+		if (!propId) {
+			console.log("❌ [handleUpdateVoucher] No propId available")
+			toast.error("Property information not available")
+			return
+		}
+		
+		if (!editPromoDiscount || parseFloat(editPromoDiscount) <= 0) {
+			console.log("❌ [handleUpdateVoucher] Invalid discount:", editPromoDiscount)
+			toast.error("Discount must be greater than 0")
+			return
+		}
+		if (editPromoDiscountType === "percentage" && parseFloat(editPromoDiscount) > 100) {
+			console.log("❌ [handleUpdateVoucher] Discount exceeds 100%")
+			toast.error("Percentage discount cannot exceed 100%")
+			return
+		}
+		
+		// Extract voucher type
+		const voucherType = editingPromo.voucherType || editingPromo.id.split('_').slice(2).join('_')
+		console.log("🔍 [handleUpdateVoucher] voucherType:", voucherType)
+		
+		// Validate dates if not a fixed-date voucher and not long_stay
+		if (!isFixedDateVoucher(voucherType) && voucherType !== 'long_stay') {
+			if (editPromoValidFrom && editPromoValidUntil) {
+				const fromDate = new Date(editPromoValidFrom)
+				const untilDate = new Date(editPromoValidUntil)
+				if (fromDate >= untilDate) {
+					console.log("❌ [handleUpdateVoucher] Invalid date range")
+					toast.error("Valid From date must be before Valid Until date")
+					return
+				}
+			}
+		}
+		
+		// Validate minimum days for long_stay (only if active)
+		if (editPromoIsActive && voucherType === 'long_stay' && editPromoMinDays && parseFloat(editPromoMinDays) < 1) {
+			console.log("❌ [handleUpdateVoucher] Minimum days less than 1")
+			toast.error("Minimum days must be at least 1")
+			return
+		}
+		// Require minimum days for long_stay if active
+		if (editPromoIsActive && voucherType === 'long_stay' && !editPromoMinDays) {
+			console.log("❌ [handleUpdateVoucher] Missing minimum days for active long_stay")
+			toast.error("Minimum days is required for active Long Stay Discount")
+			return
+		}
+
+		setIsUpdatingPromo(true)
+		try {
+			// Get current property data
+			console.log("🔍 [handleUpdateVoucher] Fetching property document with ID:", propId)
+			const propertyRef = doc(db, "properties", propId)
+			const propertyDoc = await getDoc(propertyRef)
+			
+			console.log("🔍 [handleUpdateVoucher] Property document exists:", propertyDoc.exists())
+			console.log("🔍 [handleUpdateVoucher] Property document ID:", propertyDoc.id)
+			
+			if (!propertyDoc.exists()) {
+				console.log("❌ [handleUpdateVoucher] Property document does not exist for ID:", propId)
+				console.log("❌ [handleUpdateVoucher] Attempting to search for property...")
+				toast.error("Property not found")
+				setIsUpdatingPromo(false)
+				return
+			}
+			
+			const currentProperty = propertyDoc.data()
+			console.log("🔍 [handleUpdateVoucher] Property data loaded:", currentProperty ? "Yes" : "No")
+			console.log("🔍 [handleUpdateVoucher] Property has vouchers:", !!currentProperty?.vouchers)
+			
+			if (!currentProperty) {
+				console.log("❌ [handleUpdateVoucher] Property data is null or undefined")
+				toast.error("Failed to load property data")
+				setIsUpdatingPromo(false)
+				return
+			}
+			
+			if (!currentProperty.vouchers) {
+				console.log("❌ [handleUpdateVoucher] Property has no vouchers object")
+				toast.error("Voucher data not found in property")
+				setIsUpdatingPromo(false)
+				return
+			}
+			
+			if (!currentProperty.vouchers.details) {
+				// Initialize vouchers.details if it doesn't exist
+				console.log("🔍 [handleUpdateVoucher] Initializing vouchers.details")
+				currentProperty.vouchers.details = {}
+			}
+			
+			// Prepare voucher update - only include dates for non-fixed-date vouchers
+			const existingVoucherDetails = currentProperty.vouchers.details[voucherType] || {}
+			console.log("🔍 [handleUpdateVoucher] Existing voucher details:", existingVoucherDetails)
+			
+			const voucherUpdate = {
+				...existingVoucherDetails,
+				discount: editPromoDiscount,
+				discountType: editPromoDiscountType === "percentage" ? "percent" : "price",
+				isActive: Boolean(editPromoIsActive), // Ensure boolean type
+			}
+			
+			console.log("🔍 [handleUpdateVoucher] Voucher update before type-specific changes:", voucherUpdate)
+			console.log("🔍 [handleUpdateVoucher] editPromoIsActive:", editPromoIsActive)
+			console.log("🔍 [handleUpdateVoucher] editPromoMinDays:", editPromoMinDays)
+			
+			// For long_stay, add minimum days instead of dates
+			if (voucherType === 'long_stay') {
+				voucherUpdate.minDays = editPromoMinDays ? parseInt(editPromoMinDays) : null
+				voucherUpdate.minimumDays = editPromoMinDays ? parseInt(editPromoMinDays) : null
+				// Remove dates if they exist
+				delete voucherUpdate.startDate
+				delete voucherUpdate.endDate
+				console.log("🔍 [handleUpdateVoucher] Updated voucher for long_stay:", voucherUpdate)
+			} else if (!isFixedDateVoucher(voucherType)) {
+				// Only add dates if not a fixed-date voucher
+				voucherUpdate.startDate = editPromoValidFrom || null
+				voucherUpdate.endDate = editPromoValidUntil || null
+				console.log("🔍 [handleUpdateVoucher] Updated voucher with dates:", voucherUpdate)
+			}
+			
+			// Ensure types array exists and includes this voucher type
+			const typesArray = currentProperty.vouchers.types || []
+			if (!typesArray.includes(voucherType)) {
+				console.log("🔍 [handleUpdateVoucher] Adding voucher type to types array:", voucherType)
+				typesArray.push(voucherType)
+			}
+			
+			// Update the voucher details
+			const updatedVouchers = {
+				types: typesArray,
+				details: {
+					...currentProperty.vouchers.details,
+					[voucherType]: voucherUpdate
+				}
+			}
+			
+			console.log("🔍 [handleUpdateVoucher] Final vouchers object to save:", updatedVouchers)
+			console.log("🔍 [handleUpdateVoucher] Attempting to update property document...")
+			
+			await updateDoc(propertyRef, {
+				vouchers: updatedVouchers
+			})
+			
+			console.log("✅ [handleUpdateVoucher] Property document updated successfully!")
+			
+			toast.success("🎉 Voucher updated successfully!")
+			
+			// Refresh property and promos
+			console.log("🔍 [handleUpdateVoucher] Refreshing property and promos...")
+			fetchPropertyDetails()
+			fetchPropertyPromos(propId)
+			handleCancelEdit()
+		} catch (error) {
+			console.error("❌ [handleUpdateVoucher] Error updating voucher:", error)
+			console.error("❌ [handleUpdateVoucher] Error details:", {
+				message: error.message,
+				code: error.code,
+				stack: error.stack
+			})
+			toast.error("Failed to update voucher: " + error.message)
+		} finally {
+			setIsUpdatingPromo(false)
+		}
+	}
+
+	// Delete promo
+	const handleDeletePromo = async (promoId) => {
+		if (!window.confirm("Are you sure you want to delete this promo?")) {
+			return
+		}
+		
+		try {
+			await deleteDoc(doc(db, "promos", promoId))
+			toast.success("Promo deleted successfully!")
+			// Refresh promos
+			fetchPropertyPromos(property.id)
+		} catch (error) {
+			console.error("Error deleting promo:", error)
+			toast.error("Failed to delete promo: " + error.message)
+		}
+	}
+
+	// Toggle promo active status
+	const handleTogglePromoStatus = async (promoId, currentStatus) => {
+		try {
+			await updateDoc(doc(db, "promos", promoId), {
+				isActive: !currentStatus
+			})
+			toast.success(`Promo ${!currentStatus ? 'activated' : 'deactivated'} successfully!`)
+			// Refresh promos
+			fetchPropertyPromos(property.id)
+		} catch (error) {
+			console.error("Error updating promo:", error)
+			toast.error("Failed to update promo: " + error.message)
+		}
+	}
+
+	// Fetch property booking history (for host view)
+	const fetchPropertyBookings = async (propId) => {
+		if (!currentUser?.uid) return
+		try {
+			const bookingsQuery = query(
+				collection(db, "bookings"),
+				where("propertyId", "==", propId),
+				orderBy("createdAt", "desc")
+			)
+			const bookingsSnapshot = await getDocs(bookingsQuery)
+			const bookingsList = bookingsSnapshot.docs.map((doc) => ({
+				id: doc.id,
+				...doc.data(),
+			}))
+			setPropertyBookings(bookingsList)
+		} catch (error) {
+			console.error("Error fetching property bookings:", error)
 		}
 	}
 
@@ -1276,10 +1804,10 @@ export default function PropertyDetails() {
 		}
 	}
 
-	// Handle calendar day click for booking
-	const handleCalendarDayClick = (dateString, isBooked) => {
-		if (isBooked) {
-			toast.error("This date is already booked")
+	// Handle calendar day click for booking (guest)
+	const handleCalendarDayClick = (dateString, isUnavailable) => {
+		if (isUnavailable) {
+			toast.error("This date is unavailable")
 			return
 		}
 
@@ -1510,6 +2038,118 @@ export default function PropertyDetails() {
 		return bookedDates.includes(dateString)
 	}
 
+	// Check if date is blocked by host (from property)
+	const isDateBlocked = (dateString) => {
+		return propertyBlockedDates.includes(dateString)
+	}
+
+	// Resolve the correct Firestore document ID for the property
+	const resolvePropertyDocId = async () => {
+		try {
+			// Prefer the id we stored on the loaded property object, but verify it exists
+			if (property?.id) {
+				console.log("[BlockDate] Checking loaded property.id as Firestore ID:", property.id)
+				const checkRef = doc(db, "properties", property.id)
+				const checkSnap = await getDoc(checkRef)
+				if (checkSnap.exists()) {
+					console.log("[BlockDate] Verified Firestore doc exists for property.id")
+					return property.id
+				} else {
+					console.warn("[BlockDate] Loaded property.id did not resolve to a Firestore doc")
+				}
+			}
+			// Try direct doc lookup by current route param
+			console.log("[BlockDate] Resolving Firestore ID from route propertyId:", propertyId)
+			const directRef = doc(db, "properties", propertyId)
+			const directSnap = await getDoc(directRef)
+			if (directSnap.exists()) {
+				console.log("[BlockDate] Found property by route propertyId")
+				return propertyId
+			}
+			// Try to find by 'id' field inside document data
+			console.log("[BlockDate] Searching properties by data.id match...")
+			const allPropsQ = query(collection(db, "properties"), where("id", "==", propertyId))
+			const allPropsSnap = await getDocs(allPropsQ)
+			if (!allPropsSnap.empty) {
+				const matchedDoc = allPropsSnap.docs[0]
+				console.log("[BlockDate] Found property by data.id; Firestore ID:", matchedDoc.id)
+				return matchedDoc.id
+			}
+			console.error("[BlockDate] Could not resolve Firestore document ID for property", propertyId)
+			return null
+		} catch (e) {
+			console.error("[BlockDate] Error resolving property doc ID:", {
+				message: e?.message,
+				code: e?.code,
+				name: e?.name,
+				stack: e?.stack,
+			})
+			return null
+		}
+	}
+
+	// Host: toggle blocked date on property
+	const handleToggleBlockDate = async (dateString) => {
+		if (!isHost) return
+		try {
+			const resolvedId = await resolvePropertyDocId()
+			if (!resolvedId) {
+				toast.error("Unable to locate property. Please refresh.")
+				return
+			}
+			const propertyRef = doc(db, "properties", resolvedId)
+			console.log("[BlockDate] Toggling date", {
+				dateString,
+				propertyId: resolvedId,
+				isHost,
+				isCurrentlyBlocked: isDateBlocked(dateString),
+			})
+			// Verify property exists and log current blockedDates
+			try {
+				const propSnap = await getDoc(propertyRef)
+				if (!propSnap.exists()) {
+					console.error("[BlockDate] Property doc not found for", resolvedId)
+				} else {
+					const data = propSnap.data() || {}
+					console.log("[BlockDate] Current property.blockedDates:", data.blockedDates || [])
+				}
+			} catch (preErr) {
+				console.error("[BlockDate] Failed to read property before update:", {
+					message: preErr?.message,
+					code: preErr?.code,
+					name: preErr?.name,
+					stack: preErr?.stack,
+				})
+			}
+			if (isDateBlocked(dateString)) {
+				console.log("[BlockDate] Attempting to UNBLOCK date via arrayRemove")
+				await updateDoc(propertyRef, { blockedDates: arrayRemove(dateString) })
+				const updated = propertyBlockedDates.filter((d) => d !== dateString)
+				setPropertyBlockedDates(updated)
+				// Also update merged list used by availability view
+				setBookedDates((prev) => prev.filter((d) => d !== dateString))
+				toast.success("Date unblocked")
+			} else {
+				console.log("[BlockDate] Attempting to BLOCK date via arrayUnion")
+				await updateDoc(propertyRef, { blockedDates: arrayUnion(dateString) })
+				const updated = [...propertyBlockedDates, dateString]
+				setPropertyBlockedDates(updated)
+				// Also update merged list used by availability view
+				setBookedDates((prev) => Array.from(new Set([...prev, dateString])))
+				toast.success("Date blocked")
+			}
+		} catch (error) {
+			console.error("[BlockDate] Error toggling blocked date:", {
+				message: error?.message,
+				code: error?.code,
+				name: error?.name,
+				stack: error?.stack,
+				propertyId: property?.id || propertyId,
+			})
+			toast.error("Failed to update blocked date")
+		}
+	}
+
 	// Generate calendar days for current month
 	const generateCalendarDays = () => {
 		const year = currentMonth.getFullYear()
@@ -1528,10 +2168,13 @@ export default function PropertyDetails() {
 				2,
 				"0"
 			)}-${String(day).padStart(2, "0")}`
+			const blocked = isDateBlocked(dateString)
+			const booked = isDateBooked(dateString)
 			days.push({
 				day,
 				dateString,
-				isBooked: isDateBooked(dateString),
+				isBooked: booked,
+				isBlocked: blocked,
 				isPast: new Date(dateString) < new Date(getTodayDate()),
 			})
 		}
@@ -1564,7 +2207,7 @@ export default function PropertyDetails() {
 		return (
 			<div className="property-details-error">
 				<h2>Property not found</h2>
-				<Link to="/dashboard-guest" className="back-link">
+				<Link to="/dashboardGuest" className="back-link">
 					Return to Dashboard
 				</Link>
 			</div>
@@ -1702,6 +2345,54 @@ export default function PropertyDetails() {
 						</div>
 					</section>
 
+					{/* House Rules */}
+					{property.houseRules && property.houseRules.length > 0 && (
+						<section className="house-rules-section">
+							<h2>House Rules</h2>
+							<div className="house-rules-grid">
+								{property.houseRules.map((rule, index) => (
+									<div key={index} className="house-rule-item">
+										<FaCheck />
+										<span>{rule}</span>
+									</div>
+								))}
+							</div>
+						</section>
+					)}
+
+					{/* Booking Availability Info */}
+					{property.availability && (
+						<section className="booking-info-section">
+							<h2>Booking Information</h2>
+							<div className="booking-info-content">
+								{property.availability.instantBook && (
+									<div className="booking-info-item">
+										<FaCheck style={{ color: "var(--primary)", marginRight: "0.5rem" }} />
+										<span>
+											<strong>Instant Book</strong> - Book immediately without approval
+										</span>
+									</div>
+								)}
+								<div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "1rem", marginTop: property.availability.instantBook ? "1rem" : "0" }}>
+									{property.availability.minNights && (
+										<div className="booking-info-item">
+											<span>
+												<strong>Minimum Nights:</strong> {property.availability.minNights} night{property.availability.minNights !== 1 ? "s" : ""}
+											</span>
+										</div>
+									)}
+									{property.availability.maxNights && (
+										<div className="booking-info-item">
+											<span>
+												<strong>Maximum Nights:</strong> {property.availability.maxNights} night{property.availability.maxNights !== 1 ? "s" : ""}
+											</span>
+										</div>
+									)}
+								</div>
+							</div>
+						</section>
+					)}
+
 					{/* Calendar Availability */}
 					<section className="availability-section">
 						<h2>
@@ -1740,14 +2431,23 @@ export default function PropertyDetails() {
 												<div
 													key={index}
 													className={`calendar-day ${
-														dayData.isBooked
+														dayData.isBlocked
+															? "blocked"
+															: dayData.isBooked
 															? "booked"
 															: dayData.isPast
 															? "past"
 															: "available"
 													}`}
+													onClick={() => {
+														if (isHost && !dayData.isPast) {
+															handleToggleBlockDate(dayData.dateString)
+														}
+													}}
 													title={
-														dayData.isBooked
+														dayData.isBlocked
+															? "Blocked by host"
+															: dayData.isBooked
 															? "Already booked"
 															: dayData.isPast
 															? "Past date (not bookable)"
@@ -1774,7 +2474,11 @@ export default function PropertyDetails() {
 								</div>
 								<div className="legend-item">
 									<span className="legend-color booked"></span>
-									Booked/Unavailable
+									Booked
+								</div>
+								<div className="legend-item">
+									<span className="legend-color blocked"></span>
+									Blocked
 								</div>
 							</div>
 						</div>
@@ -1905,49 +2609,124 @@ export default function PropertyDetails() {
 
 				</div>
 
-				{/* Right Column - Booking Card */}
+				{/* Right Column - Booking Card or Host Sections */}
 				<div className="content-right">
-					<div className="booking-card">
-						<div className="price-section">
-							<div className="price">
-								₱{property.pricing?.basePrice?.toLocaleString() || "N/A"}
-								<span className="per-night">/ night</span>
-							</div>
-							{property.rating && (
+					{isHost ? (
+						/* Host View - Promos and Booking History */
+						<div className="host-management-card">
+							<div className="price-section">
+								<div className="price">
+									₱{property.pricing?.basePrice?.toLocaleString() || "N/A"}
+									<span className="per-night">/ night</span>
+								</div>
 								<div className="rating-small">
-									<FaStar /> {property.rating} ({property.reviewsCount || 0})
-								</div>
-							)}
-						</div>
-
-						{/* Host Info */}
-						<div className="host-info-card">
-							<h3>Hosted by {hostInfo.hostName || "Host"}</h3>
-							<div className="host-details">
-								<div className="host-avatar">
-									{(hostInfo.hostName || "H")[0].toUpperCase()}
-								</div>
-								<div className="host-stats">
-									{hostInfo.superhost && (
-										<div className="host-badge">
-											<FaMedal /> Superhost
-										</div>
-									)}
-									{hostInfo.verified && (
-										<div className="host-badge">
-											<FaShieldAlt /> Verified
-										</div>
-									)}
-									{hostInfo.hostSince && (
-										<div className="host-stat">
-											<FaClock /> Hosting since{" "}
-											{new Date(hostInfo.hostSince).getFullYear()}
-										</div>
-									)}
+									<FaStar /> {property.rating?.toFixed(1) || "0.0"} ({property.reviewsCount || 0} {property.reviewsCount === 1 ? "review" : "reviews"})
 								</div>
 							</div>
-							<button className="contact-host-btn">Contact Host</button>
+
+							{/* Property Promos Section */}
+							<div className="host-section">
+								<h3>
+									<FaGift /> Property Promos & Vouchers
+								</h3>
+								{propertyPromos.length > 0 ? (
+									<div className="promos-list">
+										{propertyPromos.map((promo) => (
+											<div key={promo.id} className={`promo-item ${!promo.isActive ? 'inactive' : ''}`}>
+												<div className="promo-header">
+													<FaTag className="promo-icon" />
+													<span className="promo-code">{promo.code}</span>
+													<span className={`promo-status ${promo.isActive ? 'active' : 'inactive'}`}>
+														{promo.isActive ? 'Active' : 'Inactive'}
+													</span>
+												</div>
+												<div className="promo-details">
+													{promo.discountType === 'percent' || promo.discountType === 'percentage' ? (
+														<span className="promo-discount">{promo.discount || promo.discountValue}% OFF</span>
+													) : (
+														<span className="promo-discount">₱{promo.discount || promo.discountValue} OFF</span>
+													)}
+													{promo.validFrom && promo.validUntil && (
+														<span className="promo-dates">
+															{new Date(promo.validFrom).toLocaleDateString()} - {new Date(promo.validUntil).toLocaleDateString()}
+														</span>
+													)}
+												</div>
+												<div className="promo-usage">
+													{promo.source === 'property_vouchers' ? (
+														<span style={{ fontStyle: 'italic', color: '#666' }}>Property Voucher</span>
+													) : (
+														<span>Used: {promo.usageCount || 0} {promo.usageLimit ? `/ ${promo.usageLimit}` : ''} times</span>
+													)}
+												</div>
+											</div>
+										))}
+									</div>
+								) : (
+									<p className="no-data">No promos created for this property yet.</p>
+								)}
+								<button 
+									className="manage-promos-btn"
+									onClick={() => setShowManagePromosModal(true)}
+								>
+									<FaGift /> Manage Promos
+								</button>
+								<button 
+									className="view-all-bookings-btn"
+									onClick={() => navigate(`/propertyBookings/${property?.id}`)}
+									style={{ marginTop: "0.75rem" }}
+								>
+									<FaHistory /> View All Bookings
+								</button>
+							</div>
+
+							{/* Upcoming Bookings Section removed */}
+
+							{/* Booking History Section removed */}
 						</div>
+					) : (
+						/* Guest View - Booking Card */
+						<div className="booking-card">
+							<div className="price-section">
+								<div className="price">
+									₱{property.pricing?.basePrice?.toLocaleString() || "N/A"}
+									<span className="per-night">/ night</span>
+								</div>
+								{property.rating && (
+									<div className="rating-small">
+										<FaStar /> {property.rating} ({property.reviewsCount || 0})
+									</div>
+								)}
+							</div>
+
+							{/* Host Info */}
+							<div className="host-info-card">
+								<h3>Hosted by {hostInfo.hostName || "Host"}</h3>
+								<div className="host-details">
+									<div className="host-avatar">
+										{(hostInfo.hostName || "H")[0].toUpperCase()}
+									</div>
+									<div className="host-stats">
+										{hostInfo.superhost && (
+											<div className="host-badge">
+												<FaMedal /> Superhost
+											</div>
+										)}
+										{hostInfo.verified && (
+											<div className="host-badge">
+												<FaShieldAlt /> Verified
+											</div>
+										)}
+										{hostInfo.hostSince && (
+											<div className="host-stat">
+												<FaClock /> Hosting since{" "}
+												{new Date(hostInfo.hostSince).getFullYear()}
+											</div>
+										)}
+									</div>
+								</div>
+								<button className="contact-host-btn">Contact Host</button>
+							</div>
 
 						<div className="booking-form">
 							<div className="date-selector-container">
@@ -2222,7 +3001,8 @@ export default function PropertyDetails() {
 								)
 							})()}
 						</div>
-					</div>
+						</div>
+					)}
 				</div>
 			</div>
 
@@ -2318,6 +3098,249 @@ export default function PropertyDetails() {
 				</div>
 			)}
 
+			{/* Manage Promos Modal */}
+			{showManagePromosModal && (
+				<div
+					className="manage-promos-modal-overlay"
+					onClick={() => setShowManagePromosModal(false)}
+				>
+					<div
+						className="manage-promos-modal-content"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="manage-promos-modal-header">
+							<h2>
+								<FaGift /> Manage Promos for {property.title}
+							</h2>
+							<button
+								className="close-promos-modal"
+								onClick={() => setShowManagePromosModal(false)}
+							>
+								<FaTimes />
+							</button>
+						</div>
+
+						<div className="manage-promos-body">
+							{/* Existing Promos List */}
+							<div className="existing-promos-section">
+								<h3>Existing Promos ({propertyPromos.length})</h3>
+								{propertyPromos.length > 0 ? (
+									<div className="promos-management-list">
+										{propertyPromos.map((promo) => (
+											<div key={promo.id} className="promo-management-item">
+												{editingPromo?.id === promo.id && promo.source === 'property_vouchers' ? (
+													/* Edit Mode */
+													<div className="edit-voucher-form">
+														<div className="edit-voucher-header">
+															<h4>Edit {promo.description}</h4>
+															<button
+																className="cancel-edit-btn"
+																onClick={handleCancelEdit}
+															>
+																<FaTimes />
+															</button>
+														</div>
+														<div className="voucher-edit-form">
+															<div className="form-row">
+																<div className="form-group">
+																	<label>Discount Type</label>
+																	<select
+																		value={editPromoDiscountType}
+																		onChange={(e) => setEditPromoDiscountType(e.target.value)}
+																	>
+																		<option value="percentage">Percentage (%)</option>
+																		<option value="fixed">Fixed Amount (₱)</option>
+																	</select>
+																</div>
+																<div className="form-group">
+																	<label>Discount Value *</label>
+																	<input
+																		type="number"
+																		placeholder={editPromoDiscountType === "percentage" ? "20" : "500"}
+																		value={editPromoDiscount}
+																		onChange={(e) => setEditPromoDiscount(e.target.value)}
+																		min="0"
+																		max={editPromoDiscountType === "percentage" ? "100" : undefined}
+																	/>
+																</div>
+															</div>
+															{(() => {
+																// Get voucher type - either from promo.voucherType or extract from id
+																const voucherType = promo.voucherType || promo.id.split('_').slice(2).join('_')
+																const isFixed = isFixedDateVoucher(voucherType)
+																
+																// For long_stay, show minimum days field
+																if (voucherType === 'long_stay') {
+																	return (
+																		<div className="form-row">
+																			<div className="form-group">
+																				<label>Minimum Days to Make a Discount *</label>
+																				<input
+																					type="number"
+																					placeholder="e.g., 7"
+																					value={editPromoMinDays}
+																					onChange={(e) => setEditPromoMinDays(e.target.value)}
+																					min="1"
+																					required
+																				/>
+																				<small>Minimum number of days required to apply this discount</small>
+																			</div>
+																		</div>
+																	)
+																}
+																
+																// For other non-fixed vouchers, show date fields
+																if (!isFixed) {
+																	return (
+																		<div className="form-row">
+																			<div className="form-group">
+																				<label>Valid From (Optional)</label>
+																				<input
+																					type="date"
+																					value={editPromoValidFrom}
+																					onChange={(e) => setEditPromoValidFrom(e.target.value)}
+																					min={new Date().toISOString().split('T')[0]}
+																				/>
+																			</div>
+																			<div className="form-group">
+																				<label>Valid Until (Optional)</label>
+																				<input
+																					type="date"
+																					value={editPromoValidUntil}
+																					onChange={(e) => setEditPromoValidUntil(e.target.value)}
+																					min={editPromoValidFrom || new Date().toISOString().split('T')[0]}
+																				/>
+																			</div>
+																		</div>
+																	)
+																}
+																
+																return null
+															})()}
+															<div className="form-row">
+																<div className="form-group">
+																	<label>Status</label>
+																	<div className="toggle-switch-container">
+																		<label className="toggle-switch-label">
+																			<input
+																				type="checkbox"
+																				checked={editPromoIsActive}
+																				onChange={(e) => setEditPromoIsActive(e.target.checked)}
+																				className="toggle-switch-input"
+																			/>
+																			<span className="toggle-switch-slider"></span>
+																			<span className="toggle-switch-text">
+																				{editPromoIsActive ? 'Active' : 'Inactive'}
+																			</span>
+																		</label>
+																	</div>
+																</div>
+															</div>
+															<div className="edit-form-actions">
+																<button
+																	className="cancel-edit-form-btn"
+																	onClick={handleCancelEdit}
+																>
+																	Cancel
+																</button>
+																<button
+																	className="save-edit-btn"
+																	onClick={handleUpdateVoucher}
+																	disabled={
+																		isUpdatingPromo || 
+																		!editPromoDiscount || 
+																		// Only require minimum days for long_stay if voucher is active
+																		(editPromoIsActive && (promo.voucherType === 'long_stay' || (promo.id && promo.id.includes('long_stay'))) && !editPromoMinDays)
+																	}
+																>
+																	{isUpdatingPromo ? "Saving..." : "Save Changes"}
+																</button>
+															</div>
+														</div>
+													</div>
+												) : (
+													/* View Mode */
+													<>
+														<div className="promo-mgmt-header">
+															<div 
+																className="promo-mgmt-info"
+																style={{ cursor: promo.source === 'property_vouchers' ? 'pointer' : 'default' }}
+																onClick={() => promo.source === 'property_vouchers' && handleStartEditVoucher(promo)}
+															>
+																<FaTag className="promo-mgmt-icon" />
+																<div>
+																	<span className="promo-mgmt-code">{promo.code}</span>
+																	<span className="promo-mgmt-desc">{promo.description}</span>
+																</div>
+															</div>
+															<div className="promo-mgmt-actions">
+																{promo.source !== 'property_vouchers' && (
+																	<>
+																		<button
+																			className={`toggle-promo-btn ${promo.isActive ? 'active' : 'inactive'}`}
+																			onClick={() => handleTogglePromoStatus(promo.id, promo.isActive)}
+																		>
+																			{promo.isActive ? 'Deactivate' : 'Activate'}
+																		</button>
+																		<button
+																			className="delete-promo-btn"
+																			onClick={() => handleDeletePromo(promo.id)}
+																		>
+																			<FaTimes /> Delete
+																		</button>
+																	</>
+																)}
+																{promo.source === 'property_vouchers' && (
+																	<span className="voucher-badge">Property Voucher - Click to Edit</span>
+																)}
+															</div>
+														</div>
+														<div className="promo-mgmt-details">
+															<div className="promo-mgmt-detail-item">
+																<span className="detail-label">Discount:</span>
+																<span className="detail-value">
+																	{promo.discountType === 'percent' || promo.discountType === 'percentage' 
+																		? `${promo.discount || promo.discountValue}%` 
+																		: `₱${promo.discount || promo.discountValue}`}
+																</span>
+															</div>
+															{promo.validFrom && promo.validUntil && (
+																<div className="promo-mgmt-detail-item">
+																	<span className="detail-label">Valid:</span>
+																	<span className="detail-value">
+																		{new Date(promo.validFrom).toLocaleDateString()} - {new Date(promo.validUntil).toLocaleDateString()}
+																	</span>
+																</div>
+															)}
+															{promo.source !== 'property_vouchers' && (
+																<div className="promo-mgmt-detail-item">
+																	<span className="detail-label">Status:</span>
+																	<span className={`detail-value status-${promo.isActive ? 'active' : 'inactive'}`}>
+																		{promo.isActive ? 'Active' : 'Inactive'}
+																	</span>
+																</div>
+															)}
+															{promo.source !== 'property_vouchers' && (
+																<div className="promo-mgmt-detail-item">
+																	<span className="detail-label">Used:</span>
+																	<span className="detail-value">{promo.usageCount || 0} times</span>
+																</div>
+															)}
+														</div>
+													</>
+												)}
+											</div>
+										))}
+									</div>
+								) : (
+									<p className="no-promos-message">No promos created yet. Create one above!</p>
+								)}
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
 			{/* Date Picker Modal */}
 			{showDatePickerModal && (
 				<div
@@ -2404,7 +3427,9 @@ export default function PropertyDetails() {
 											<div
 												key={index}
 												className={`calendar-day ${
-													dayData.isBooked
+													dayData.isBlocked
+														? "blocked"
+														: dayData.isBooked
 														? "booked"
 														: dayData.isPast
 														? "past"
@@ -2418,14 +3443,20 @@ export default function PropertyDetails() {
 														? "selected-check-out"
 														: ""
 												}`}
-												onClick={() =>
-													handleCalendarDayClick(
-														dayData.dateString,
-														dayData.isBooked
-													)
-												}
+												onClick={() => {
+													if (isHost && !dayData.isPast) {
+														handleToggleBlockDate(dayData.dateString)
+													} else {
+														handleCalendarDayClick(
+															dayData.dateString,
+															dayData.isBooked || dayData.isBlocked
+														)
+													}
+												}}
 												title={
-													dayData.isBooked
+													dayData.isBlocked
+														? "Blocked by host"
+														: dayData.isBooked
 														? "Already booked"
 														: dayData.isPast
 														? "Past date (bookable)"
@@ -2658,6 +3689,167 @@ export default function PropertyDetails() {
 								}
 							>
 								{isSubmittingReview ? "Submitting..." : "Submit Review"}
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* View All Bookings Modal */}
+			{showAllBookingsModal && (
+				<div
+					className="modal-overlay"
+					onClick={() => setShowAllBookingsModal(false)}
+				>
+					<div
+						className="modal-content large-modal"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="modal-header">
+							<h2>
+								<FaHistory /> All Bookings for {property?.title}
+							</h2>
+							<button
+								className="close-modal-btn"
+								onClick={() => setShowAllBookingsModal(false)}
+							>
+								<FaTimes />
+							</button>
+						</div>
+						<div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+							{(() => {
+								const today = new Date()
+								today.setHours(0, 0, 0, 0)
+								
+								const upcomingBookings = propertyBookings.filter((booking) => {
+									if (booking.status === 'cancelled') return false
+									const checkInDate = new Date(booking.checkInDate)
+									checkInDate.setHours(0, 0, 0, 0)
+									return checkInDate >= today
+								}).sort((a, b) => {
+									const dateA = new Date(a.checkInDate)
+									const dateB = new Date(b.checkInDate)
+									return dateA - dateB
+								})
+								
+								const pastBookings = propertyBookings.filter((booking) => {
+									if (booking.status === 'cancelled') return false
+									const checkInDate = new Date(booking.checkInDate)
+									checkInDate.setHours(0, 0, 0, 0)
+									return checkInDate < today
+								}).sort((a, b) => {
+									const dateA = new Date(a.checkInDate)
+									const dateB = new Date(b.checkInDate)
+									return dateB - dateA
+								})
+								
+								return (
+									<>
+										{/* Upcoming Bookings Section */}
+										<div className="bookings-category-section" style={{ marginBottom: '2rem' }}>
+											<h3 style={{ 
+												display: 'flex', 
+												alignItems: 'center', 
+												gap: '0.5rem',
+												marginBottom: '1rem',
+												color: 'var(--primary)'
+											}}>
+												<FaCalendarCheck /> Upcoming Bookings ({upcomingBookings.length})
+											</h3>
+											{upcomingBookings.length > 0 ? (
+												<div className="bookings-list">
+													{upcomingBookings.map((booking) => (
+														<div key={booking.id} className="booking-history-item">
+															<div className="booking-header">
+																<span className="booking-id">#{booking.id.substring(0, 8)}</span>
+																<span className={`booking-status-badge ${booking.status}`}>
+																	{booking.status}
+																</span>
+															</div>
+															<div className="booking-details">
+																<div className="booking-info">
+																	<FaUser className="info-icon" />
+																	<span>{booking.guestName || 'Guest'}</span>
+																</div>
+																<div className="booking-info">
+																	<FaCalendarAlt className="info-icon" />
+																	<span>
+																		{new Date(booking.checkInDate).toLocaleDateString()} - {new Date(booking.checkOutDate).toLocaleDateString()}
+																	</span>
+																</div>
+																<div className="booking-info">
+																	<FaUsers className="info-icon" />
+																	<span>{booking.numberOfGuests || booking.guests || 1} {booking.numberOfGuests === 1 ? 'guest' : 'guests'}</span>
+																</div>
+																<div className="booking-amount">
+																	₱{(booking.pricing?.total || booking.totalAmount || 0).toLocaleString()}
+																</div>
+															</div>
+														</div>
+													))}
+												</div>
+											) : (
+												<p className="no-data">No upcoming bookings for this property.</p>
+											)}
+										</div>
+
+										{/* Booking History Section */}
+										<div className="bookings-category-section">
+											<h3 style={{ 
+												display: 'flex', 
+												alignItems: 'center', 
+												gap: '0.5rem',
+												marginBottom: '1rem',
+												color: 'var(--primary)'
+											}}>
+												<FaHistory /> Booking History ({pastBookings.length})
+											</h3>
+											{pastBookings.length > 0 ? (
+												<div className="bookings-list">
+													{pastBookings.map((booking) => (
+														<div key={booking.id} className="booking-history-item">
+															<div className="booking-header">
+																<span className="booking-id">#{booking.id.substring(0, 8)}</span>
+																<span className={`booking-status-badge ${booking.status}`}>
+																	{booking.status}
+																</span>
+															</div>
+															<div className="booking-details">
+																<div className="booking-info">
+																	<FaUser className="info-icon" />
+																	<span>{booking.guestName || 'Guest'}</span>
+																</div>
+																<div className="booking-info">
+																	<FaCalendarAlt className="info-icon" />
+																	<span>
+																		{new Date(booking.checkInDate).toLocaleDateString()} - {new Date(booking.checkOutDate).toLocaleDateString()}
+																	</span>
+																</div>
+																<div className="booking-info">
+																	<FaUsers className="info-icon" />
+																	<span>{booking.numberOfGuests || booking.guests || 1} {booking.numberOfGuests === 1 ? 'guest' : 'guests'}</span>
+																</div>
+																<div className="booking-amount">
+																	₱{(booking.pricing?.total || booking.totalAmount || 0).toLocaleString()}
+																</div>
+															</div>
+														</div>
+													))}
+												</div>
+											) : (
+												<p className="no-data">No booking history for this property.</p>
+											)}
+										</div>
+									</>
+								)
+							})()}
+						</div>
+						<div className="modal-footer">
+							<button
+								className="btn-primary"
+								onClick={() => setShowAllBookingsModal(false)}
+							>
+								Close
 							</button>
 						</div>
 					</div>

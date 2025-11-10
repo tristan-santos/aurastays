@@ -2,7 +2,14 @@ import { useState, useEffect } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { db } from "../components/firebaseConfig"
-import { collection, getDocs, query, where, orderBy, onSnapshot } from "firebase/firestore"
+import {
+	collection,
+	getDocs,
+	query,
+	where,
+	orderBy,
+	onSnapshot,
+} from "firebase/firestore"
 import { toast } from "react-stacked-toast"
 import {
 	Chart as ChartJS,
@@ -91,7 +98,7 @@ export default function DashboardHost() {
 	const [deletingDraft, setDeletingDraft] = useState(null)
 	const [draftsCategoryFilter, setDraftsCategoryFilter] = useState(null)
 	const [unreadNotifications, setUnreadNotifications] = useState(0)
-	const [activeCategory, setActiveCategory] = useState("home")
+	const [activeCategory, setActiveCategory] = useState("all")
 	const [filteredProperties, setFilteredProperties] = useState([])
 	const [previousBookings, setPreviousBookings] = useState([])
 	const [showBookingsModal, setShowBookingsModal] = useState(false)
@@ -113,9 +120,9 @@ export default function DashboardHost() {
 	const [showPremiumModal, setShowPremiumModal] = useState(false)
 	const [premiumFeatureName, setPremiumFeatureName] = useState("")
 
-	// Reset category to "home" whenever component mounts or route changes
+	// Reset category to "all" whenever component mounts or route changes
 	useEffect(() => {
-		setActiveCategory("home")
+		setActiveCategory("all")
 	}, [location.pathname])
 
 	useEffect(() => {
@@ -125,6 +132,14 @@ export default function DashboardHost() {
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [currentUser])
+
+	// Refresh data when navigating back to dashboard (e.g., after creating a listing)
+	useEffect(() => {
+		if (currentUser && location.pathname === "/dashboardHost") {
+			fetchHostData()
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [location.pathname])
 
 	// Fetch user subscription status
 	const fetchUserSubscription = async () => {
@@ -137,7 +152,11 @@ export default function DashboardHost() {
 				const subscription = userData.subscription || null
 
 				// Check if cancelling subscription has expired
-				if (subscription && subscription.status === "cancelling" && subscription.expiryDate) {
+				if (
+					subscription &&
+					subscription.status === "cancelling" &&
+					subscription.expiryDate
+				) {
 					const expiryDate = subscription.expiryDate.toDate
 						? subscription.expiryDate.toDate()
 						: new Date(subscription.expiryDate)
@@ -199,7 +218,10 @@ export default function DashboardHost() {
 			}
 
 			// Check if cancelling subscription is still valid (not expired)
-			if (userSubscription.status === "cancelling" && userSubscription.expiryDate) {
+			if (
+				userSubscription.status === "cancelling" &&
+				userSubscription.expiryDate
+			) {
 				const expiryDate = userSubscription.expiryDate.toDate
 					? userSubscription.expiryDate.toDate()
 					: new Date(userSubscription.expiryDate)
@@ -209,6 +231,11 @@ export default function DashboardHost() {
 		}
 
 		return false
+	}
+
+	// Check if property creation is blocked (has 1+ property and not premium)
+	const isPropertyCreationBlocked = () => {
+		return properties.length >= 1 && !hasPremium()
 	}
 
 	// Check if subscription has expired and needs to be reverted
@@ -247,7 +274,9 @@ export default function DashboardHost() {
 							price: 0,
 						})
 
-						toast.info("Your premium subscription has expired. You've been moved to the free plan.")
+						toast.info(
+							"Your premium subscription has expired. You've been moved to the free plan."
+						)
 					} catch (error) {
 						console.error("Error reverting to free plan:", error)
 					}
@@ -341,10 +370,28 @@ export default function DashboardHost() {
 					where("hostId", "==", hostId)
 				)
 				const propertiesSnapshot = await getDocs(propertiesQuery)
-				propertiesList = propertiesSnapshot.docs.map((doc) => ({
-					id: doc.id,
-					...doc.data(),
-				}))
+				propertiesList = propertiesSnapshot.docs.map((doc) => {
+					const data = doc.data()
+					// Remove the custom id field from data and use Firestore document ID instead
+					const { id: customId, ...dataWithoutId } = data
+					const propertyWithId = {
+						...dataWithoutId,
+						id: doc.id, // Always use Firestore document ID (set last to ensure it's not overridden)
+					}
+					console.log("📋 Fetched property:", {
+						firestoreDocId: doc.id,
+						customIdInData: customId,
+						title: data.title,
+						hostId: data.hostId,
+						finalId: propertyWithId.id,
+					})
+					return propertyWithId
+				})
+				console.log("✅ Total properties fetched:", propertiesList.length)
+				console.log(
+					"📋 All property IDs:",
+					propertiesList.map((p) => p.id)
+				)
 			} catch (error) {
 				console.error("Error fetching properties:", error)
 				propertiesList = []
@@ -451,7 +498,8 @@ export default function DashboardHost() {
 			const upcomingList = bookingsList
 				.filter((booking) => {
 					const checkIn = new Date(booking.checkInDate)
-					return checkIn > today && booking.status === "confirmed"
+					// Count any future booking that is not cancelled
+					return checkIn > today && booking.status !== "cancelled"
 				})
 				.sort((a, b) => {
 					const dateA = new Date(a.checkInDate)
@@ -657,14 +705,15 @@ export default function DashboardHost() {
 		try {
 			const draftsQuery = query(
 				collection(db, "propertyDrafts"),
-				where("hostId", "==", currentUser.uid),
-				where("status", "!=", "published")
+				where("hostId", "==", currentUser.uid)
 			)
 			const draftsSnapshot = await getDocs(draftsQuery)
-			const draftsList = draftsSnapshot.docs.map((doc) => ({
-				id: doc.id,
-				...doc.data(),
-			}))
+			const draftsList = draftsSnapshot.docs
+				.map((doc) => ({
+					id: doc.id,
+					...doc.data(),
+				}))
+				.filter((draft) => draft.status !== "published" && draft.status !== "deleted")
 
 			// Sort by updatedAt (newest first)
 			draftsList.sort((a, b) => {
@@ -687,7 +736,7 @@ export default function DashboardHost() {
 						id: doc.id,
 						...doc.data(),
 					}))
-					.filter((draft) => draft.status !== "published")
+					.filter((draft) => draft.status !== "published" && draft.status !== "deleted")
 
 				draftsList.sort((a, b) => {
 					const dateA = a.updatedAt?.toDate?.() || new Date(a.updatedAt || 0)
@@ -756,7 +805,11 @@ export default function DashboardHost() {
 
 	// Filter properties by category
 	useEffect(() => {
-		const filtered = properties.filter((p) => p.category === activeCategory)
+		const filtered =
+			activeCategory === "all"
+				? properties
+				: properties.filter((p) => p.category === activeCategory)
+
 		setFilteredProperties(filtered)
 	}, [properties, activeCategory])
 
@@ -798,13 +851,27 @@ export default function DashboardHost() {
 	const getStatusBadge = (status) => {
 		switch (status) {
 			case "confirmed":
-				return <span className="host-status-badge host-status-confirmed">Confirmed</span>
+				return (
+					<span className="host-status-badge host-status-confirmed">
+						Confirmed
+					</span>
+				)
 			case "pending":
-				return <span className="host-status-badge host-status-pending">Pending</span>
+				return (
+					<span className="host-status-badge host-status-pending">Pending</span>
+				)
 			case "completed":
-				return <span className="host-status-badge host-status-completed">Completed</span>
+				return (
+					<span className="host-status-badge host-status-completed">
+						Completed
+					</span>
+				)
 			case "cancelled":
-				return <span className="host-status-badge host-status-cancelled">Cancelled</span>
+				return (
+					<span className="host-status-badge host-status-cancelled">
+						Cancelled
+					</span>
+				)
 			default:
 				return <span className="host-status-badge">{status}</span>
 		}
@@ -857,7 +924,11 @@ export default function DashboardHost() {
 		const currentDate = new Date()
 
 		for (let i = 5; i >= 0; i--) {
-			const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1)
+			const date = new Date(
+				currentDate.getFullYear(),
+				currentDate.getMonth() - i,
+				1
+			)
 			const monthName = date.toLocaleDateString("en-US", { month: "short" })
 			months.push(monthName)
 
@@ -895,7 +966,11 @@ export default function DashboardHost() {
 
 		// Bookings Trend (last 6 months)
 		const bookingsData = months.map((monthName, index) => {
-			const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - (5 - index), 1)
+			const date = new Date(
+				currentDate.getFullYear(),
+				currentDate.getMonth() - (5 - index),
+				1
+			)
 			return bookingsList.filter((booking) => {
 				const bookingDate =
 					booking.createdAt?.toDate?.() || new Date(booking.createdAt || 0)
@@ -908,9 +983,14 @@ export default function DashboardHost() {
 
 		// Reviews Trend (last 6 months)
 		const reviewsData = months.map((monthName, index) => {
-			const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - (5 - index), 1)
+			const date = new Date(
+				currentDate.getFullYear(),
+				currentDate.getMonth() - (5 - index),
+				1
+			)
 			return reviewsList.filter((review) => {
-				const reviewDate = review.createdAt?.toDate?.() || new Date(review.createdAt || 0)
+				const reviewDate =
+					review.createdAt?.toDate?.() || new Date(review.createdAt || 0)
 				return (
 					reviewDate.getMonth() === date.getMonth() &&
 					reviewDate.getFullYear() === date.getFullYear()
@@ -1009,7 +1089,9 @@ export default function DashboardHost() {
 								p.pricing?.basePrice || p.pricing?.price || 0,
 								p.pricing?.currency
 							),
-							location: `${p.location?.city || ""}, ${p.location?.province || ""}`,
+							location: `${p.location?.city || ""}, ${
+								p.location?.province || ""
+							}`,
 							status: p.status || "active",
 						})),
 					}
@@ -1055,7 +1137,8 @@ export default function DashboardHost() {
 							.concat(bookingsList.today, bookingsList.upcoming)
 							.filter((booking) => {
 								const bookingDate =
-									booking.createdAt?.toDate?.() || new Date(booking.createdAt || 0)
+									booking.createdAt?.toDate?.() ||
+									new Date(booking.createdAt || 0)
 								return (
 									bookingDate.getMonth() === date.getMonth() &&
 									bookingDate.getFullYear() === date.getFullYear()
@@ -1072,7 +1155,9 @@ export default function DashboardHost() {
 							monthlyRevenue: `₱${stats.monthlyRevenue.toLocaleString()}`,
 							averageBookingValue:
 								stats.totalBookings > 0
-									? `₱${Math.round(stats.totalRevenue / stats.totalBookings).toLocaleString()}`
+									? `₱${Math.round(
+											stats.totalRevenue / stats.totalBookings
+									  ).toLocaleString()}`
 									: "₱0",
 						},
 						monthlyBreakdown: months.map((month, idx) => ({
@@ -1101,8 +1186,11 @@ export default function DashboardHost() {
 						properties: {
 							summary: {
 								total: stats.totalProperties,
-								homes: filteredProperties.filter((p) => p.category === "home").length,
-								services: filteredProperties.filter((p) => p.category === "service").length,
+								homes: filteredProperties.filter((p) => p.category === "home")
+									.length,
+								services: filteredProperties.filter(
+									(p) => p.category === "service"
+								).length,
 								experiences: filteredProperties.filter(
 									(p) => p.category === "experience"
 								).length,
@@ -1225,8 +1313,12 @@ export default function DashboardHost() {
 						{reportType === "complete" && reportData.hostInfo && (
 							<View style={styles.section}>
 								<Text style={styles.sectionTitle}>Host Information</Text>
-								<Text style={styles.summaryLabel}>Name: {reportData.hostInfo.name}</Text>
-								<Text style={styles.summaryLabel}>Email: {reportData.hostInfo.email}</Text>
+								<Text style={styles.summaryLabel}>
+									Name: {reportData.hostInfo.name}
+								</Text>
+								<Text style={styles.summaryLabel}>
+									Email: {reportData.hostInfo.email}
+								</Text>
 							</View>
 						)}
 
@@ -1275,10 +1367,18 @@ export default function DashboardHost() {
 								</Text>
 								<View style={styles.table}>
 									<View style={[styles.tableRow, styles.tableHeader]}>
-										<Text style={[styles.tableCell, { width: "40%" }]}>Title</Text>
-										<Text style={[styles.tableCell, { width: "20%" }]}>Category</Text>
-										<Text style={[styles.tableCell, { width: "15%" }]}>Rating</Text>
-										<Text style={[styles.tableCell, { width: "25%" }]}>Price</Text>
+										<Text style={[styles.tableCell, { width: "40%" }]}>
+											Title
+										</Text>
+										<Text style={[styles.tableCell, { width: "20%" }]}>
+											Category
+										</Text>
+										<Text style={[styles.tableCell, { width: "15%" }]}>
+											Rating
+										</Text>
+										<Text style={[styles.tableCell, { width: "25%" }]}>
+											Price
+										</Text>
 									</View>
 									{reportData.properties.list.map((prop, idx) => (
 										<View key={idx} style={styles.tableRow}>
@@ -1307,11 +1407,21 @@ export default function DashboardHost() {
 								</Text>
 								<View style={styles.table}>
 									<View style={[styles.tableRow, styles.tableHeader]}>
-										<Text style={[styles.tableCell, { width: "30%" }]}>Property</Text>
-										<Text style={[styles.tableCell, { width: "25%" }]}>Guest</Text>
-										<Text style={[styles.tableCell, { width: "20%" }]}>Check-in</Text>
-										<Text style={[styles.tableCell, { width: "15%" }]}>Status</Text>
-										<Text style={[styles.tableCell, { width: "10%" }]}>Amount</Text>
+										<Text style={[styles.tableCell, { width: "30%" }]}>
+											Property
+										</Text>
+										<Text style={[styles.tableCell, { width: "25%" }]}>
+											Guest
+										</Text>
+										<Text style={[styles.tableCell, { width: "20%" }]}>
+											Check-in
+										</Text>
+										<Text style={[styles.tableCell, { width: "15%" }]}>
+											Status
+										</Text>
+										<Text style={[styles.tableCell, { width: "10%" }]}>
+											Amount
+										</Text>
 									</View>
 									{reportData.bookings.recent.map((booking, idx) => (
 										<View key={idx} style={styles.tableRow}>
@@ -1341,11 +1451,21 @@ export default function DashboardHost() {
 								<Text style={styles.sectionTitle}>Properties List</Text>
 								<View style={styles.table}>
 									<View style={[styles.tableRow, styles.tableHeader]}>
-										<Text style={[styles.tableCell, { width: "30%" }]}>Title</Text>
-										<Text style={[styles.tableCell, { width: "20%" }]}>Category</Text>
-										<Text style={[styles.tableCell, { width: "15%" }]}>Rating</Text>
-										<Text style={[styles.tableCell, { width: "20%" }]}>Price</Text>
-										<Text style={[styles.tableCell, { width: "15%" }]}>Status</Text>
+										<Text style={[styles.tableCell, { width: "30%" }]}>
+											Title
+										</Text>
+										<Text style={[styles.tableCell, { width: "20%" }]}>
+											Category
+										</Text>
+										<Text style={[styles.tableCell, { width: "15%" }]}>
+											Rating
+										</Text>
+										<Text style={[styles.tableCell, { width: "20%" }]}>
+											Price
+										</Text>
+										<Text style={[styles.tableCell, { width: "15%" }]}>
+											Status
+										</Text>
 									</View>
 									{reportData.properties.map((prop, idx) => (
 										<View key={idx} style={styles.tableRow}>
@@ -1375,12 +1495,24 @@ export default function DashboardHost() {
 								<Text style={styles.sectionTitle}>Bookings List</Text>
 								<View style={styles.table}>
 									<View style={[styles.tableRow, styles.tableHeader]}>
-										<Text style={[styles.tableCell, { width: "25%" }]}>Property</Text>
-										<Text style={[styles.tableCell, { width: "20%" }]}>Guest</Text>
-										<Text style={[styles.tableCell, { width: "18%" }]}>Check-in</Text>
-										<Text style={[styles.tableCell, { width: "18%" }]}>Check-out</Text>
-										<Text style={[styles.tableCell, { width: "12%" }]}>Status</Text>
-										<Text style={[styles.tableCell, { width: "7%" }]}>Total</Text>
+										<Text style={[styles.tableCell, { width: "25%" }]}>
+											Property
+										</Text>
+										<Text style={[styles.tableCell, { width: "20%" }]}>
+											Guest
+										</Text>
+										<Text style={[styles.tableCell, { width: "18%" }]}>
+											Check-in
+										</Text>
+										<Text style={[styles.tableCell, { width: "18%" }]}>
+											Check-out
+										</Text>
+										<Text style={[styles.tableCell, { width: "12%" }]}>
+											Status
+										</Text>
+										<Text style={[styles.tableCell, { width: "7%" }]}>
+											Total
+										</Text>
 									</View>
 									{reportData.bookings.map((booking, idx) => (
 										<View key={idx} style={styles.tableRow}>
@@ -1410,11 +1542,17 @@ export default function DashboardHost() {
 
 						{reportType === "revenue" && reportData.monthlyBreakdown && (
 							<View style={styles.section}>
-								<Text style={styles.sectionTitle}>Monthly Revenue Breakdown</Text>
+								<Text style={styles.sectionTitle}>
+									Monthly Revenue Breakdown
+								</Text>
 								<View style={styles.table}>
 									<View style={[styles.tableRow, styles.tableHeader]}>
-										<Text style={[styles.tableCell, { width: "50%" }]}>Month</Text>
-										<Text style={[styles.tableCell, { width: "50%" }]}>Revenue</Text>
+										<Text style={[styles.tableCell, { width: "50%" }]}>
+											Month
+										</Text>
+										<Text style={[styles.tableCell, { width: "50%" }]}>
+											Revenue
+										</Text>
 									</View>
 									{reportData.monthlyBreakdown.map((item, idx) => (
 										<View key={idx} style={styles.tableRow}>
@@ -1573,16 +1711,6 @@ export default function DashboardHost() {
 										<FaUser />
 										<span>My Profile</span>
 									</button>
-									<button
-										className="dropdown-item"
-										onClick={() => {
-											navigate("/wishlist/new")
-											setIsMenuOpen(false)
-										}}
-									>
-										<FaBookmark />
-										<span>Wishlist</span>
-									</button>
 									<div className="dropdown-theme-section">
 										<span className="theme-label">THEME</span>
 										<div className="theme-buttons">
@@ -1630,11 +1758,17 @@ export default function DashboardHost() {
 
 					{/* Quick Actions */}
 					<div className="quick-actions">
-						<button className="action-btn" onClick={() => navigate("/host/bookings")}>
+						<button
+							className="action-btn"
+							onClick={() => navigate("/host/bookings")}
+						>
 							<FaCalendarAlt />
-							<span>Calendar</span>
+							<span>Bookings</span>
 						</button>
-						<button className="action-btn" onClick={() => navigate("/host/points")}>
+						<button
+							className="action-btn"
+							onClick={() => navigate("/host/points")}
+						>
 							<FaStar />
 							<span>Points</span>
 						</button>
@@ -1708,6 +1842,15 @@ export default function DashboardHost() {
 					<div className="category-tabs">
 						<button
 							className={`category-tab ${
+								activeCategory === "all" ? "active" : ""
+							}`}
+							onClick={() => handleCategoryChange("all")}
+						>
+							<span className="tab-icon">🌟</span>
+							<span className="tab-label">All</span>
+						</button>
+						<button
+							className={`category-tab ${
 								activeCategory === "home" ? "active" : ""
 							}`}
 							onClick={() => handleCategoryChange("home")}
@@ -1742,33 +1885,140 @@ export default function DashboardHost() {
 								<div className="loading-spinner"></div>
 								<p>Loading properties...</p>
 							</div>
-						) : filteredProperties.length === 0 ? (
+						) : filteredProperties.length === 0 && properties.length === 0 ? (
 							<div className="no-results">
-								<p>No properties found in this category</p>
+								<p>No properties found. Create your first listing!</p>
 								<div className="no-results-actions">
 									<button
-										className="category-create-btn"
-										onClick={() => navigate(`/host/list-property?category=${activeCategory}`)}
+										className={`category-create-btn ${isPropertyCreationBlocked() ? "disabled" : ""}`}
+										disabled={isPropertyCreationBlocked()}
+										onClick={() => {
+											if (isPropertyCreationBlocked()) {
+												checkPremiumAccess("Multiple Property Listings")
+											} else {
+												navigate(
+													activeCategory === "all"
+														? "/host/list-property"
+														: `/host/list-property?category=${activeCategory}`
+												)
+											}
+										}}
+										title={isPropertyCreationBlocked() ? "Upgrade to Premium to create more properties" : ""}
 									>
 										<FaHome />
-										<span>Create {activeCategory === "home" ? "Home" : activeCategory === "service" ? "Service" : "Experience"}</span>
+										<span>
+											Create{" "}
+											{activeCategory === "all"
+												? "Listing"
+												: activeCategory === "home"
+												? "Home"
+												: activeCategory === "service"
+												? "Service"
+												: "Experience"}
+										</span>
 									</button>
 									<button
-										className="category-drafts-btn"
+										className={`category-drafts-btn ${isPropertyCreationBlocked() ? "disabled" : ""}`}
+										disabled={isPropertyCreationBlocked()}
 										onClick={() => {
-											setDraftsCategoryFilter(activeCategory)
-											setShowDraftsModal(true)
+											if (isPropertyCreationBlocked()) {
+												checkPremiumAccess("Multiple Property Listings")
+											} else {
+												setDraftsCategoryFilter(
+													activeCategory === "all" ? null : activeCategory
+												)
+												setShowDraftsModal(true)
+											}
 										}}
+										title={isPropertyCreationBlocked() ? "Upgrade to Premium to access drafts" : ""}
 									>
 										<FaFileAlt />
-										<span>Drafts ({drafts.filter(d => d.formData?.category === activeCategory).length})</span>
+										<span>
+											Drafts (
+											{activeCategory === "all"
+												? drafts.length
+												: drafts.filter(
+														(d) => d.formData?.category === activeCategory
+												  ).length}
+											)
+										</span>
+									</button>
+								</div>
+							</div>
+						) : filteredProperties.length === 0 ? (
+							<div className="no-results">
+								<p>
+									No properties found in{" "}
+									{activeCategory === "home"
+										? "Homes"
+										: activeCategory === "service"
+										? "Services"
+										: activeCategory === "experience"
+										? "Experiences"
+										: "this category"}
+									.
+								</p>
+								<div className="no-results-actions">
+									<button
+										className={`category-create-btn ${isPropertyCreationBlocked() ? "disabled" : ""}`}
+										disabled={isPropertyCreationBlocked()}
+										onClick={() => {
+											if (isPropertyCreationBlocked()) {
+												checkPremiumAccess("Multiple Property Listings")
+											} else {
+												navigate(
+													activeCategory === "all"
+														? "/host/list-property"
+														: `/host/list-property?category=${activeCategory}`
+												)
+											}
+										}}
+										title={isPropertyCreationBlocked() ? "Upgrade to Premium to create more properties" : ""}
+									>
+										<FaHome />
+										<span>
+											Create{" "}
+											{activeCategory === "all"
+												? "Listing"
+												: activeCategory === "home"
+												? "Home"
+												: activeCategory === "service"
+												? "Service"
+												: "Experience"}
+										</span>
+									</button>
+									<button
+										className={`category-drafts-btn ${isPropertyCreationBlocked() ? "disabled" : ""}`}
+										disabled={isPropertyCreationBlocked()}
+										onClick={() => {
+											if (isPropertyCreationBlocked()) {
+												checkPremiumAccess("Multiple Property Listings")
+											} else {
+												setDraftsCategoryFilter(
+													activeCategory === "all" ? null : activeCategory
+												)
+												setShowDraftsModal(true)
+											}
+										}}
+										title={isPropertyCreationBlocked() ? "Upgrade to Premium to access drafts" : ""}
+									>
+										<FaFileAlt />
+										<span>
+											Drafts (
+											{activeCategory === "all"
+												? drafts.length
+												: drafts.filter(
+														(d) => d.formData?.category === activeCategory
+												  ).length}
+											)
+										</span>
 									</button>
 								</div>
 							</div>
 						) : (
 							<>
 								<div className="listings-grid">
-									{filteredProperties.slice(0, 6).map((property) => (
+									{filteredProperties.map((property) => (
 										<div key={property.id} className="listing-card">
 											<div
 												className="listing-image"
@@ -1776,8 +2026,17 @@ export default function DashboardHost() {
 													backgroundImage: `url(${
 														property.images?.[0] || housePlaceholder
 													})`,
+													cursor: "pointer",
 												}}
-												onClick={() => navigate(`/property/${property.id}`)}
+												onClick={() => {
+													navigate("/host/all-listings", { 
+														state: { 
+															category: activeCategory,
+															propertyId: property.id 
+														} 
+													})
+												}}
+												title="View all listings"
 											>
 												{property.featured && (
 													<span className="listing-badge">Featured</span>
@@ -1789,7 +2048,7 @@ export default function DashboardHost() {
 													<div className="listing-rating">
 														<span className="star">⭐</span>
 														<span className="rating-text">
-															{property.rating || "N/A"}
+															{property.rating || 0}
 														</span>
 														<span className="reviews-count">
 															({property.reviewsCount || 0})
@@ -1814,22 +2073,40 @@ export default function DashboardHost() {
 												{/* Details for Homes */}
 												{property.category === "home" && property.capacity && (
 													<div className="listing-details">
+														{property.capacity.bedrooms > 0 && (
+															<div className="detail-item">
+																<span className="listing-icon">🚪</span>
+																<span className="detail-text">
+																	{property.capacity.bedrooms}{" "}
+																	{property.capacity.bedrooms === 1
+																		? "bedroom"
+																		: "bedrooms"}
+																</span>
+															</div>
+														)}
 														<div className="detail-item">
 															<span className="listing-icon">🛏️</span>
 															<span className="detail-text">
-																{property.capacity.beds || 0} beds
+																{property.capacity.beds || 0}{" "}
+																{property.capacity.beds === 1 ? "bed" : "beds"}
 															</span>
 														</div>
 														<div className="detail-item">
 															<span className="listing-icon">🛁</span>
 															<span className="detail-text">
-																{property.capacity.bathrooms || 0} bath
+																{property.capacity.bathrooms || 0}{" "}
+																{property.capacity.bathrooms === 1
+																	? "bath"
+																	: "baths"}
 															</span>
 														</div>
 														<div className="detail-item">
 															<span className="listing-icon">👥</span>
 															<span className="detail-text">
-																{property.capacity.guests || 0} guests
+																{property.capacity.guests || 0}{" "}
+																{property.capacity.guests === 1
+																	? "guest"
+																	: "guests"}
 															</span>
 														</div>
 													</div>
@@ -1848,8 +2125,16 @@ export default function DashboardHost() {
 															<div className="detail-item">
 																<span className="listing-icon">👥</span>
 																<span className="detail-text">
-																	{property.capacity?.minGuests || 0}-
-																	{property.capacity?.maxGuests || 0} guests
+																	{property.capacity?.minGuests ||
+																		property.capacity?.guests ||
+																		0}
+																	-
+																	{property.capacity?.maxGuests ||
+																		property.capacity?.guests ||
+																		0}{" "}
+																	{property.capacity?.maxGuests === 1
+																		? "guest"
+																		: "guests"}
 																</span>
 															</div>
 														</div>
@@ -1890,9 +2175,17 @@ export default function DashboardHost() {
 													<div className="listing-actions">
 														<button
 															className="view-btn"
-															onClick={() =>
+															onClick={() => {
+																console.log(
+																	"🖱️ Clicked on 'View Details' button"
+																)
+																console.log("📋 Property ID:", property.id)
+																console.log(
+																	"📋 Full property object:",
+																	property
+																)
 																navigate(`/property/${property.id}`)
-															}
+															}}
 														>
 															View Details
 														</button>
@@ -1903,20 +2196,84 @@ export default function DashboardHost() {
 									))}
 								</div>
 
-								{/* View All Button */}
-								{filteredProperties.length > 6 && (
+								{/* Show total count */}
+								{filteredProperties.length > 0 && (
 									<div className="view-all-container">
-										<button
-											className="view-all-properties-btn"
-											onClick={() => {
-												// Could navigate to a dedicated properties page later
-												toast.info(`Showing ${filteredProperties.length} properties in this category`)
+										<p
+											style={{
+												textAlign: "center",
+												color: "#666",
+												marginTop: "1rem",
 											}}
 										>
-											View All {filteredProperties.length} Properties
-										</button>
+											Showing {filteredProperties.length}{" "}
+											{filteredProperties.length === 1
+												? "property"
+												: "properties"}
+											{activeCategory !== "all" &&
+												filteredProperties.length === properties.length &&
+												" (all categories)"}
+										</p>
 									</div>
 								)}
+								
+								{/* Always show Create Listing and Drafts buttons */}
+								<div className="no-results-actions" style={{ marginTop: "1.5rem", justifyContent: "center" }}>
+									<button
+										className={`category-create-btn ${isPropertyCreationBlocked() ? "disabled" : ""}`}
+										disabled={isPropertyCreationBlocked()}
+										onClick={() => {
+											if (isPropertyCreationBlocked()) {
+												checkPremiumAccess("Multiple Property Listings")
+											} else {
+												navigate(
+													activeCategory === "all"
+														? "/host/list-property"
+														: `/host/list-property?category=${activeCategory}`
+												)
+											}
+										}}
+										title={isPropertyCreationBlocked() ? "Upgrade to Premium to create more properties" : ""}
+									>
+										<FaHome />
+										<span>
+											Create{" "}
+											{activeCategory === "all"
+												? "Listing"
+												: activeCategory === "home"
+												? "Home"
+												: activeCategory === "service"
+												? "Service"
+												: "Experience"}
+										</span>
+									</button>
+									<button
+										className={`category-drafts-btn ${isPropertyCreationBlocked() ? "disabled" : ""}`}
+										disabled={isPropertyCreationBlocked()}
+										onClick={() => {
+											if (isPropertyCreationBlocked()) {
+												checkPremiumAccess("Multiple Property Listings")
+											} else {
+												setDraftsCategoryFilter(
+													activeCategory === "all" ? null : activeCategory
+												)
+												setShowDraftsModal(true)
+											}
+										}}
+										title={isPropertyCreationBlocked() ? "Upgrade to Premium to access drafts" : ""}
+									>
+										<FaFileAlt />
+										<span>
+											Drafts (
+											{activeCategory === "all"
+												? drafts.length
+												: drafts.filter(
+														(d) => d.formData?.category === activeCategory
+												  ).length}
+											)
+										</span>
+									</button>
+								</div>
 							</>
 						)}
 					</div>
@@ -1930,149 +2287,156 @@ export default function DashboardHost() {
 							Track your performance and growth over time
 						</p>
 
-					<div className="host-stats-charts-grid">
-						{/* Monthly Revenue Chart */}
-						<div className="host-chart-card">
-							<h3>💵 Monthly Revenue</h3>
-							{chartData.monthlyRevenue ? (
-								<Line
-									data={chartData.monthlyRevenue}
-									options={{
-										responsive: true,
-										maintainAspectRatio: true,
-										aspectRatio: 2,
-										plugins: {
-											legend: {
-												display: false,
-											},
-											tooltip: {
-												callbacks: {
-													label: function (context) {
-														return `₱${context.parsed.y.toLocaleString()}`
+						<div className="host-stats-charts-grid">
+							{/* Monthly Revenue Chart */}
+							<div className="host-chart-card">
+								<h3>💵 Monthly Revenue</h3>
+								{chartData.monthlyRevenue ? (
+									<Line
+										data={chartData.monthlyRevenue}
+										options={{
+											responsive: true,
+											maintainAspectRatio: true,
+											aspectRatio: 2,
+											plugins: {
+												legend: {
+													display: false,
+												},
+												tooltip: {
+													callbacks: {
+														label: function (context) {
+															return `₱${context.parsed.y.toLocaleString()}`
+														},
 													},
 												},
 											},
-										},
-										scales: {
-											y: {
-												beginAtZero: true,
-												ticks: {
-													callback: function (value) {
-														return "₱" + value.toLocaleString()
+											scales: {
+												y: {
+													beginAtZero: true,
+													ticks: {
+														callback: function (value) {
+															return "₱" + value.toLocaleString()
+														},
 													},
 												},
 											},
-										},
-									}}
-								/>
-							) : (
-								<div className="chart-placeholder">Loading chart data...</div>
-							)}
-						</div>
-
-						{/* Total Revenue Chart */}
-						<div className="host-chart-card">
-							<h3>💰 Total Revenue</h3>
-							<div className="host-revenue-stats">
-								<div className="host-revenue-total">
-									<span className="revenue-label">This Year</span>
-									<span className="revenue-amount">
-										₱{stats.totalRevenue.toLocaleString()}
-									</span>
-								</div>
+										}}
+									/>
+								) : (
+									<div className="chart-placeholder">Loading chart data...</div>
+								)}
 							</div>
-							{chartData.totalRevenue ? (
-								<Doughnut
-									data={chartData.totalRevenue}
-									options={{
-										responsive: true,
-										maintainAspectRatio: true,
-										aspectRatio: 2,
-										plugins: {
-											legend: {
-												position: "bottom",
-											},
-											tooltip: {
-												callbacks: {
-													label: function (context) {
-														return `${context.label}: ₱${context.parsed.toLocaleString()}`
+
+							{/* Total Revenue Chart */}
+							<div className="host-chart-card">
+								<h3>💰 Total Revenue</h3>
+								<div className="host-revenue-stats">
+									<div className="host-revenue-total">
+										<span className="revenue-label">This Year</span>
+										<span className="revenue-amount">
+											₱{stats.totalRevenue.toLocaleString()}
+										</span>
+									</div>
+								</div>
+								{chartData.totalRevenue ? (
+									<Doughnut
+										data={chartData.totalRevenue}
+										options={{
+											responsive: true,
+											maintainAspectRatio: true,
+											aspectRatio: 2,
+											plugins: {
+												legend: {
+													position: "bottom",
+												},
+												tooltip: {
+													callbacks: {
+														label: function (context) {
+															return `${
+																context.label
+															}: ₱${context.parsed.toLocaleString()}`
+														},
 													},
 												},
 											},
-										},
-									}}
-								/>
-							) : (
-								<div className="chart-placeholder">Loading chart data...</div>
-							)}
-						</div>
+										}}
+									/>
+								) : (
+									<div className="chart-placeholder">Loading chart data...</div>
+								)}
+							</div>
 
-						{/* Total Bookings Chart */}
-						<div className="host-chart-card">
-							<h3>📅 Total Bookings</h3>
-							<div className="host-stat-number-large">{stats.totalBookings}</div>
-							{chartData.bookings ? (
-								<Bar
-									data={chartData.bookings}
-									options={{
-										responsive: true,
-										maintainAspectRatio: true,
-										aspectRatio: 2,
-										plugins: {
-											legend: {
-												display: false,
-											},
-										},
-										scales: {
-											y: {
-												beginAtZero: true,
-												ticks: {
-													stepSize: 1,
+							{/* Total Bookings Chart */}
+							<div className="host-chart-card">
+								<h3>📅 Total Bookings</h3>
+								<div className="host-stat-number-large">
+									{stats.totalBookings}
+								</div>
+								{chartData.bookings ? (
+									<Bar
+										data={chartData.bookings}
+										options={{
+											responsive: true,
+											maintainAspectRatio: true,
+											aspectRatio: 2,
+											plugins: {
+												legend: {
+													display: false,
 												},
 											},
-										},
-									}}
-								/>
-							) : (
-								<div className="chart-placeholder">Loading chart data...</div>
-							)}
-						</div>
-
-						{/* Total Reviews Chart */}
-						<div className="host-chart-card">
-							<h3>⭐ Total Reviews</h3>
-							<div className="host-stat-number-large">{totalReviews}</div>
-							{chartData.reviews ? (
-								<Bar
-									data={chartData.reviews}
-									options={{
-										responsive: true,
-										maintainAspectRatio: true,
-										aspectRatio: 2,
-										plugins: {
-											legend: {
-												display: false,
-											},
-										},
-										scales: {
-											y: {
-												beginAtZero: true,
-												ticks: {
-													stepSize: 1,
+											scales: {
+												y: {
+													beginAtZero: true,
+													ticks: {
+														stepSize: 1,
+													},
 												},
 											},
-										},
-									}}
-								/>
-							) : (
-								<div className="chart-placeholder">Loading chart data...</div>
-							)}
+										}}
+									/>
+								) : (
+									<div className="chart-placeholder">Loading chart data...</div>
+								)}
+							</div>
+
+							{/* Total Reviews Chart */}
+							<div className="host-chart-card">
+								<h3>⭐ Total Reviews</h3>
+								<div className="host-stat-number-large">{totalReviews}</div>
+								{chartData.reviews ? (
+									<Bar
+										data={chartData.reviews}
+										options={{
+											responsive: true,
+											maintainAspectRatio: true,
+											aspectRatio: 2,
+											plugins: {
+												legend: {
+													display: false,
+												},
+											},
+											scales: {
+												y: {
+													beginAtZero: true,
+													ticks: {
+														stepSize: 1,
+													},
+												},
+											},
+										}}
+									/>
+								) : (
+									<div className="chart-placeholder">Loading chart data...</div>
+								)}
+							</div>
 						</div>
-					</div>
-				</section>
+					</section>
 				) : (
 					<section className="host-stats-section premium-locked-section">
-						<div className="premium-locked-overlay" onClick={() => checkPremiumAccess("Statistics & Analytics")}>
+						<div
+							className="premium-locked-overlay"
+							onClick={() => checkPremiumAccess("Statistics & Analytics")}
+						>
 							<FaCrown className="premium-lock-icon" />
 							<h2>📊 Statistics & Analytics</h2>
 							<p className="premium-lock-message">
@@ -2096,116 +2460,127 @@ export default function DashboardHost() {
 							Export your host data and analytics as PDF reports
 						</p>
 
-					<div className="host-reports-grid">
-						<div className="host-report-card">
-							<div className="report-icon">🏠</div>
-							<h3>Properties Report</h3>
-							<p>
-								Complete list of your properties with ratings, reviews, and pricing
-								information
-							</p>
-							<div className="report-stats">
-								<div className="stat">
-									<span className="stat-value">{stats.totalProperties}</span>
-									<span className="stat-label">Total Properties</span>
-								</div>
-								<div className="stat">
-									<span className="stat-value">{stats.avgRating}</span>
-									<span className="stat-label">Avg Rating</span>
-								</div>
-							</div>
-							<button
-								className="generate-report-btn"
-								onClick={() => generateHostReport("properties")}
-								disabled={isGeneratingReport}
-							>
-								{isGeneratingReport ? "⏳ Generating..." : "📊 Generate Properties Report"}
-							</button>
-						</div>
-
-						<div className="host-report-card">
-							<div className="report-icon">📅</div>
-							<h3>Bookings Report</h3>
-							<p>
-								Detailed booking history with guest information, dates, status, and
-								amounts
-							</p>
-							<div className="report-stats">
-								<div className="stat">
-									<span className="stat-value">{stats.totalBookings}</span>
-									<span className="stat-label">Total Bookings</span>
-								</div>
-								<div className="stat">
-									<span className="stat-value">{upcomingBookings.length}</span>
-									<span className="stat-label">Upcoming</span>
-								</div>
-							</div>
-							<button
-								className="generate-report-btn"
-								onClick={() => generateHostReport("bookings")}
-								disabled={isGeneratingReport}
-							>
-								{isGeneratingReport ? "⏳ Generating..." : "📊 Generate Bookings Report"}
-							</button>
-						</div>
-
-						<div className="host-report-card">
-							<div className="report-icon">💰</div>
-							<h3>Revenue Report</h3>
-							<p>
-								Financial overview with revenue trends and monthly breakdown
-							</p>
-							<div className="report-stats">
-								<div className="stat">
-									<span className="stat-value">
-										₱{stats.totalRevenue.toLocaleString()}
-									</span>
-									<span className="stat-label">Total Revenue</span>
-								</div>
-								<div className="stat">
-									<span className="stat-value">
-										₱{stats.monthlyRevenue.toLocaleString()}
-									</span>
-									<span className="stat-label">This Month</span>
-								</div>
-							</div>
-							<button
-								className="generate-report-btn"
-								onClick={() => generateHostReport("revenue")}
-								disabled={isGeneratingReport}
-							>
-								{isGeneratingReport ? "⏳ Generating..." : "📊 Generate Revenue Report"}
-							</button>
-						</div>
-
-						<div className="host-report-card featured">
-							<div className="report-icon">📑</div>
-							<h3>Complete Host Report</h3>
-							<p>
-								Generate a comprehensive report with all your properties, bookings,
-								revenue, and analytics in one document
-							</p>
-							<div className="report-stats full-width">
-								<p className="report-description">
-									Includes properties overview, bookings summary, revenue breakdown,
-									and performance metrics
+						<div className="host-reports-grid">
+							<div className="host-report-card">
+								<div className="report-icon">🏠</div>
+								<h3>Properties Report</h3>
+								<p>
+									Complete list of your properties with ratings, reviews, and
+									pricing information
 								</p>
+								<div className="report-stats">
+									<div className="stat">
+										<span className="stat-value">{stats.totalProperties}</span>
+										<span className="stat-label">Total Properties</span>
+									</div>
+									<div className="stat">
+										<span className="stat-value">{stats.avgRating}</span>
+										<span className="stat-label">Avg Rating</span>
+									</div>
+								</div>
+								<button
+									className="generate-report-btn"
+									onClick={() => generateHostReport("properties")}
+									disabled={isGeneratingReport}
+								>
+									{isGeneratingReport
+										? "⏳ Generating..."
+										: "📊 Generate Properties Report"}
+								</button>
 							</div>
-							<button
-								className="generate-report-btn primary"
-								onClick={() => generateHostReport("complete")}
-								disabled={isGeneratingReport}
-							>
-								{isGeneratingReport
-									? "⏳ Generating..."
-									: "📊 Generate Complete Report"}
-							</button>
+
+							<div className="host-report-card">
+								<div className="report-icon">📅</div>
+								<h3>Bookings Report</h3>
+								<p>
+									Detailed booking history with guest information, dates,
+									status, and amounts
+								</p>
+								<div className="report-stats">
+									<div className="stat">
+										<span className="stat-value">{stats.totalBookings}</span>
+										<span className="stat-label">Total Bookings</span>
+									</div>
+									<div className="stat">
+										<span className="stat-value">
+											{upcomingBookings.length}
+										</span>
+										<span className="stat-label">Upcoming</span>
+									</div>
+								</div>
+								<button
+									className="generate-report-btn"
+									onClick={() => generateHostReport("bookings")}
+									disabled={isGeneratingReport}
+								>
+									{isGeneratingReport
+										? "⏳ Generating..."
+										: "📊 Generate Bookings Report"}
+								</button>
+							</div>
+
+							<div className="host-report-card">
+								<div className="report-icon">💰</div>
+								<h3>Revenue Report</h3>
+								<p>
+									Financial overview with revenue trends and monthly breakdown
+								</p>
+								<div className="report-stats">
+									<div className="stat">
+										<span className="stat-value">
+											₱{stats.totalRevenue.toLocaleString()}
+										</span>
+										<span className="stat-label">Total Revenue</span>
+									</div>
+									<div className="stat">
+										<span className="stat-value">
+											₱{stats.monthlyRevenue.toLocaleString()}
+										</span>
+										<span className="stat-label">This Month</span>
+									</div>
+								</div>
+								<button
+									className="generate-report-btn"
+									onClick={() => generateHostReport("revenue")}
+									disabled={isGeneratingReport}
+								>
+									{isGeneratingReport
+										? "⏳ Generating..."
+										: "📊 Generate Revenue Report"}
+								</button>
+							</div>
+
+							<div className="host-report-card featured">
+								<div className="report-icon">📑</div>
+								<h3>Complete Host Report</h3>
+								<p>
+									Generate a comprehensive report with all your properties,
+									bookings, revenue, and analytics in one document
+								</p>
+								<div className="report-stats full-width">
+									<p className="report-description">
+										Includes properties overview, bookings summary, revenue
+										breakdown, and performance metrics
+									</p>
+								</div>
+								<button
+									className="generate-report-btn primary"
+									onClick={() => generateHostReport("complete")}
+									disabled={isGeneratingReport}
+								>
+									{isGeneratingReport
+										? "⏳ Generating..."
+										: "📊 Generate Complete Report"}
+								</button>
+							</div>
 						</div>
-					</div>
-				</section>
+					</section>
 				) : (
 					<section className="host-reports-section premium-locked-section">
-						<div className="premium-locked-overlay" onClick={() => checkPremiumAccess("Report Generation")}>
+						<div
+							className="premium-locked-overlay"
+							onClick={() => checkPremiumAccess("Report Generation")}
+						>
 							<FaCrown className="premium-lock-icon" />
 							<h2>📄 Generate Reports</h2>
 							<p className="premium-lock-message">
@@ -2224,13 +2599,30 @@ export default function DashboardHost() {
 
 			{/* Drafts Modal */}
 			{showDraftsModal && (
-				<div className="host-modal-overlay" onClick={() => {
-					setShowDraftsModal(false)
-					setDraftsCategoryFilter(null)
-				}}>
-					<div className="host-modal-content" onClick={(e) => e.stopPropagation()}>
+				<div
+					className="host-modal-overlay"
+					onClick={() => {
+						setShowDraftsModal(false)
+						setDraftsCategoryFilter(null)
+					}}
+				>
+					<div
+						className="host-modal-content"
+						onClick={(e) => e.stopPropagation()}
+					>
 						<div className="host-modal-header">
-							<h2>Saved Drafts{draftsCategoryFilter ? ` - ${draftsCategoryFilter === "home" ? "Homes" : draftsCategoryFilter === "service" ? "Services" : "Experiences"}` : ""}</h2>
+							<h2>
+								Saved Drafts
+								{draftsCategoryFilter
+									? ` - ${
+											draftsCategoryFilter === "home"
+												? "Homes"
+												: draftsCategoryFilter === "service"
+												? "Services"
+												: "Experiences"
+									  }`
+									: ""}
+							</h2>
 							<button
 								className="host-modal-close"
 								onClick={() => {
@@ -2241,84 +2633,100 @@ export default function DashboardHost() {
 								×
 							</button>
 						</div>
-					<div className="host-drafts-list">
-						{draftsCategoryFilter && (
-							<div className="host-drafts-filter-info">
-								<p>Showing drafts for: <strong>{draftsCategoryFilter === "home" ? "Homes" : draftsCategoryFilter === "service" ? "Services" : "Experiences"}</strong></p>
-								<button
-									className="host-clear-filter-btn"
-									onClick={() => setDraftsCategoryFilter(null)}
-								>
-									Show All
-								</button>
-							</div>
-						)}
-						{(() => {
-							const filteredDrafts = draftsCategoryFilter
-								? drafts.filter((d) => d.formData?.category === draftsCategoryFilter)
-								: drafts
-							
-							return filteredDrafts.length > 0 ? (
-								filteredDrafts.map((draft) => (
-									<div key={draft.id} className="host-draft-item">
-										<div className="host-draft-info">
-											<h4>
-												{draft.formData?.title || "Untitled Property"}
-											</h4>
-											<p className="host-draft-meta">
-												{draft.formData?.category
-													? draft.formData.category.charAt(0).toUpperCase() +
-													  draft.formData.category.slice(1)
-													: "Draft"} • Step {draft.currentStep || 1} of 6
-											</p>
-											<p className="host-draft-date">
-												Last updated:{" "}
-												{draft.updatedAt?.toDate
-													? draft.updatedAt.toDate().toLocaleDateString()
-													: "Recently"}
-											</p>
-										</div>
-										<div className="host-draft-actions">
-											<button
-												className="host-draft-edit-button"
-												onClick={() => handleEditDraft(draft.id)}
-											>
-												<FaEdit /> Edit
-											</button>
-											<button
-												className="host-draft-delete-button"
-												onClick={() => handleDeleteDraft(draft.id)}
-												disabled={deletingDraft === draft.id}
-											>
-												<FaTrash />
-											</button>
-										</div>
-									</div>
-								))
-							) : (
-								<div className="host-empty-message">
-									<FaFileAlt className="empty-icon" />
+						<div className="host-drafts-list">
+							{draftsCategoryFilter && (
+								<div className="host-drafts-filter-info">
 									<p>
-										{draftsCategoryFilter
-											? `No saved drafts for ${draftsCategoryFilter === "home" ? "Homes" : draftsCategoryFilter === "service" ? "Services" : "Experiences"}`
-											: "No saved drafts"}
+										Showing drafts for:{" "}
+										<strong>
+											{draftsCategoryFilter === "home"
+												? "Homes"
+												: draftsCategoryFilter === "service"
+												? "Services"
+												: "Experiences"}
+										</strong>
 									</p>
 									<button
-										className="host-create-draft-button"
-										onClick={() => {
-											setShowDraftsModal(false)
-											navigate(
-												draftsCategoryFilter
-													? `/host/list-property?category=${draftsCategoryFilter}`
-													: "/host/list-property"
-											)
-										}}
+										className="host-clear-filter-btn"
+										onClick={() => setDraftsCategoryFilter(null)}
 									>
-										Create New Listing
+										Show All
 									</button>
 								</div>
-							)
-						})()}
+							)}
+							{(() => {
+								const filteredDrafts = draftsCategoryFilter
+									? drafts.filter(
+											(d) => d.formData?.category === draftsCategoryFilter
+									  )
+									: drafts
+
+								return filteredDrafts.length > 0 ? (
+									filteredDrafts.map((draft) => (
+										<div key={draft.id} className="host-draft-item">
+											<div className="host-draft-info">
+												<h4>{draft.formData?.title || "Untitled Property"}</h4>
+												<p className="host-draft-meta">
+													{draft.formData?.category
+														? draft.formData.category.charAt(0).toUpperCase() +
+														  draft.formData.category.slice(1)
+														: "Draft"}{" "}
+													• Step {draft.currentStep || 1} of 6
+												</p>
+												<p className="host-draft-date">
+													Last updated:{" "}
+													{draft.updatedAt?.toDate
+														? draft.updatedAt.toDate().toLocaleDateString()
+														: "Recently"}
+												</p>
+											</div>
+											<div className="host-draft-actions">
+												<button
+													className="host-draft-edit-button"
+													onClick={() => handleEditDraft(draft.id)}
+												>
+													<FaEdit /> Edit
+												</button>
+												<button
+													className="host-draft-delete-button"
+													onClick={() => handleDeleteDraft(draft.id)}
+													disabled={deletingDraft === draft.id}
+												>
+													<FaTrash />
+												</button>
+											</div>
+										</div>
+									))
+								) : (
+									<div className="host-empty-message">
+										<FaFileAlt className="empty-icon" />
+										<p>
+											{draftsCategoryFilter
+												? `No saved drafts for ${
+														draftsCategoryFilter === "home"
+															? "Homes"
+															: draftsCategoryFilter === "service"
+															? "Services"
+															: "Experiences"
+												  }`
+												: "No saved drafts"}
+										</p>
+										<button
+											className="host-create-draft-button"
+											onClick={() => {
+												setShowDraftsModal(false)
+												navigate(
+													draftsCategoryFilter
+														? `/host/list-property?category=${draftsCategoryFilter}`
+														: "/host/list-property"
+												)
+											}}
+										>
+											Create New Listing
+										</button>
+									</div>
+								)
+							})()}
 						</div>
 					</div>
 				</div>
@@ -2377,7 +2785,9 @@ export default function DashboardHost() {
 													navigate(`/property/${booking.propertyId}`)
 												}
 											>
-												<span className={`booking-status-badge ${booking.status}`}>
+												<span
+													className={`booking-status-badge ${booking.status}`}
+												>
 													{booking.status}
 												</span>
 											</div>
@@ -2388,13 +2798,17 @@ export default function DashboardHost() {
 												<div className="booking-dates">
 													<FaCalendarAlt />
 													<span>
-														{formatDate(booking.checkInDate)} - {formatDate(booking.checkOutDate)}
+														{formatDate(booking.checkInDate)} -{" "}
+														{formatDate(booking.checkOutDate)}
 													</span>
 												</div>
 												<div className="booking-stats">
 													<span>
-														👥 {booking.numberOfGuests || booking.guests || 1} guest
-														{(booking.numberOfGuests || booking.guests || 1) > 1 ? "s" : ""}
+														👥 {booking.numberOfGuests || booking.guests || 1}{" "}
+														guest
+														{(booking.numberOfGuests || booking.guests || 1) > 1
+															? "s"
+															: ""}
 													</span>
 													{booking.numberOfNights && (
 														<span>
