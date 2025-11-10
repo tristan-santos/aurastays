@@ -233,6 +233,41 @@ export default function DashboardHost() {
 		return false
 	}
 
+	// Check if user is in free trial mode
+	const isFreeTrial = () => {
+		if (!userSubscription || hasPremium()) return false
+
+		// User is in free trial if:
+		// 1. On free/standard plan
+		// 2. Account created within last 14 days (trial period)
+		if (userSubscription.planId === "standard" || !userSubscription.planId) {
+			// Use Firebase Auth metadata for account creation time
+			if (currentUser?.metadata?.creationTime) {
+				const createdAt = new Date(currentUser.metadata.creationTime)
+				const now = new Date()
+				const daysSinceCreation = (now - createdAt) / (1000 * 60 * 60 * 24)
+				
+				// 14-day free trial period
+				return daysSinceCreation <= 14
+			}
+			// If no creation time available, check userData from Firestore
+			if (userData?.createdAt) {
+				const createdAt = userData.createdAt.toDate
+					? userData.createdAt.toDate()
+					: new Date(userData.createdAt)
+				const now = new Date()
+				const daysSinceCreation = (now - createdAt) / (1000 * 60 * 60 * 24)
+				
+				// 14-day free trial period
+				return daysSinceCreation <= 14
+			}
+			// If no creation data, assume new user (trial)
+			return true
+		}
+
+		return false
+	}
+
 	// Check if property creation is blocked (has 1+ property and not premium)
 	const isPropertyCreationBlocked = () => {
 		return properties.length >= 1 && !hasPremium()
@@ -1616,7 +1651,15 @@ export default function DashboardHost() {
 					</div>
 					<div className="host-user-info">
 						<span className="host-user-name">{displayName.split(" ")[0]}</span>
-						{userSubscription && (
+						{isFreeTrial() && (
+							<span className="host-free-trial-text">Free Trial</span>
+						)}
+						{isFreeTrial() && (
+							<span className="host-plan-badge free-trial">
+								⏱️ Free Trial
+							</span>
+						)}
+						{userSubscription && !isFreeTrial() && (
 							<span
 								className={`host-plan-badge ${
 									userSubscription.planId === "premium" ? "premium" : "free"

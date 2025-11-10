@@ -298,10 +298,51 @@
 	font-size: 1.1rem;
 	display: flex;
 	align-items: center;
-	justify-content: center;
-	gap: 0.5rem;
+	justify-content: space-between;
+	gap: 1rem;
 	margin-top: 1rem;
 	box-shadow: 0 4px 12px rgba(97, 191, 156, 0.3);
+}
+
+.monthly-goal-bonus-content {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.claim-monthly-goal-btn {
+	background: white;
+	color: var(--primary);
+	border: 2px solid white;
+	padding: 0.6rem 1.2rem;
+	border-radius: 8px;
+	font-weight: 700;
+	font-size: 0.95rem;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	white-space: nowrap;
+}
+
+.claim-monthly-goal-btn:hover:not(:disabled) {
+	background: rgba(255, 255, 255, 0.9);
+	transform: scale(1.05);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.claim-monthly-goal-btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+	background: rgba(255, 255, 255, 0.5);
+	color: rgba(97, 191, 156, 0.7);
+}
+
+.monthly-goal-claimed {
+	background: rgba(255, 255, 255, 0.2);
+	padding: 0.6rem 1.2rem;
+	border-radius: 8px;
+	font-weight: 600;
+	font-size: 0.95rem;
+	white-space: nowrap;
 }
 
 /* Rewards Section */
@@ -465,6 +506,13 @@
 	margin: 0;
 	color: #999;
 	font-size: 0.85rem;
+}
+
+.transaction-property {
+	margin-top: 0.25rem !important;
+	color: #666 !important;
+	font-size: 0.8rem !important;
+	font-style: italic;
 }
 
 .transaction-amount {

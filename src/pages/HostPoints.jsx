@@ -2,7 +2,19 @@ import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { db } from "../components/firebaseConfig"
-import { doc, getDoc, collection, query, where, getDocs, orderBy, limit, updateDoc, addDoc, serverTimestamp } from "firebase/firestore"
+import {
+	doc,
+	getDoc,
+	collection,
+	query,
+	where,
+	getDocs,
+	orderBy,
+	limit,
+	updateDoc,
+	addDoc,
+	serverTimestamp,
+} from "firebase/firestore"
 import { toast } from "react-stacked-toast"
 import {
 	FaArrowLeft,
@@ -13,16 +25,18 @@ import {
 	FaCoins,
 	FaCheckCircle,
 	FaCalendarAlt,
+	FaCalendarCheck,
 	FaPlus,
 	FaMinus,
 	FaFire,
+	FaBook,
 } from "react-icons/fa"
 import "../css/HostPoints.css"
 import logoPlain from "../assets/logoPlain.png"
 
 export default function HostPoints() {
 	const navigate = useNavigate()
-	const { currentUser, userData } = useAuth()
+	const { currentUser } = useAuth()
 	const [loading, setLoading] = useState(true)
 	const [pointsData, setPointsData] = useState({
 		totalPoints: 0,
@@ -37,6 +51,9 @@ export default function HostPoints() {
 		listings: { current: 0, target: 4, completed: false },
 		bookings: { current: 0, target: 4, completed: false },
 	})
+	const [monthlyGoalRewardClaimed, setMonthlyGoalRewardClaimed] =
+		useState(false)
+	const [isClaimingReward, setIsClaimingReward] = useState(false)
 	const [availableRewards] = useState([
 		{
 			id: 1,
@@ -65,7 +82,8 @@ export default function HostPoints() {
 		{
 			id: 4,
 			name: "Boost Property",
-			description: "Your property will be featured on the front page of the guest page",
+			description:
+				"Your property will be featured on the front page of the guest page",
 			points: 300,
 			icon: "🚀",
 			type: "boost",
@@ -116,23 +134,61 @@ export default function HostPoints() {
 			// Fetch monthly goals progress
 			const now = new Date()
 			const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-			const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+			const endOfMonth = new Date(
+				now.getFullYear(),
+				now.getMonth() + 1,
+				0,
+				23,
+				59,
+				59
+			)
 
 			// Count listings this month
+			// Query by hostId (top-level field)
 			const listingsQuery = query(
 				collection(db, "properties"),
 				where("hostId", "==", currentUser.uid)
 			)
 			const listingsSnapshot = await getDocs(listingsQuery)
-			const allListings = listingsSnapshot.docs.map((doc) => ({
+			let allListings = listingsSnapshot.docs.map((doc) => ({
 				id: doc.id,
 				...doc.data(),
 			}))
 
+			// Also check for properties with host.hostId (fallback)
+			const listingsQuery2 = query(
+				collection(db, "properties"),
+				where("host.hostId", "==", currentUser.uid)
+			)
+			try {
+				const listingsSnapshot2 = await getDocs(listingsQuery2)
+				const listings2 = listingsSnapshot2.docs.map((doc) => ({
+					id: doc.id,
+					...doc.data(),
+				}))
+				// Merge and deduplicate by id
+				const existingIds = new Set(allListings.map((l) => l.id))
+				const newListings = listings2.filter((l) => !existingIds.has(l.id))
+				allListings = [...allListings, ...newListings]
+			} catch (err) {
+				console.log("Could not query by host.hostId:", err)
+			}
+
+			// Filter listings created this month
 			const listingsThisMonth = allListings.filter((listing) => {
-				const createdAt = listing.createdAt?.toDate?.() || new Date(listing.createdAt || 0)
+				if (!listing.createdAt) {
+					// If no createdAt, include it (might be an older property)
+					return true
+				}
+				const createdAt =
+					listing.createdAt?.toDate?.() || new Date(listing.createdAt || 0)
 				return createdAt >= startOfMonth && createdAt <= endOfMonth
 			})
+
+			// If no listings this month but user has listings, show total listings count
+			const totalListings = allListings.length
+			const listingsCount =
+				listingsThisMonth.length > 0 ? listingsThisMonth.length : totalListings
 
 			// Count bookings this month (completed bookings)
 			const bookingsQuery = query(
@@ -148,14 +204,18 @@ export default function HostPoints() {
 			const bookingsThisMonth = allBookings.filter((booking) => {
 				const checkOutDate = new Date(booking.checkOutDate)
 				checkOutDate.setHours(0, 0, 0, 0)
-				return checkOutDate >= startOfMonth && checkOutDate <= endOfMonth && booking.status === "completed"
+				return (
+					checkOutDate >= startOfMonth &&
+					checkOutDate <= endOfMonth &&
+					booking.status === "completed"
+				)
 			})
 
 			setMonthlyGoals({
 				listings: {
-					current: listingsThisMonth.length,
+					current: listingsCount,
 					target: 4,
-					completed: listingsThisMonth.length >= 4,
+					completed: listingsCount >= 4,
 				},
 				bookings: {
 					current: bookingsThisMonth.length,
@@ -163,6 +223,80 @@ export default function HostPoints() {
 					completed: bookingsThisMonth.length >= 4,
 				},
 			})
+
+			console.log("📊 Monthly Goals:", {
+				listings: {
+					thisMonth: listingsThisMonth.length,
+					total: totalListings,
+					displayed: listingsCount,
+				},
+				bookings: bookingsThisMonth.length,
+			})
+
+			// Check if monthly goal reward was already claimed this month
+			try {
+				const monthlyGoalRewardQuery = query(
+					collection(db, "pointsTransactions"),
+					where("userId", "==", currentUser.uid),
+					where("type", "==", "monthly_goal_bonus"),
+					orderBy("createdAt", "desc"),
+					limit(1)
+				)
+				const rewardSnapshot = await getDocs(monthlyGoalRewardQuery)
+				if (!rewardSnapshot.empty) {
+					const rewardData = rewardSnapshot.docs[0].data()
+					const rewardDate =
+						rewardData.createdAt?.toDate?.() ||
+						new Date(rewardData.createdAt || 0)
+					// Check if reward was claimed this month
+					if (rewardDate >= startOfMonth && rewardDate <= endOfMonth) {
+						setMonthlyGoalRewardClaimed(true)
+					} else {
+						setMonthlyGoalRewardClaimed(false)
+					}
+				} else {
+					setMonthlyGoalRewardClaimed(false)
+				}
+			} catch {
+				// If orderBy fails, try without it
+				try {
+					const monthlyGoalRewardQuery2 = query(
+						collection(db, "pointsTransactions"),
+						where("userId", "==", currentUser.uid),
+						where("type", "==", "monthly_goal_bonus"),
+						limit(10)
+					)
+					const rewardSnapshot2 = await getDocs(monthlyGoalRewardQuery2)
+					if (!rewardSnapshot2.empty) {
+						// Sort manually and check the most recent
+						const rewards = rewardSnapshot2.docs.map((doc) => ({
+							id: doc.id,
+							...doc.data(),
+						}))
+						rewards.sort((a, b) => {
+							const dateA =
+								a.createdAt?.toDate?.() || new Date(a.createdAt || 0)
+							const dateB =
+								b.createdAt?.toDate?.() || new Date(b.createdAt || 0)
+							return dateB - dateA
+						})
+						const mostRecent = rewards[0]
+						const rewardDate =
+							mostRecent.createdAt?.toDate?.() ||
+							new Date(mostRecent.createdAt || 0)
+						if (rewardDate >= startOfMonth && rewardDate <= endOfMonth) {
+							setMonthlyGoalRewardClaimed(true)
+						} else {
+							setMonthlyGoalRewardClaimed(false)
+						}
+					} else {
+						setMonthlyGoalRewardClaimed(false)
+					}
+				} catch (err2) {
+					console.log("Could not check monthly goal reward status:", err2)
+					setMonthlyGoalRewardClaimed(false)
+				}
+			}
 
 			// Fetch transaction history
 			const transactionsQuery = query(
@@ -179,7 +313,7 @@ export default function HostPoints() {
 					...doc.data(),
 				}))
 				setTransactions(transactionsList)
-			} catch (error) {
+			} catch {
 				// Collection might not exist yet
 				console.log("Points transactions collection may not exist")
 				setTransactions([])
@@ -200,7 +334,7 @@ export default function HostPoints() {
 					...doc.data(),
 				}))
 				setRewards(rewardsList)
-			} catch (error) {
+			} catch {
 				console.log("Redeemed rewards collection may not exist")
 				setRewards([])
 			}
@@ -209,6 +343,68 @@ export default function HostPoints() {
 			toast.error("Failed to load points data")
 		} finally {
 			setLoading(false)
+		}
+	}
+
+	const handleClaimMonthlyGoal = async () => {
+		if (!currentUser?.uid) {
+			toast.error("Please log in to claim reward")
+			return
+		}
+
+		if (isClaimingReward) return
+
+		if (!monthlyGoals.listings.completed || !monthlyGoals.bookings.completed) {
+			toast.error("Complete all monthly goals to claim the reward")
+			return
+		}
+
+		if (monthlyGoalRewardClaimed) {
+			toast.error("Monthly goal reward already claimed this month")
+			return
+		}
+
+		try {
+			setIsClaimingReward(true)
+
+			const userDocRef = doc(db, "users", currentUser.uid)
+			const userDoc = await getDoc(userDocRef)
+
+			if (!userDoc.exists()) {
+				toast.error("User not found")
+				return
+			}
+
+			const currentPoints = userDoc.data().points || 0
+			const currentLifetimePoints = userDoc.data().lifetimePoints || 0
+			const newPoints = currentPoints + 200
+			const newLifetimePoints = currentLifetimePoints + 200
+
+			// Update user points
+			await updateDoc(userDocRef, {
+				points: newPoints,
+				lifetimePoints: newLifetimePoints,
+			})
+
+			// Add transaction record
+			await addDoc(collection(db, "pointsTransactions"), {
+				userId: currentUser.uid,
+				type: "monthly_goal_bonus",
+				amount: 200,
+				description: "Monthly Goal Bonus - Completed all monthly goals",
+				balanceBefore: currentPoints,
+				balanceAfter: newPoints,
+				createdAt: serverTimestamp(),
+			})
+
+			setMonthlyGoalRewardClaimed(true)
+			toast.success("🎉 +200 points claimed for completing monthly goals!")
+			fetchPointsData() // Refresh to update points display
+		} catch (error) {
+			console.error("Error claiming monthly goal reward:", error)
+			toast.error("Failed to claim reward. Please try again.")
+		} finally {
+			setIsClaimingReward(false)
 		}
 	}
 
@@ -309,6 +505,69 @@ export default function HostPoints() {
 		})
 	}
 
+	// Helper function to determine if transaction is earning or redeeming
+	const isEarningTransaction = (type) => {
+		const earningTypes = [
+			"earn",
+			"property_listed",
+			"monthly_goal_bonus",
+			"booking_completed",
+			"review_received",
+		]
+		return earningTypes.includes(type)
+	}
+
+	// Helper function to get transaction icon
+	const getTransactionIcon = (type) => {
+		switch (type) {
+			case "property_listed":
+				return <FaBook className="earn-icon" />
+			case "monthly_goal_bonus":
+				return <FaStar className="earn-icon" />
+			case "booking_completed":
+				return <FaCalendarCheck className="earn-icon" />
+			case "review_received":
+				return <FaStar className="earn-icon" />
+			case "redeem":
+				return <FaMinus className="redeem-icon" />
+			default:
+				return isEarningTransaction(type) ? (
+					<FaPlus className="earn-icon" />
+				) : (
+					<FaMinus className="redeem-icon" />
+				)
+		}
+	}
+
+	// Helper function to get transaction description
+	const getTransactionDescription = (transaction) => {
+		if (transaction.description) return transaction.description
+
+		switch (transaction.type) {
+			case "property_listed":
+				return transaction.propertyTitle
+					? `Points earned for listing "${transaction.propertyTitle}"`
+					: "Points earned for listing a property"
+			case "monthly_goal_bonus":
+				return "Monthly Goal Bonus - Completed all monthly goals"
+			case "booking_completed":
+				return transaction.propertyTitle
+					? `Points earned for completed booking at "${transaction.propertyTitle}"`
+					: "Points earned for completed booking"
+			case "review_received":
+				return "Points earned for receiving a 5-star review"
+			case "redeem":
+				return transaction.description || "Redeemed reward"
+			default:
+				return transaction.description || "Transaction"
+		}
+	}
+
+	// Helper function to get transaction amount
+	const getTransactionAmount = (transaction) => {
+		return transaction.amount || transaction.points || 0
+	}
+
 	if (loading) {
 		return (
 			<div className="host-points-container">
@@ -324,7 +583,10 @@ export default function HostPoints() {
 		<div className="host-points-container">
 			{/* Header */}
 			<div className="points-header">
-				<button className="host-points-back-button" onClick={() => navigate("/dashboardHost")}>
+				<button
+					className="host-points-back-button"
+					onClick={() => navigate("/dashboardHost")}
+				>
 					<FaArrowLeft />
 					<span>Back to Dashboard</span>
 				</button>
@@ -347,9 +609,14 @@ export default function HostPoints() {
 					<div className="points-balance-card">
 						<div className="balance-header">
 							<h2>Available Points</h2>
-							<div className="tier-badge" style={{ borderColor: getTierColor(pointsData.tier) }}>
+							<div
+								className="tier-badge"
+								style={{ borderColor: getTierColor(pointsData.tier) }}
+							>
 								{getTierIcon(pointsData.tier)}
-								<span style={{ color: getTierColor(pointsData.tier) }}>{pointsData.tier}</span>
+								<span style={{ color: getTierColor(pointsData.tier) }}>
+									{pointsData.tier}
+								</span>
 							</div>
 						</div>
 						<div className="balance-amount">
@@ -359,11 +626,15 @@ export default function HostPoints() {
 						<div className="balance-stats">
 							<div className="stat-item">
 								<span className="stat-label">Lifetime Points</span>
-								<span className="stat-value">{pointsData.lifetimePoints.toLocaleString()}</span>
+								<span className="stat-value">
+									{pointsData.lifetimePoints.toLocaleString()}
+								</span>
 							</div>
 							<div className="stat-item">
 								<span className="stat-label">Redeemed</span>
-								<span className="stat-value">{pointsData.redeemedPoints.toLocaleString()}</span>
+								<span className="stat-value">
+									{pointsData.redeemedPoints.toLocaleString()}
+								</span>
 							</div>
 						</div>
 					</div>
@@ -378,7 +649,8 @@ export default function HostPoints() {
 								<div className="earn-icon">📅</div>
 								<h4>Complete Bookings</h4>
 								<p>
-									{subscription?.planId === "premium" && subscription?.status === "active" ? (
+									{subscription?.planId === "premium" &&
+									subscription?.status === "active" ? (
 										<>+200 points per week (max per completed booking)</>
 									) : (
 										<>+100 points per week (max per completed booking)</>
@@ -394,7 +666,8 @@ export default function HostPoints() {
 								<div className="earn-icon">📝</div>
 								<h4>Property Listings</h4>
 								<p>
-									{subscription?.planId === "premium" && subscription?.status === "active" ? (
+									{subscription?.planId === "premium" &&
+									subscription?.status === "active" ? (
 										<>+200 points per week (max per new listing)</>
 									) : (
 										<>+100 points per week (max per new listing)</>
@@ -416,7 +689,8 @@ export default function HostPoints() {
 									<div className="goal-header">
 										<span className="goal-label">📝 Listings</span>
 										<span className="goal-progress">
-											{monthlyGoals.listings.current}/{monthlyGoals.listings.target}
+											{monthlyGoals.listings.current}/
+											{monthlyGoals.listings.target}
 										</span>
 									</div>
 									<div className="goal-bar">
@@ -424,7 +698,9 @@ export default function HostPoints() {
 											className="goal-bar-fill"
 											style={{
 												width: `${Math.min(
-													(monthlyGoals.listings.current / monthlyGoals.listings.target) * 100,
+													(monthlyGoals.listings.current /
+														monthlyGoals.listings.target) *
+														100,
 													100
 												)}%`,
 											}}
@@ -438,7 +714,8 @@ export default function HostPoints() {
 									<div className="goal-header">
 										<span className="goal-label">📅 Bookings</span>
 										<span className="goal-progress">
-											{monthlyGoals.bookings.current}/{monthlyGoals.bookings.target}
+											{monthlyGoals.bookings.current}/
+											{monthlyGoals.bookings.target}
 										</span>
 									</div>
 									<div className="goal-bar">
@@ -446,7 +723,9 @@ export default function HostPoints() {
 											className="goal-bar-fill"
 											style={{
 												width: `${Math.min(
-													(monthlyGoals.bookings.current / monthlyGoals.bookings.target) * 100,
+													(monthlyGoals.bookings.current /
+														monthlyGoals.bookings.target) *
+														100,
 													100
 												)}%`,
 											}}
@@ -457,11 +736,30 @@ export default function HostPoints() {
 									)}
 								</div>
 							</div>
-							{monthlyGoals.listings.completed && monthlyGoals.bookings.completed && (
-								<div className="monthly-goal-bonus">
-									<FaStar /> Monthly Goal Achieved! +200 points bonus
+							<div className="monthly-goal-bonus">
+								<div className="monthly-goal-bonus-content">
+									<FaStar />{" "}
+									{monthlyGoals.listings.completed &&
+									monthlyGoals.bookings.completed
+										? "Monthly Goal Achieved! +200 points bonus"
+										: "Complete all monthly goals to earn +200 points bonus"}
 								</div>
-							)}
+								{monthlyGoalRewardClaimed ? (
+									<span className="monthly-goal-claimed">✓ Claimed</span>
+								) : (
+									<button
+										className="claim-monthly-goal-btn"
+										onClick={handleClaimMonthlyGoal}
+										disabled={
+											isClaimingReward ||
+											!monthlyGoals.listings.completed ||
+											!monthlyGoals.bookings.completed
+										}
+									>
+										{isClaimingReward ? "Claiming..." : "Claim +200pts"}
+									</button>
+								)}
+							</div>
 						</div>
 					</div>
 				</div>
@@ -514,29 +812,36 @@ export default function HostPoints() {
 						</div>
 					) : (
 						<div className="transactions-list">
-							{transactions.map((transaction) => (
-								<div key={transaction.id} className="transaction-item">
-									<div className="transaction-icon">
-										{transaction.type === "earn" ? (
-											<FaPlus className="earn-icon" />
-										) : (
-											<FaMinus className="redeem-icon" />
-										)}
+							{transactions.map((transaction) => {
+								const isEarn = isEarningTransaction(transaction.type)
+								const amount = getTransactionAmount(transaction)
+								const description = getTransactionDescription(transaction)
+
+								return (
+									<div key={transaction.id} className="transaction-item">
+										<div className="transaction-icon">
+											{getTransactionIcon(transaction.type)}
+										</div>
+										<div className="transaction-details">
+											<h4>{description}</h4>
+											<p>{formatDate(transaction.createdAt)}</p>
+											{transaction.propertyTitle && (
+												<p className="transaction-property">
+													Property: {transaction.propertyTitle}
+												</p>
+											)}
+										</div>
+										<div
+											className={`transaction-amount ${
+												isEarn ? "earn" : "redeem"
+											}`}
+										>
+											{isEarn ? "+" : "-"}
+											{Math.abs(amount).toLocaleString()} pts
+										</div>
 									</div>
-									<div className="transaction-details">
-										<h4>{transaction.description || "Transaction"}</h4>
-										<p>{formatDate(transaction.createdAt)}</p>
-									</div>
-									<div
-										className={`transaction-amount ${
-											transaction.type === "earn" ? "earn" : "redeem"
-										}`}
-									>
-										{transaction.type === "earn" ? "+" : "-"}
-										{Math.abs(transaction.amount).toLocaleString()}
-									</div>
-								</div>
-							))}
+								)
+							})}
 						</div>
 					)}
 				</div>
@@ -569,4 +874,3 @@ export default function HostPoints() {
 		</div>
 	)
 }
-

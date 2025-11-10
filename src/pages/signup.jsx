@@ -134,7 +134,8 @@ export default function Signup() {
 			setCurrentStep(3)
 			toast.success(`Welcome, ${user.displayName}!`)
 		} catch (error) {
-			toast.error(error.message)
+			const errorMessage = error?.message || error?.toString() || "An error occurred. Please try again."
+			toast.error(errorMessage)
 			console.error(error)
 		}
 	}
@@ -200,7 +201,8 @@ export default function Signup() {
 				navigate("/login")
 			}, 100)
 		} catch (error) {
-			toast.error(error.message)
+			const errorMessage = error?.message || error?.toString() || "An error occurred. Please try again."
+			toast.error(errorMessage)
 			console.error(error)
 		}
 	}
@@ -213,40 +215,45 @@ export default function Signup() {
 
 		try {
 			// Check if user is already signed in (Google sign-in case)
-			if (auth.currentUser) {
+			const currentUser = auth.currentUser
+			if (currentUser) {
 				console.log("✅ Branch: User already signed in")
+
+				// Store user data in variables to avoid null reference issues
+				const userEmail = currentUser.email || formdata.email
+				const userDisplayName = currentUser.displayName || `${formdata.firstName} ${formdata.lastName}`
+				const userUid = currentUser.uid
+
+				if (!userEmail) {
+					throw new Error("User email is required but not available")
+				}
 
 				// Save to Firestore pendingUsers collection
 				const userData = {
-					displayName:
-						auth.currentUser.displayName ||
-						`${formdata.firstName} ${formdata.lastName}`,
-					email: auth.currentUser.email || formdata.email,
-					uid: auth.currentUser.uid,
+					displayName: userDisplayName,
+					email: userEmail,
+					uid: userUid,
 					userType: userType,
 					firstName:
 						formdata.firstName ||
-						auth.currentUser.displayName?.split(" ")[0] ||
+						currentUser.displayName?.split(" ")[0] ||
 						"",
 					lastName:
 						formdata.lastName ||
-						auth.currentUser.displayName?.split(" ").slice(1).join(" ") ||
+						currentUser.displayName?.split(" ").slice(1).join(" ") ||
 						"",
-					signInMethod: auth.currentUser.providerData[0]?.providerId || "email",
+					signInMethod: currentUser.providerData[0]?.providerId || "email",
 					createdAt: new Date(),
 				}
 
 				console.log("💾 Attempting to save to pendingUsers collection...")
-				await setDoc(doc(db, "pendingUsers", auth.currentUser.uid), userData)
+				await setDoc(doc(db, "pendingUsers", userUid), userData)
 				console.log("✅ SUCCESS: Saved to pendingUsers collection:", userData)
 
 				// Store only email in localStorage
 				console.log("💾 Storing email in localStorage...")
-				localStorage.setItem("pendingUserEmail", auth.currentUser.email)
-				console.log(
-					"✅ SUCCESS: Stored email in localStorage:",
-					auth.currentUser.email
-				)
+				localStorage.setItem("pendingUserEmail", userEmail)
+				console.log("✅ SUCCESS: Stored email in localStorage:", userEmail)
 
 				// Verify it was saved
 				const verify = localStorage.getItem("pendingUserEmail")
@@ -254,10 +261,8 @@ export default function Signup() {
 
 				// User is already signed in via Google, just send verification using EmailJS
 				await sendVerificationEmail({
-					to_email: auth.currentUser.email,
-					to_name:
-						auth.currentUser.displayName ||
-						formdata.firstName + " " + formdata.lastName,
+					to_email: userEmail,
+					to_name: userDisplayName,
 					verification_link: `${window.location.origin}/verify-email`,
 				})
 				toast.success(
@@ -322,7 +327,8 @@ export default function Signup() {
 				}, 100)
 			}
 		} catch (error) {
-			toast.error(error.message)
+			const errorMessage = error?.message || error?.toString() || "An error occurred. Please try again."
+			toast.error(errorMessage)
 			console.error(error)
 		}
 	}

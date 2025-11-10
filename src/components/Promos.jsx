@@ -183,10 +183,11 @@ export default function Promos({ isOpen, onClose, userId = null }) {
 
 	const getCategoryLabel = (category) => {
 		const labels = {
-			all: "All Categories",
+			all: "All Categories (except Host)",
 			properties: "Properties",
 			experiences: "Experiences",
 			service: "Service",
+			host: "Host (Subscription)",
 		}
 		return labels[category] || category
 	}

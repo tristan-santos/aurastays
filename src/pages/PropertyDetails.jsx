@@ -1222,6 +1222,15 @@ export default function PropertyDetails() {
 			const promoData = promosSnapshot.docs[0].data()
 			const promoId = promosSnapshot.docs[0].id
 
+			// Check if promo is applicable to bookings (not host subscriptions)
+			if (promoData.applicableTo === "host") {
+				toast.error(
+					"This promo code is only valid for host subscriptions, not bookings"
+				)
+				setIsValidatingPromo(false)
+				return
+			}
+
 			// Validation checks
 			if (!promoData.isActive) {
 				toast.error("This promo code is no longer active")
@@ -1405,6 +1414,9 @@ export default function PropertyDetails() {
 				console.log("Using auth email as fallback:", err)
 			}
 
+			// Check if instant booking is enabled
+			const isInstantBook = property?.availability?.instantBook === true
+
 			const bookingData = {
 				propertyId,
 				propertyTitle: property.title,
@@ -1443,7 +1455,16 @@ export default function PropertyDetails() {
 					amountPaid: prices.total,
 				},
 				bookedDates: bookedDatesList,
-				status: "pending", // Pending host review
+				status: isInstantBook ? "confirmed" : "pending", // Instant book = confirmed, else pending host approval
+				instantBook: isInstantBook,
+				...(isInstantBook && {
+					approval: {
+						status: "approved",
+						approvedAt: serverTimestamp(),
+						approvedBy: "system",
+						approvedByType: "instant_book",
+					},
+				}),
 				createdAt: serverTimestamp(),
 			}
 
@@ -1465,6 +1486,113 @@ export default function PropertyDetails() {
 			} catch (notifError) {
 				console.error("Error creating booking notification:", notifError)
 				// Don't fail the booking if notification fails
+			}
+
+			// Handle instant booking: Create invoice and order approval
+			if (isInstantBook) {
+				try {
+					// Create invoice for guest
+					const invoiceData = {
+						bookingId: docRef.id,
+						guestId: currentUser.uid,
+						guestName: userName,
+						guestEmail: userEmail,
+						hostId: property.hostId || "UI7UgbxJj4atJmzmS61fAjA2E0A3",
+						propertyId: propertyId,
+						propertyTitle: property.title,
+						checkInDate,
+						checkOutDate,
+						numberOfGuests,
+						numberOfNights: prices.nights,
+						pricing: {
+							basePrice: prices.basePrice,
+							subtotal: prices.subtotal,
+							cleaningFee: prices.cleaningFee,
+							serviceFee: prices.serviceFee,
+							guestFee: prices.guestFee,
+							promoDiscount: prices.promoDiscount || 0,
+							totalBeforeDiscount: prices.totalBeforeDiscount,
+							total: prices.total,
+						},
+						payment: {
+							method: paymentDetails.method || "paypal",
+							paymentId,
+							paymentDate: new Date().toISOString(),
+							amountPaid: prices.total,
+							currency: "PHP",
+						},
+						invoiceNumber: `INV-${docRef.id
+							.substring(0, 8)
+							.toUpperCase()}-${Date.now()}`,
+						status: "paid",
+						type: "booking",
+						createdAt: serverTimestamp(),
+					}
+
+					await addDoc(firestoreCollection(db, "invoices"), invoiceData)
+					console.log("✅ Invoice created for instant booking")
+
+					// Create order approval record
+					const orderApprovalData = {
+						bookingId: docRef.id,
+						propertyId: propertyId,
+						propertyTitle: property.title,
+						guestId: currentUser.uid,
+						guestName: userName,
+						guestEmail: userEmail,
+						hostId: property.hostId || "UI7UgbxJj4atJmzmS61fAjA2E0A3",
+						status: "approved",
+						approvedAt: serverTimestamp(),
+						approvedBy: "system",
+						approvedByType: "instant_book",
+						approvalMethod: "automatic",
+						checkInDate,
+						checkOutDate,
+						totalAmount: prices.total,
+						createdAt: serverTimestamp(),
+					}
+
+					await addDoc(
+						firestoreCollection(db, "orderApprovals"),
+						orderApprovalData
+					)
+					console.log("✅ Order approval created for instant booking")
+
+					// Send invoice notification to guest
+					try {
+						const { createInvoiceNotification } = await import(
+							"../utils/notifications"
+						)
+						await createInvoiceNotification(currentUser.uid, {
+							invoiceNumber: invoiceData.invoiceNumber,
+							bookingId: docRef.id,
+							propertyTitle: property.title,
+							totalAmount: prices.total,
+							checkInDate,
+							checkOutDate,
+						})
+						console.log("✅ Invoice notification sent to guest")
+					} catch (invoiceNotifError) {
+						console.error(
+							"Error sending invoice notification:",
+							invoiceNotifError
+						)
+						// Don't fail the booking if notification fails
+					}
+
+					// Send booking confirmation to guest (instant booking)
+					toast.success(
+						`🎉 Booking confirmed! Your instant booking for ${property.title} has been approved. Invoice sent to ${userEmail}`
+					)
+				} catch (instantBookError) {
+					console.error("Error processing instant booking:", instantBookError)
+					// Don't fail the booking if instant book processing fails
+				}
+			} else {
+				// Regular booking - pending host approval
+				toast.success(
+					`Booking request sent! The host will review and approve your booking.`
+				)
 			}
 
 			// Add money to admin wallet for ALL payment methods

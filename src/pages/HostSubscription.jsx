@@ -33,6 +33,12 @@ export default function HostSubscription() {
 	const [isPayPalLoaded, setIsPayPalLoaded] = useState(false)
 	const paypalRef = useRef(null)
 	const paypalButtonsInstanceRef = useRef(null)
+	
+	// Promo code states
+	const [promoCode, setPromoCode] = useState("")
+	const [appliedPromo, setAppliedPromo] = useState(null)
+	const [promoDiscount, setPromoDiscount] = useState(0)
+	const [isValidatingPromo, setIsValidatingPromo] = useState(false)
 
 	const plans = [
 		{

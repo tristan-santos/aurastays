@@ -1,5 +1,5 @@
 import { useAuth } from "../contexts/AuthContext"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { auth, db } from "../components/firebaseConfig"
 import {
@@ -10,8 +10,12 @@ import {
 	setDoc,
 	addDoc,
 	deleteDoc,
+	query,
+	where,
+	limit,
 } from "firebase/firestore"
 import { toast } from "react-stacked-toast"
+import { FaCalendarAlt, FaTimes } from "react-icons/fa"
 import {
 	Chart as ChartJS,
 	CategoryScale,
@@ -40,6 +44,42 @@ ChartJS.register(
 	Legend
 )
 
+// Component to show tooltip only when text is truncated
+const DescriptionWithTooltip = ({ text }) => {
+	const textRef = useRef(null)
+	const [showTooltip, setShowTooltip] = useState(false)
+	const [isTruncated, setIsTruncated] = useState(false)
+
+	useEffect(() => {
+		const checkTruncation = () => {
+			if (textRef.current) {
+				const isOverflowing =
+					textRef.current.scrollWidth > textRef.current.clientWidth
+				setIsTruncated(isOverflowing)
+			}
+		}
+
+		checkTruncation()
+		window.addEventListener("resize", checkTruncation)
+		return () => window.removeEventListener("resize", checkTruncation)
+	}, [text])
+
+	return (
+		<div
+			className="promo-description-wrapper"
+			onMouseEnter={() => isTruncated && setShowTooltip(true)}
+			onMouseLeave={() => setShowTooltip(false)}
+		>
+			<span ref={textRef} className="promo-description-text">
+				{text}
+			</span>
+			{showTooltip && isTruncated && (
+				<div className="promo-description-tooltip">{text}</div>
+			)}
+		</div>
+	)
+}
+
 const AdminDashboard = () => {
 	const { currentUser, userData } = useAuth()
 	const navigate = useNavigate()
@@ -56,6 +96,9 @@ const AdminDashboard = () => {
 	const [bestReviews, setBestReviews] = useState([])
 	const [lowestReviews, setLowestReviews] = useState([])
 	const [pendingPayouts, setPendingPayouts] = useState([])
+	const [hosts, setHosts] = useState([])
+	const [selectedHost, setSelectedHost] = useState(null)
+	const [showHostModal, setShowHostModal] = useState(false)
 	const [loading, setLoading] = useState(true)
 	const [chartData, setChartData] = useState({
 		bookings: null,
@@ -107,6 +150,11 @@ const AdminDashboard = () => {
 	const [showPaypalModal, setShowPaypalModal] = useState(false)
 	const [paypalEmailInput, setPaypalEmailInput] = useState("")
 
+	// Calendar state for promo validity dates
+	const [promoCalendarMonth, setPromoCalendarMonth] = useState(new Date())
+	const [selectingValidFrom, setSelectingValidFrom] = useState(true)
+	const [showPromoDatePicker, setShowPromoDatePicker] = useState(false)
+
 	useEffect(() => {
 		fetchAdminData()
 		fetchPlatformPolicies()
@@ -116,6 +164,8 @@ const AdminDashboard = () => {
 	useEffect(() => {
 		if (activeTab === "wallet") {
 			fetchWalletData()
+		} else if (activeTab === "manageHost") {
+			fetchHostsData()
 		}
 	}, [activeTab])
 
@@ -396,6 +446,127 @@ const AdminDashboard = () => {
 		} catch (err) {
 			console.error("Error rejecting payout:", err)
 			toast.error("Failed to reject payout")
+		}
+	}
+
+	const fetchHostsData = async () => {
+		try {
+			setLoading(true)
+
+			// Fetch all properties
+			const propertiesRef = collection(db, "properties")
+			const propertiesSnapshot = await getDocs(propertiesRef)
+			const properties = propertiesSnapshot.docs.map((doc) => ({
+				id: doc.id,
+				...doc.data(),
+			}))
+
+			// Group properties by hostId and calculate average ratings
+			const hostMap = new Map()
+
+			properties.forEach((property) => {
+				const hostId = property.hostId || property.host?.hostId
+				if (!hostId) return
+
+				if (!hostMap.has(hostId)) {
+					hostMap.set(hostId, {
+						hostId,
+						properties: [],
+						totalRating: 0,
+						ratedPropertiesCount: 0,
+					})
+				}
+
+				const hostData = hostMap.get(hostId)
+				hostData.properties.push(property)
+
+				// Only count properties with ratings > 0
+				if (property.rating && property.rating > 0) {
+					hostData.totalRating += property.rating
+					hostData.ratedPropertiesCount += 1
+				}
+			})
+
+			// Calculate average ratings and fetch user data
+			const hostsList = []
+			const usersRef = collection(db, "users")
+			const subscriptionsRef = collection(db, "subscriptions")
+
+			for (const [hostId, hostData] of hostMap.entries()) {
+				const averageRating =
+					hostData.ratedPropertiesCount > 0
+						? hostData.totalRating / hostData.ratedPropertiesCount
+						: 0
+
+				// Fetch user data
+				let userData = null
+				try {
+					const userQuery = query(
+						usersRef,
+						where("uid", "==", hostId),
+						limit(1)
+					)
+					const userSnapshot = await getDocs(userQuery)
+					if (!userSnapshot.empty) {
+						userData = {
+							id: userSnapshot.docs[0].id,
+							...userSnapshot.docs[0].data(),
+						}
+					}
+				} catch (err) {
+					console.error(`Error fetching user data for host ${hostId}:`, err)
+				}
+
+				// Fetch subscription data
+				let subscriptionType = "Free"
+				try {
+					const subscriptionQuery = query(
+						subscriptionsRef,
+						where("userId", "==", hostId),
+						where("status", "in", ["active", "pending"])
+					)
+					const subscriptionSnapshot = await getDocs(subscriptionQuery)
+					if (!subscriptionSnapshot.empty) {
+						const subData = subscriptionSnapshot.docs[0].data()
+						if (subData.planId === "premium") {
+							subscriptionType = "Premium"
+						}
+					} else if (userData?.subscription?.planId === "premium") {
+						subscriptionType = "Premium"
+					}
+				} catch (err) {
+					console.error(
+						`Error fetching subscription data for host ${hostId}:`,
+						err
+					)
+				}
+
+				hostsList.push({
+					hostId,
+					displayName:
+						userData?.displayName ||
+						(userData?.firstName && userData?.lastName
+							? `${userData.firstName} ${userData.lastName}`
+							: userData?.firstName || "Unknown Host"),
+					email: userData?.email || "N/A",
+					propertiesCount: hostData.properties.length,
+					averageRating: Math.round(averageRating * 10) / 10, // Round to 1 decimal
+					ratedPropertiesCount: hostData.ratedPropertiesCount,
+					properties: hostData.properties,
+					userData,
+					subscriptionType,
+				})
+			}
+
+			// Sort by average rating (descending)
+			hostsList.sort((a, b) => b.averageRating - a.averageRating)
+
+			setHosts(hostsList)
+			setLoading(false)
+		} catch (err) {
+			console.error("Error fetching hosts data:", err)
+			toast.error("Failed to fetch hosts data")
+			setLoading(false)
 		}
 	}
 
@@ -699,6 +870,106 @@ const AdminDashboard = () => {
 			...prev,
 			[field]: value,
 		}))
+	}
+
+	// Calendar functions for promo validity dates
+	const generatePromoCalendarDays = () => {
+		const year = promoCalendarMonth.getFullYear()
+		const month = promoCalendarMonth.getMonth()
+		const firstDay = new Date(year, month, 1).getDay()
+		const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+		const days = []
+		// Add empty cells for days before month starts
+		for (let i = 0; i < firstDay; i++) {
+			days.push(null)
+		}
+		// Add days of the month
+		for (let day = 1; day <= daysInMonth; day++) {
+			const dateString = `${year}-${String(month + 1).padStart(
+				2,
+				"0"
+			)}-${String(day).padStart(2, "0")}`
+			const date = new Date(dateString)
+			const today = new Date()
+			today.setHours(0, 0, 0, 0)
+			days.push({
+				day,
+				dateString,
+				isPast: date < today,
+			})
+		}
+		return days
+	}
+
+	const previousPromoMonth = () => {
+		setPromoCalendarMonth(
+			new Date(
+				promoCalendarMonth.getFullYear(),
+				promoCalendarMonth.getMonth() - 1
+			)
+		)
+	}
+
+	const nextPromoMonth = () => {
+		setPromoCalendarMonth(
+			new Date(
+				promoCalendarMonth.getFullYear(),
+				promoCalendarMonth.getMonth() + 1
+			)
+		)
+	}
+
+	const handlePromoDateClick = (dateString) => {
+		const selectedDate = new Date(dateString)
+		const today = new Date()
+		today.setHours(0, 0, 0, 0)
+
+		if (selectedDate < today) {
+			toast.error("Cannot select past dates")
+			return
+		}
+
+		// Format as datetime-local format (YYYY-MM-DDTHH:mm)
+		const dateTimeString = `${dateString}T00:00`
+
+		if (selectingValidFrom) {
+			handlePromoInputChange("validFrom", dateTimeString)
+			setSelectingValidFrom(false)
+			// If validUntil is before validFrom, clear it
+			if (
+				promoFormData.validUntil &&
+				new Date(promoFormData.validUntil) < selectedDate
+			) {
+				handlePromoInputChange("validUntil", "")
+			}
+		} else {
+			// Selecting validUntil
+			if (
+				promoFormData.validFrom &&
+				new Date(promoFormData.validFrom) > selectedDate
+			) {
+				toast.error("Valid Until must be after Valid From")
+				return
+			}
+			handlePromoInputChange("validUntil", dateTimeString)
+			setShowPromoDatePicker(false)
+		}
+	}
+
+	const openPromoDatePicker = (isValidFrom) => {
+		setSelectingValidFrom(isValidFrom)
+		setShowPromoDatePicker(true)
+	}
+
+	const formatPromoDate = (dateString) => {
+		if (!dateString) return ""
+		const date = new Date(dateString)
+		return date.toLocaleDateString("en-US", {
+			year: "numeric",
+			month: "short",
+			day: "numeric",
+		})
 	}
 
 	const handleNextStep = () => {
@@ -1716,6 +1987,15 @@ const AdminDashboard = () => {
 					</button>
 					<button
 						className={`sidebar-item ${
+							activeTab === "manageHost" ? "active" : ""
+						}`}
+						onClick={() => setActiveTab("manageHost")}
+					>
+						<span className="sidebar-icon">👥</span>
+						<span className="sidebar-text">Manage Host</span>
+					</button>
+					<button
+						className={`sidebar-item ${
 							activeTab === "policies" ? "active" : ""
 						}`}
 						onClick={() => setActiveTab("policies")}
@@ -1761,6 +2041,13 @@ const AdminDashboard = () => {
 					>
 						<span className="sidebar-icon">💰</span>
 						<span className="sidebar-text">E-Wallet</span>
+					</button>
+					<button
+						className={`sidebar-item ${activeTab === "payout" ? "active" : ""}`}
+						onClick={() => setActiveTab("payout")}
+					>
+						<span className="sidebar-icon">💸</span>
+						<span className="sidebar-text">Payout</span>
 					</button>
 				</nav>
 			</aside>
@@ -2204,13 +2491,14 @@ const AdminDashboard = () => {
 
 						{/* Property Removal Policy */}
 						<div className="policy-card warning-card">
-							<h3>⚠️ Property Removal & Delisting Policy</h3>
+							<h3>⚠️ Account Removal Policy</h3>
 							<div className="policy-content">
 								<div className="policy-item">
-									<h4>Automatic Removal Triggers</h4>
+									<h4>Account Removal</h4>
 									<ul>
 										<li>
-											<strong>Low Rating:</strong> Properties with rating below{" "}
+											<strong>Low Rating:</strong> Hosts with average rating
+											below{" "}
 											<input
 												type="number"
 												className="inline-input"
@@ -3217,8 +3505,17 @@ const AdminDashboard = () => {
 								<div>
 									<h4>Inactive Promos</h4>
 									<p>
-										{promos.filter((p) => p.isActive === false).length} inactive
-										codes
+										{
+											promos.filter((p) => {
+												const now = new Date()
+												const validFrom = p.validFrom
+													? new Date(p.validFrom)
+													: null
+												const isScheduled = validFrom && validFrom > now
+												return p.isActive === false && !isScheduled
+											}).length
+										}{" "}
+										inactive codes
 									</p>
 								</div>
 							</div>
@@ -3300,7 +3597,18 @@ const AdminDashboard = () => {
 									}`}
 									onClick={() => setPromoFilter("inactive")}
 								>
-									Inactive ({promos.filter((p) => p.isActive === false).length})
+									Inactive (
+									{
+										promos.filter((p) => {
+											const now = new Date()
+											const validFrom = p.validFrom
+												? new Date(p.validFrom)
+												: null
+											const isScheduled = validFrom && validFrom > now
+											return p.isActive === false && !isScheduled
+										}).length
+									}
+									)
 								</button>
 								<button
 									className={`filter-tab ${
@@ -3390,7 +3698,7 @@ const AdminDashboard = () => {
 															!isScheduled
 														)
 													if (promoFilter === "inactive")
-														return promo.isActive === false
+														return promo.isActive === false && !isScheduled
 													if (promoFilter === "expired") return isExpired
 													if (promoFilter === "scheduled") return isScheduled
 													return true
@@ -3421,25 +3729,47 @@ const AdminDashboard = () => {
 																</strong>
 															</td>
 															<td className="promo-description">
-																{promo.description}
+																<DescriptionWithTooltip
+																	text={promo.description}
+																/>
+															</td>
+															<td style={{ verticalAlign: "middle" }}>
+																{(() => {
+																	const discountValue = promo.discountValue || 0
+																	const discountType =
+																		promo.discountType || "fixed"
+
+																	if (discountValue > 0) {
+																		return discountType === "percentage" ? (
+																			<span className="discount-badge percentage">
+																				{discountValue}%
+																				{promo.maxDiscount > 0 &&
+																					` (Max ₱${promo.maxDiscount})`}
+																			</span>
+																		) : (
+																			<span className="discount-badge fixedPrice">
+																				₱{discountValue}
+																			</span>
+																		)
+																	}
+																	return (
+																		<span
+																			style={{
+																				color: "#999",
+																				fontStyle: "italic",
+																			}}
+																		>
+																			No discount
+																		</span>
+																	)
+																})()}
 															</td>
 															<td>
-																{promo.discountType === "percentage" ? (
-																	<span className="discount-badge percentage">
-																		{promo.discountValue}%
-																		{promo.maxDiscount > 0 &&
-																			` (Max ₱${promo.maxDiscount})`}
-																	</span>
+																{promo.minPurchase > 0 ? (
+																	<span>₱{promo.minPurchase}</span>
 																) : (
-																	<span className="discount-badge fixed">
-																		₱{promo.discountValue}
-																	</span>
+																	<span style={{ color: "#999" }}>None</span>
 																)}
-															</td>
-															<td>
-																{promo.minPurchase > 0
-																	? `₱${promo.minPurchase}`
-																	: "None"}
 															</td>
 															<td>
 																<div className="usage-info">
@@ -3549,7 +3879,7 @@ const AdminDashboard = () => {
 												promo.isActive === true && !isExpired && !isScheduled
 											)
 										if (promoFilter === "inactive")
-											return promo.isActive === false
+											return promo.isActive === false && !isScheduled
 										if (promoFilter === "expired") return isExpired
 										if (promoFilter === "scheduled") return isScheduled
 										return true
@@ -4108,28 +4438,40 @@ const AdminDashboard = () => {
 								<div className="progress-steps">
 									<div
 										className={`progress-step ${
-											promoWizardStep >= 1 ? "active" : ""
+											promoWizardStep > 1
+												? "completed"
+												: promoWizardStep === 1
+												? "active"
+												: ""
 										}`}
 									>
 										1
 									</div>
 									<div
 										className={`progress-step ${
-											promoWizardStep >= 2 ? "active" : ""
+											promoWizardStep > 2
+												? "completed"
+												: promoWizardStep === 2
+												? "active"
+												: ""
 										}`}
 									>
 										2
 									</div>
 									<div
 										className={`progress-step ${
-											promoWizardStep >= 3 ? "active" : ""
+											promoWizardStep > 3
+												? "completed"
+												: promoWizardStep === 3
+												? "active"
+												: ""
 										}`}
 									>
 										3
 									</div>
 									<div
 										className={`progress-step ${
-											promoWizardStep >= 4 ? "active" : ""
+											promoWizardStep === 4 ? "active" : ""
 										}`}
 									>
 										4
@@ -4184,14 +4526,27 @@ const AdminDashboard = () => {
 											<label>Applicable To</label>
 											<select
 												value={promoFormData.applicableTo}
-												onChange={(e) =>
-													handlePromoInputChange("applicableTo", e.target.value)
-												}
+												onChange={(e) => {
+													const newApplicableTo = e.target.value
+													handlePromoInputChange(
+														"applicableTo",
+														newApplicableTo
+													)
+													// Reset minPurchase to 0 when selecting "host"
+													if (newApplicableTo === "host") {
+														handlePromoInputChange("minPurchase", 0)
+													}
+												}}
 											>
-												<option value="all">All Categories</option>
+												<option value="all">
+													All Categories (except Host)
+												</option>
 												<option value="properties">Properties Only</option>
 												<option value="experiences">Experiences Only</option>
 												<option value="service">Service Only</option>
+												<option value="host">
+													Host (Subscription Discount)
+												</option>
 											</select>
 										</div>
 									</div>
@@ -4305,23 +4660,25 @@ const AdminDashboard = () => {
 												</small>
 											</div>
 										)}
-										<div className="form-group">
-											<label>Minimum Purchase Amount (₱)</label>
-											<input
-												type="number"
-												placeholder="e.g., 1000"
-												value={promoFormData.minPurchase || ""}
-												onChange={(e) =>
-													handlePromoInputChange(
-														"minPurchase",
-														parseFloat(e.target.value) || 0
-													)
-												}
-												min="0"
-												step="100"
-											/>
-											<small>Minimum amount required to use this promo</small>
-										</div>
+										{promoFormData.applicableTo !== "host" && (
+											<div className="form-group">
+												<label>Minimum Purchase Amount (₱)</label>
+												<input
+													type="number"
+													placeholder="e.g., 1000"
+													value={promoFormData.minPurchase || ""}
+													onChange={(e) =>
+														handlePromoInputChange(
+															"minPurchase",
+															parseFloat(e.target.value) || 0
+														)
+													}
+													min="0"
+													step="100"
+												/>
+												<small>Minimum amount required to use this promo</small>
+											</div>
+										)}
 									</div>
 								)}
 
@@ -4379,24 +4736,106 @@ const AdminDashboard = () => {
 										<h3>⏰ Validity Period</h3>
 										<div className="form-group">
 											<label>Valid From</label>
-											<input
-												type="datetime-local"
-												value={promoFormData.validFrom}
-												onChange={(e) =>
-													handlePromoInputChange("validFrom", e.target.value)
-												}
-											/>
+											<div
+												style={{
+													display: "flex",
+													gap: "0.5rem",
+													alignItems: "center",
+												}}
+											>
+												<button
+													type="button"
+													onClick={() => openPromoDatePicker(true)}
+													style={{
+														flex: 1,
+														padding: "0.75rem",
+														border: "1px solid #ddd",
+														borderRadius: "8px",
+														background: "#fff",
+														cursor: "pointer",
+														display: "flex",
+														alignItems: "center",
+														justifyContent: "space-between",
+														gap: "0.5rem",
+													}}
+												>
+													<span>
+														{promoFormData.validFrom
+															? formatPromoDate(promoFormData.validFrom)
+															: "Select start date"}
+													</span>
+													<FaCalendarAlt />
+												</button>
+												{promoFormData.validFrom && (
+													<button
+														type="button"
+														onClick={() =>
+															handlePromoInputChange("validFrom", "")
+														}
+														style={{
+															padding: "0.5rem",
+															border: "none",
+															background: "#f0f0f0",
+															borderRadius: "4px",
+															cursor: "pointer",
+														}}
+													>
+														<FaTimes />
+													</button>
+												)}
+											</div>
 											<small>Leave empty to start immediately</small>
 										</div>
 										<div className="form-group">
 											<label>Valid Until</label>
-											<input
-												type="datetime-local"
-												value={promoFormData.validUntil}
-												onChange={(e) =>
-													handlePromoInputChange("validUntil", e.target.value)
-												}
-											/>
+											<div
+												style={{
+													display: "flex",
+													gap: "0.5rem",
+													alignItems: "center",
+												}}
+											>
+												<button
+													type="button"
+													onClick={() => openPromoDatePicker(false)}
+													style={{
+														flex: 1,
+														padding: "0.75rem",
+														border: "1px solid #ddd",
+														borderRadius: "8px",
+														background: "#fff",
+														cursor: "pointer",
+														display: "flex",
+														alignItems: "center",
+														justifyContent: "space-between",
+														gap: "0.5rem",
+													}}
+												>
+													<span>
+														{promoFormData.validUntil
+															? formatPromoDate(promoFormData.validUntil)
+															: "Select end date"}
+													</span>
+													<FaCalendarAlt />
+												</button>
+												{promoFormData.validUntil && (
+													<button
+														type="button"
+														onClick={() =>
+															handlePromoInputChange("validUntil", "")
+														}
+														style={{
+															padding: "0.5rem",
+															border: "none",
+															background: "#f0f0f0",
+															borderRadius: "4px",
+															cursor: "pointer",
+														}}
+													>
+														<FaTimes />
+													</button>
+												)}
+											</div>
 											<small>Leave empty for no expiration</small>
 										</div>
 										<div className="form-group">
@@ -4408,7 +4847,9 @@ const AdminDashboard = () => {
 														handlePromoInputChange("isActive", e.target.checked)
 													}
 												/>
-												<span>Activate promo immediately</span>
+												<span style={{ marginLeft: "1rem" }}>
+													Activate promo immediately
+												</span>
 											</label>
 										</div>
 
@@ -4539,6 +4980,197 @@ const AdminDashboard = () => {
 											{isCreatingPromo ? "Creating..." : "🎉 Create Promo"}
 										</button>
 									)}
+								</div>
+							</div>
+						</div>
+					</div>
+				)}
+
+				{/* Promo Date Picker Modal */}
+				{showPromoDatePicker && (
+					<div
+						className="date-picker-modal-overlay"
+						onClick={() => setShowPromoDatePicker(false)}
+						style={{
+							position: "fixed",
+							top: 0,
+							left: 0,
+							right: 0,
+							bottom: 0,
+							background: "rgba(0, 0, 0, 0.5)",
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+							zIndex: 10000,
+						}}
+					>
+						<div
+							className="date-picker-modal-content"
+							onClick={(e) => e.stopPropagation()}
+							style={{
+								background: "#fff",
+								borderRadius: "12px",
+								padding: "2rem",
+								maxWidth: "500px",
+								width: "90%",
+								maxHeight: "90vh",
+								overflow: "auto",
+								position: "relative",
+							}}
+						>
+							<button
+								className="close-date-modal"
+								onClick={() => setShowPromoDatePicker(false)}
+								style={{
+									position: "absolute",
+									top: "1rem",
+									right: "1rem",
+									background: "none",
+									border: "none",
+									fontSize: "1.5rem",
+									cursor: "pointer",
+									color: "#666",
+								}}
+							>
+								<FaTimes />
+							</button>
+							<h2 style={{ marginTop: 0, marginBottom: "1rem" }}>
+								<FaCalendarAlt style={{ marginRight: "0.5rem" }} />
+								Select {selectingValidFrom ? "Start" : "End"} Date
+							</h2>
+							<div className="modal-calendar" style={{ marginTop: "1rem" }}>
+								<div className="month-view">
+									<div
+										className="month-header"
+										style={{
+											display: "flex",
+											justifyContent: "space-between",
+											alignItems: "center",
+											marginBottom: "1rem",
+										}}
+									>
+										<button
+											onClick={previousPromoMonth}
+											className="month-nav-btn"
+											style={{
+												background: "none",
+												border: "1px solid #ddd",
+												borderRadius: "4px",
+												padding: "0.5rem",
+												cursor: "pointer",
+											}}
+										>
+											◀
+										</button>
+										<h3 style={{ margin: 0 }}>
+											{promoCalendarMonth.toLocaleString("default", {
+												month: "long",
+												year: "numeric",
+											})}
+										</h3>
+										<button
+											onClick={nextPromoMonth}
+											className="month-nav-btn"
+											style={{
+												background: "none",
+												border: "1px solid #ddd",
+												borderRadius: "4px",
+												padding: "0.5rem",
+												cursor: "pointer",
+											}}
+										>
+											▶
+										</button>
+									</div>
+									<div
+										className="calendar-days"
+										style={{
+											display: "grid",
+											gridTemplateColumns: "repeat(7, 1fr)",
+											gap: "0.5rem",
+										}}
+									>
+										{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+											(day) => (
+												<div
+													key={day}
+													className="day-label"
+													style={{
+														textAlign: "center",
+														fontWeight: "bold",
+														padding: "0.5rem",
+														color: "#666",
+													}}
+												>
+													{day}
+												</div>
+											)
+										)}
+										{generatePromoCalendarDays().map((dayData, index) =>
+											dayData ? (
+												<div
+													key={index}
+													className={`calendar-day ${
+														dayData.isPast ? "past" : "available"
+													} ${
+														(promoFormData.validFrom &&
+															dayData.dateString ===
+																promoFormData.validFrom.split("T")[0]) ||
+														(promoFormData.validUntil &&
+															dayData.dateString ===
+																promoFormData.validUntil.split("T")[0])
+															? "selected"
+															: ""
+													}`}
+													onClick={() => {
+														if (!dayData.isPast) {
+															handlePromoDateClick(dayData.dateString)
+														}
+													}}
+													style={{
+														padding: "0.75rem",
+														textAlign: "center",
+														borderRadius: "4px",
+														cursor: dayData.isPast ? "not-allowed" : "pointer",
+														background: dayData.isPast
+															? "#f0f0f0"
+															: (promoFormData.validFrom &&
+																	dayData.dateString ===
+																		promoFormData.validFrom.split("T")[0]) ||
+															  (promoFormData.validUntil &&
+																	dayData.dateString ===
+																		promoFormData.validUntil.split("T")[0])
+															? "var(--primary)"
+															: "#fff",
+														color: dayData.isPast
+															? "#999"
+															: (promoFormData.validFrom &&
+																	dayData.dateString ===
+																		promoFormData.validFrom.split("T")[0]) ||
+															  (promoFormData.validUntil &&
+																	dayData.dateString ===
+																		promoFormData.validUntil.split("T")[0])
+															? "#fff"
+															: "#333",
+														border: "1px solid #ddd",
+													}}
+													title={
+														dayData.isPast
+															? "Past date (cannot select)"
+															: "Click to select"
+													}
+												>
+													{dayData.day}
+												</div>
+											) : (
+												<div
+													key={index}
+													className="calendar-day empty"
+													style={{ padding: "0.75rem" }}
+												></div>
+											)
+										)}
+									</div>
 								</div>
 							</div>
 						</div>
@@ -4849,6 +5481,365 @@ const AdminDashboard = () => {
 								</div>
 							</div>
 						)}
+					</div>
+				)}
+
+				{/* Payout Tab */}
+				{activeTab === "payout" && (
+					<div className="content-section payout-section">
+						<div className="section-header">
+							<div>
+								<h2>💸 Payout Management</h2>
+								<p>View and process guest withdrawal requests</p>
+							</div>
+						</div>
+
+						<div className="payout-stats">
+							<div className="stat-card">
+								<div className="stat-icon">⏳</div>
+								<div className="stat-content">
+									<h3>Pending Payouts</h3>
+									<p className="stat-value">0</p>
+								</div>
+							</div>
+							<div className="stat-card">
+								<div className="stat-icon">✅</div>
+								<div className="stat-content">
+									<h3>Completed Today</h3>
+									<p className="stat-value">0</p>
+								</div>
+							</div>
+							<div className="stat-card">
+								<div className="stat-icon">💰</div>
+								<div className="stat-content">
+									<h3>Total Processed</h3>
+									<p className="stat-value">₱0</p>
+								</div>
+							</div>
+						</div>
+
+						<div className="payout-requests">
+							<h3 className="withdrawal-requests-header">
+								📋 Withdrawal Requests
+							</h3>
+							<div className="empty-state">
+								<div className="empty-icon">📭</div>
+								<p>No pending withdrawal requests</p>
+								<p className="empty-subtitle">
+									Guest withdrawal requests will appear here
+								</p>
+							</div>
+						</div>
+					</div>
+				)}
+
+				{/* Manage Host Tab */}
+				{activeTab === "manageHost" && (
+					<div className="content-section manage-host-section">
+						<div className="section-header">
+							<div>
+								<h2>👥 Manage Hosts</h2>
+								<p>View and manage all hosts with their average ratings</p>
+							</div>
+						</div>
+
+						{loading ? (
+							<div className="loading-state">
+								<p>Loading hosts data...</p>
+							</div>
+						) : hosts.length === 0 ? (
+							<div className="empty-state">
+								<div className="empty-icon">👥</div>
+								<p>No hosts found</p>
+								<p className="empty-subtitle">
+									Hosts will appear here once they list properties
+								</p>
+							</div>
+						) : (
+							<div className="hosts-table-wrapper">
+								<table className="hosts-table">
+									<thead>
+										<tr>
+											<th>Host Name</th>
+											<th>Email</th>
+											<th>Average Rating</th>
+											<th>Properties</th>
+											<th>Rated Properties</th>
+											<th>Actions</th>
+										</tr>
+									</thead>
+									<tbody>
+										{hosts.map((host) => (
+											<tr key={host.hostId}>
+												<td>
+													<strong>{host.displayName}</strong>
+												</td>
+												<td>{host.email}</td>
+												<td>
+													<div className="rating-display">
+														<span className="rating-value">
+															{host.averageRating > 0
+																? host.averageRating.toFixed(1)
+																: "N/A"}
+														</span>
+														{host.averageRating > 0 && (
+															<span className="rating-stars">
+																{"⭐".repeat(Math.floor(host.averageRating))}
+															</span>
+														)}
+													</div>
+												</td>
+												<td>{host.propertiesCount}</td>
+												<td>{host.ratedPropertiesCount}</td>
+												<td>
+													<button
+														className="btn-view-details"
+														onClick={() => {
+															setSelectedHost(host)
+															setShowHostModal(true)
+														}}
+													>
+														View Details
+													</button>
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						)}
+					</div>
+				)}
+
+				{/* Host Details Modal */}
+				{showHostModal && selectedHost && (
+					<div
+						className="modal-overlay"
+						onClick={() => {
+							setShowHostModal(false)
+							setSelectedHost(null)
+						}}
+					>
+						<div
+							className="host-details-modal"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<div className="modal-header">
+								<h2>👤 Host Details</h2>
+								<button
+									className="modal-close-btn"
+									onClick={() => {
+										setShowHostModal(false)
+										setSelectedHost(null)
+									}}
+								>
+									<FaTimes />
+								</button>
+							</div>
+
+							<div className="modal-body host-details-content">
+								<div className="host-details-section">
+									<h3>Rating Information</h3>
+									<div className="detail-grid">
+										<div className="detail-item">
+											<label>Average Rating:</label>
+											<div className="rating-display-large">
+												<span className="rating-value-large">
+													{selectedHost.averageRating > 0
+														? selectedHost.averageRating.toFixed(1)
+														: "N/A"}
+												</span>
+												{selectedHost.averageRating > 0 && (
+													<span className="rating-stars-large">
+														{"⭐".repeat(
+															Math.floor(selectedHost.averageRating)
+														)}
+													</span>
+												)}
+											</div>
+										</div>
+										<div className="detail-item">
+											<label>Total Properties:</label>
+											<span>{selectedHost.propertiesCount}</span>
+										</div>
+										<div className="detail-item">
+											<label>Rated Properties:</label>
+											<span>{selectedHost.ratedPropertiesCount}</span>
+										</div>
+									</div>
+								</div>
+
+								<div className="host-details-section">
+									<h3>Properties List</h3>
+									{selectedHost.properties.length === 0 ? (
+										<p className="no-properties">No properties listed</p>
+									) : (
+										(() => {
+											// Find top property (highest rating)
+											const topProperty = selectedHost.properties.reduce(
+												(top, current) => {
+													const topRating = top.rating || 0
+													const currentRating = current.rating || 0
+													return currentRating > topRating ? current : top
+												},
+												selectedHost.properties[0]
+											)
+
+											// Find lowest rating property
+											const lowestProperty = selectedHost.properties.reduce(
+												(lowest, current) => {
+													const lowestRating = lowest.rating || 0
+													const currentRating = current.rating || 0
+													// Only consider properties with ratings > 0, or if all are 0, return the first
+													if (lowestRating === 0 && currentRating > 0)
+														return current
+													if (currentRating === 0 && lowestRating > 0)
+														return lowest
+													return currentRating < lowestRating ? current : lowest
+												},
+												selectedHost.properties[0]
+											)
+
+											const displayProperties = []
+											if (topProperty)
+												displayProperties.push({
+													...topProperty,
+													label: "Top Property",
+												})
+											if (
+												lowestProperty &&
+												lowestProperty.id !== topProperty?.id
+											) {
+												displayProperties.push({
+													...lowestProperty,
+													label: "Lowest Rating",
+												})
+											}
+
+											return (
+												<div className="properties-list">
+													{displayProperties.map((property) => (
+														<div key={property.id} className="property-item">
+															<div className="property-header">
+																<div>
+																	<span className="property-label">
+																		{property.label}
+																	</span>
+																	<h4>
+																		{property.title || "Untitled Property"}
+																	</h4>
+																</div>
+																<span className="property-rating">
+																	{property.rating > 0
+																		? `${property.rating.toFixed(1)} ⭐`
+																		: "No rating"}
+																</span>
+															</div>
+															<div className="property-details">
+																{property.location?.city && (
+																	<span className="property-location">
+																		📍 {property.location.city}
+																		{property.location.province &&
+																			`, ${property.location.province}`}
+																	</span>
+																)}
+																{property.pricing?.basePrice && (
+																	<span className="property-price">
+																		₱
+																		{property.pricing.basePrice.toLocaleString()}
+																		/night
+																	</span>
+																)}
+																{property.category && (
+																	<span className="host-property-category-badge">
+																		{property.category}
+																	</span>
+																)}
+															</div>
+															{property.reviewsCount !== undefined && (
+																<div className="property-reviews">
+																	{property.reviewsCount} review
+																	{property.reviewsCount !== 1 ? "s" : ""}
+																</div>
+															)}
+														</div>
+													))}
+												</div>
+											)
+										})()
+									)}
+								</div>
+
+								{selectedHost.userData && (
+									<div className="host-details-section">
+										<h3>Account Information</h3>
+										<div className="detail-grid">
+											{selectedHost.userData.firstName && (
+												<div className="detail-item">
+													<label>First Name:</label>
+													<span>{selectedHost.userData.firstName}</span>
+												</div>
+											)}
+											{selectedHost.userData.lastName && (
+												<div className="detail-item">
+													<label>Last Name:</label>
+													<span>{selectedHost.userData.lastName}</span>
+												</div>
+											)}
+											{selectedHost.userData.createdAt && (
+												<div className="detail-item">
+													<label>Member Since:</label>
+													<span>
+														{selectedHost.userData.createdAt?.toDate
+															? selectedHost.userData.createdAt
+																	.toDate()
+																	.toLocaleDateString()
+															: new Date(
+																	selectedHost.userData.createdAt
+															  ).toLocaleDateString()}
+													</span>
+												</div>
+											)}
+											<div className="detail-item">
+												<label>Host ID:</label>
+												<span className="host-id">{selectedHost.hostId}</span>
+											</div>
+											{selectedHost.userData.userType && (
+												<div className="detail-item">
+													<label>User Type:</label>
+													<span className="user-type-badge">
+														{selectedHost.userData.userType}
+													</span>
+												</div>
+											)}
+											<div className="detail-item">
+												<label>Subscription Type:</label>
+												<span
+													className={`subscription-badge ${
+														selectedHost.subscriptionType?.toLowerCase() ||
+														"free"
+													}`}
+												>
+													{selectedHost.subscriptionType || "Free"}
+												</span>
+											</div>
+										</div>
+									</div>
+								)}
+							</div>
+
+							<div className="modal-footer">
+								<button
+									className="btn-close-modal"
+									onClick={() => {
+										setShowHostModal(false)
+										setSelectedHost(null)
+									}}
+								>
+									Close
+								</button>
+							</div>
+						</div>
 					</div>
 				)}
 			</main>

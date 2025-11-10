@@ -62,7 +62,7 @@ function App() {
 					left: "10px",
 					right: "auto",
 					bottom: "auto",
-					zIndex: 1000,
+					zIndex: 100,
 				}}
 				position="top-left"
 				toastOptions={{

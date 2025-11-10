@@ -153,3 +153,32 @@ export const createBookingCancelledNotification = async (
 	)
 }
 
+/**
+ * Create invoice notification for guest
+ */
+export const createInvoiceNotification = async (userId, invoiceData) => {
+	const { invoiceNumber, bookingId, propertyTitle, totalAmount, checkInDate, checkOutDate } = invoiceData
+
+	const checkIn = checkInDate?.toDate
+		? checkInDate.toDate().toLocaleDateString()
+		: new Date(checkInDate).toLocaleDateString()
+	const checkOut = checkOutDate?.toDate
+		? checkOutDate.toDate().toLocaleDateString()
+		: new Date(checkOutDate).toLocaleDateString()
+
+	await createNotification(
+		userId,
+		"invoice",
+		"Invoice Generated",
+		`Invoice ${invoiceNumber} has been generated for your booking at ${propertyTitle}. Amount: ₱${totalAmount.toLocaleString()}. Check-in: ${checkIn}, Check-out: ${checkOut}`,
+		{
+			invoiceNumber,
+			bookingId,
+			propertyTitle,
+			amount: totalAmount,
+			checkInDate,
+			checkOutDate,
+		}
+	)
+}
+

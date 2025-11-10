@@ -777,8 +777,31 @@ export default function PropertyListingWizard() {
 				}
 			}
 
+			// Helper function to remove undefined values from nested objects
+			const removeUndefined = (obj) => {
+				if (obj === null || obj === undefined) {
+					return null
+				}
+				if (Array.isArray(obj)) {
+					return obj.map(removeUndefined)
+				}
+				if (typeof obj !== "object") {
+					return obj
+				}
+				const cleaned = {}
+				for (const key in obj) {
+					if (obj[key] !== undefined) {
+						cleaned[key] = removeUndefined(obj[key])
+					}
+				}
+				return cleaned
+			}
+
+			// Clean vouchers data to remove undefined values
+			const cleanedVouchers = removeUndefined(formData.vouchers)
+
 			// Prepare property data
-			const propertyData = {
+			const propertyDataRaw = {
 				hostId: currentUser.uid, // Add top-level hostId for filtering
 				category: formData.category,
 				propertyType:
@@ -811,7 +834,7 @@ export default function PropertyListingWizard() {
 				houseRules: formData.houseRules,
 				mealIncluded: formData.mealIncluded,
 				availability: formData.availability,
-				vouchers: formData.vouchers,
+				vouchers: cleanedVouchers,
 				host: {
 					hostId: currentUser.uid,
 					hostName: userData?.displayName || "Host",
@@ -825,6 +848,9 @@ export default function PropertyListingWizard() {
 				featured: false,
 				createdAt: serverTimestamp(),
 			}
+
+			// Clean entire property data to remove any undefined values
+			const propertyData = removeUndefined(propertyDataRaw)
 
 			// Save to Firestore - Firestore will auto-generate the document ID
 			const docRef = await addDoc(collection(db, "properties"), propertyData)
