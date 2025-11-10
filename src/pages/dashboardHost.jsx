@@ -1360,7 +1360,7 @@ export default function DashboardHost() {
 							</View>
 						)}
 
-						{reportData.properties && (
+						{reportType === "complete" && reportData.properties && (
 							<View style={styles.section} break>
 								<Text style={styles.sectionTitle}>
 									Properties ({reportData.properties.list.length})
@@ -1400,10 +1400,10 @@ export default function DashboardHost() {
 							</View>
 						)}
 
-						{reportData.bookings && (
+						{reportType === "complete" && reportData.bookings && (
 							<View style={styles.section} break>
 								<Text style={styles.sectionTitle}>
-									Bookings ({reportData.bookings.recent.length})
+									Bookings ({(reportData.bookings?.recent?.length) || 0})
 								</Text>
 								<View style={styles.table}>
 									<View style={[styles.tableRow, styles.tableHeader]}>

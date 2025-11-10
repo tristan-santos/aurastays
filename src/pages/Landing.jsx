@@ -1,7 +1,7 @@
 import Navbar from "../components/Navbar"
 import Hero from "../components/Hero"
 import ImageGrid from "../components/ImageGrid"
-import Squares from "../components/Squares"
+import YouTubeBackground from "../components/YouTubeBackground"
 import FeaturedProperties from "../components/FeaturedProperties"
 import HowItWorks from "../components/HowItWorks"
 import Stats from "../components/Stats"
@@ -15,13 +15,12 @@ export default function Landing() {
 			<div className="landing-page">
 				<div className="finisher-header">
 					<Navbar />
-					<main className="main-content">
-						<Squares
-							speed={0.5}
-							squareSize={40}
-							direction="diagonal"
-							borderColor="#333"
-							hoverFillColor="rgba(65, 95, 148, 0.5)"
+					<main className="main-content" style={{ position: "relative" }}>
+						<YouTubeBackground
+							videoUrl={"https://youtu.be/7_29vB7_lBs?si=fBEA0q_UnFhtrknX"}
+							zIndex={1}
+							overlayOpacity={0.75}
+							scopeToParent={true}
 						/>
 						<Hero />
 						<ImageGrid />

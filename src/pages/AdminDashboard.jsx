@@ -449,20 +449,54 @@ const AdminDashboard = () => {
 	const fetchWalletData = async () => {
 		try {
 			setLoadingWallet(true)
-			const adminEmail = "adminAurastays@aurastays.com"
+			const preferredEmail =
+				(import.meta?.env?.VITE_ADMIN_EMAIL || "").trim() ||
+				"admin@aurastays.com"
 
 			// Get admin user document
-			const { query, where } = await import("firebase/firestore")
+			console.log("[AdminDashboard][Wallet] Looking up admin account", {
+				preferredEmail,
+			})
+			const { query, where, limit } = await import("firebase/firestore")
 			const usersCollection = collection(db, "users")
-			const adminQuery = query(
+			// 1) Try preferred email
+			const emailQuery = query(
 				usersCollection,
-				where("email", "==", adminEmail)
+				where("email", "==", preferredEmail),
+				limit(1)
 			)
-			const adminSnapshot = await getDocs(adminQuery)
+			let adminSnapshot = await getDocs(emailQuery)
+			// 2) Fallback: userType == 'admin'
+			if (adminSnapshot.empty) {
+				const byUserType = query(
+					usersCollection,
+					where("userType", "==", "admin"),
+					limit(1)
+				)
+				adminSnapshot = await getDocs(byUserType)
+			}
+			// 3) Fallback: isAdmin == true
+			if (adminSnapshot.empty) {
+				const byIsAdmin = query(
+					usersCollection,
+					where("isAdmin", "==", true),
+					limit(1)
+				)
+				adminSnapshot = await getDocs(byIsAdmin)
+			}
 
+			console.log("[AdminDashboard][Wallet] Admin query result", {
+				snapshotEmpty: adminSnapshot.empty,
+				count: adminSnapshot.size,
+			})
 			if (!adminSnapshot.empty) {
 				const adminDoc = adminSnapshot.docs[0]
 				const adminData = adminDoc.data()
+				console.log("[AdminDashboard][Wallet] Admin doc found", {
+					adminId: adminDoc.id,
+					hasWalletBalance: typeof adminData?.walletBalance !== "undefined",
+					hasPaypalEmail: !!adminData?.paypalEmail,
+				})
 				setWalletBalance(adminData?.walletBalance || 0)
 				setAdminPaypalEmail(adminData?.paypalEmail || "")
 				setPaypalEmailInput(adminData?.paypalEmail || "")
@@ -472,6 +506,9 @@ const AdminDashboard = () => {
 					collection(db, "walletTransactions"),
 					where("userId", "==", adminDoc.id)
 				)
+				console.log("[AdminDashboard][Wallet] Fetching admin transactions", {
+					adminId: adminDoc.id,
+				})
 				const txSnapshot = await getDocs(txQuery)
 				const transactions = txSnapshot.docs.map((doc) => ({
 					id: doc.id,
@@ -485,9 +522,83 @@ const AdminDashboard = () => {
 					return timeB - timeA
 				})
 
+				console.log("[AdminDashboard][Wallet] Transactions loaded", {
+					count: transactions.length,
+				})
 				setWalletTransactions(transactions)
 			} else {
-				toast.error("Admin account not found")
+				console.warn(
+					"[AdminDashboard][Wallet] Admin account not found for email",
+					preferredEmail
+				)
+				// Auto-initialize admin account document
+				try {
+					const { addDoc } = await import("firebase/firestore")
+					const initData = {
+						email: preferredEmail,
+						role: "admin",
+						walletBalance: 0,
+						paypalEmail: "",
+						createdAt: new Date(),
+						updatedAt: new Date(),
+					}
+					console.log(
+						"[AdminDashboard][Wallet] Initializing admin account with default wallet",
+						initData
+					)
+					const createdRef = await addDoc(collection(db, "users"), initData)
+					console.log("[AdminDashboard][Wallet] Admin account created", {
+						adminId: createdRef.id,
+					})
+					toast.success("Admin wallet initialized. Reloading data...")
+					// Re-run the loader to populate state from the new doc
+					// Simple approach: recall this function after a tick
+					setTimeout(async () => {
+						try {
+							let adminSnapshot2 = await getDocs(
+								query(
+									collection(db, "users"),
+									where("email", "==", preferredEmail),
+									limit(1)
+								)
+							)
+							if (adminSnapshot2.empty) {
+								adminSnapshot2 = await getDocs(
+									query(
+										collection(db, "users"),
+										where("userType", "==", "admin"),
+										limit(1)
+									)
+								)
+							}
+							if (!adminSnapshot2.empty) {
+								const adminDoc2 = adminSnapshot2.docs[0]
+								const adminData2 = adminDoc2.data()
+								console.log(
+									"[AdminDashboard][Wallet] Admin doc found after init",
+									{
+										adminId: adminDoc2.id,
+										walletBalance: adminData2?.walletBalance,
+									}
+								)
+								setWalletBalance(adminData2?.walletBalance || 0)
+								setAdminPaypalEmail(adminData2?.paypalEmail || "")
+								setPaypalEmailInput(adminData2?.paypalEmail || "")
+							}
+						} catch (reErr) {
+							console.error(
+								"[AdminDashboard][Wallet] Post-init reload failed:",
+								reErr
+							)
+						}
+					}, 300)
+				} catch (initErr) {
+					console.error(
+						"[AdminDashboard][Wallet] Failed to initialize admin account",
+						initErr
+					)
+					toast.error("Admin account not found")
+				}
 			}
 		} catch (err) {
 			console.error("Error fetching wallet data:", err)
@@ -504,14 +615,24 @@ const AdminDashboard = () => {
 		}
 
 		try {
-			const adminEmail = "adminAurastays@aurastays.com"
-			const { query, where } = await import("firebase/firestore")
+			const preferredEmail =
+				(import.meta?.env?.VITE_ADMIN_EMAIL || "").trim() ||
+				"admin@aurastays.com"
+			const { query, where, limit } = await import("firebase/firestore")
 			const usersCollection = collection(db, "users")
-			const adminQuery = query(
-				usersCollection,
-				where("email", "==", adminEmail)
+			let adminSnapshot = await getDocs(
+				query(usersCollection, where("email", "==", preferredEmail), limit(1))
 			)
-			const adminSnapshot = await getDocs(adminQuery)
+			if (adminSnapshot.empty) {
+				adminSnapshot = await getDocs(
+					query(usersCollection, where("userType", "==", "admin"), limit(1))
+				)
+			}
+			if (adminSnapshot.empty) {
+				adminSnapshot = await getDocs(
+					query(usersCollection, where("isAdmin", "==", true), limit(1))
+				)
+			}
 
 			if (!adminSnapshot.empty) {
 				const adminDoc = adminSnapshot.docs[0]
@@ -534,14 +655,24 @@ const AdminDashboard = () => {
 
 	const handleDisconnectPaypal = async () => {
 		try {
-			const adminEmail = "adminAurastays@aurastays.com"
-			const { query, where } = await import("firebase/firestore")
+			const preferredEmail =
+				(import.meta?.env?.VITE_ADMIN_EMAIL || "").trim() ||
+				"admin@aurastays.com"
+			const { query, where, limit } = await import("firebase/firestore")
 			const usersCollection = collection(db, "users")
-			const adminQuery = query(
-				usersCollection,
-				where("email", "==", adminEmail)
+			let adminSnapshot = await getDocs(
+				query(usersCollection, where("email", "==", preferredEmail), limit(1))
 			)
-			const adminSnapshot = await getDocs(adminQuery)
+			if (adminSnapshot.empty) {
+				adminSnapshot = await getDocs(
+					query(usersCollection, where("userType", "==", "admin"), limit(1))
+				)
+			}
+			if (adminSnapshot.empty) {
+				adminSnapshot = await getDocs(
+					query(usersCollection, where("isAdmin", "==", true), limit(1))
+				)
+			}
 
 			if (!adminSnapshot.empty) {
 				const adminDoc = adminSnapshot.docs[0]
@@ -826,7 +957,7 @@ const AdminDashboard = () => {
 		})
 	}
 
-	const updateAllPropertiesOwner = async () => {
+	const _updateAllPropertiesOwner = async () => {
 		const confirmed = window.confirm(
 			"This will update all properties to be owned by the host user. Continue?"
 		)
@@ -1557,17 +1688,7 @@ const AdminDashboard = () => {
 					</div>
 					<div className="admin-user-info">
 						<span>Welcome, {userData?.displayName || "Admin"}</span>
-						<button
-							onClick={updateAllPropertiesOwner}
-							className="update-properties-btn"
-							style={{
-								background: "var(--secondary)",
-								color: "white",
-								marginRight: "1rem",
-							}}
-						>
-							🏠 Update Properties Owner
-						</button>
+
 						<button
 							onClick={() => navigate("/")}
 							className="back-to-landing-btn"

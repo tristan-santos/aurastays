@@ -324,19 +324,49 @@ export default function Wallet() {
 			}
 
 			// Get admin account
-			const adminEmail = "adminAurastays@aurastays.com"
+			const preferredEmail =
+				(import.meta?.env?.VITE_ADMIN_EMAIL || "").trim() ||
+				"admin@aurastays.com"
 			const {
 				query: firestoreQuery,
 				where,
 				getDocs,
+				limit,
 			} = await import("firebase/firestore")
-			const adminQuery = firestoreQuery(
-				collection(db, "users"),
-				where("email", "==", adminEmail)
+			console.log("[Wallet][Withdraw] Looking up admin account", {
+				preferredEmail,
+			})
+			let adminSnapshot = await getDocs(
+				firestoreQuery(
+					collection(db, "users"),
+					where("email", "==", preferredEmail),
+					limit(1)
+				)
 			)
-			const adminSnapshot = await getDocs(adminQuery)
+			if (adminSnapshot.empty) {
+				adminSnapshot = await getDocs(
+					firestoreQuery(
+						collection(db, "users"),
+						where("userType", "==", "admin"),
+						limit(1)
+					)
+				)
+			}
+			if (adminSnapshot.empty) {
+				adminSnapshot = await getDocs(
+					firestoreQuery(
+						collection(db, "users"),
+						where("isAdmin", "==", true),
+						limit(1)
+					)
+				)
+			}
 
 			if (adminSnapshot.empty) {
+				console.warn(
+					"[Wallet][Withdraw] Admin account not found for preferredEmail",
+					preferredEmail
+				)
 				throw new Error("Admin account not found. Please contact support.")
 			}
 
@@ -344,6 +374,10 @@ export default function Wallet() {
 			const adminRef = doc(db, "users", adminDoc.id)
 			const adminData = adminDoc.data()
 			const adminCurrentBalance = adminData?.walletBalance || 0
+			console.log("[Wallet][Withdraw] Admin doc found", {
+				adminId: adminDoc.id,
+				adminCurrentBalance,
+			})
 
 			// Check if admin has sufficient funds for payout
 			if (adminCurrentBalance < amount) {

@@ -1,6 +1,6 @@
 .navbar-landing {
 	position: fixed;
-	background-color: white;
+	background-color: transparent;
 	top: 0;
 	z-index: 100;
 	padding: 0.5rem 2rem;
@@ -23,10 +23,15 @@
 }
 
 .navbar-brand h1 {
-	color: var(--primary);
+	color: #ffffff;
 	font-size: 1.5rem;
 	margin: 0;
 	font-weight: 700;
+	transition: color 0.25s ease;
+}
+
+.navbar-landing.scrolled-primary .navbar-brand h1 {
+	color: var(--primary);
 }
 .nav-links button:hover {
 	scale: 1.05;

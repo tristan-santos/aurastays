@@ -5,7 +5,6 @@ import { db } from "../components/firebaseConfig"
 import {
 	doc,
 	getDoc,
-	setDoc,
 	updateDoc,
 	collection,
 	addDoc,
@@ -26,13 +25,14 @@ import "../css/HostSubscription.css"
 
 export default function HostSubscription() {
 	const navigate = useNavigate()
-	const { currentUser, userData } = useAuth()
+	const { currentUser } = useAuth()
 	const [subscription, setSubscription] = useState(null)
 	const [loading, setLoading] = useState(true)
 	const [selectedPlan, setSelectedPlan] = useState(null)
 	const [isProcessing, setIsProcessing] = useState(false)
 	const [isPayPalLoaded, setIsPayPalLoaded] = useState(false)
 	const paypalRef = useRef(null)
+	const paypalButtonsInstanceRef = useRef(null)
 
 	const plans = [
 		{
@@ -77,7 +77,6 @@ export default function HostSubscription() {
 	useEffect(() => {
 		const urlParams = new URLSearchParams(window.location.search)
 		const success = urlParams.get("success")
-		const planId = urlParams.get("planId")
 		const cancelled = urlParams.get("cancelled")
 
 		if (success === "true") {
@@ -91,7 +90,7 @@ export default function HostSubscription() {
 			// Clean URL
 			window.history.replaceState({}, document.title, window.location.pathname)
 		} else if (cancelled === "true") {
-			toast.info("Subscription was cancelled.")
+			toast("Subscription was cancelled.", { type: "info" })
 			window.history.replaceState({}, document.title, window.location.pathname)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,6 +106,29 @@ export default function HostSubscription() {
 		loadPayPalSDK()
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [currentUser])
+
+	// Utilities
+	const getPaypalClientId = () =>
+		(import.meta.env.VITE_PAYPAL_CLIENT_ID || "").toString().trim()
+
+	const getPaypalPlanId = () =>
+		(import.meta.env.VITE_PAYPAL_PREMIUM_PLAN_ID || "").toString().trim()
+
+	const ensureEnvConfigured = () => {
+		const clientId = getPaypalClientId()
+		const planId = getPaypalPlanId()
+		if (!clientId) {
+			console.error("[HostSubscription] Missing VITE_PAYPAL_CLIENT_ID")
+			toast.error("PayPal is not configured. Please contact support.")
+			return false
+		}
+		if (!planId) {
+			console.error("[HostSubscription] Missing VITE_PAYPAL_PREMIUM_PLAN_ID")
+			toast.error("Subscription plan is not configured. Please contact support.")
+			return false
+		}
+		return true
+	}
 
 	const loadPayPalSDK = () => {
 		if (window.paypal) {
@@ -125,11 +147,10 @@ export default function HostSubscription() {
 			return
 		}
 
-		const paypalClientId =
-			import.meta.env.VITE_PAYPAL_CLIENT_ID ||
+		const paypalClientId = getPaypalClientId() ||
 			"AX2bN4tGrgZCaOm5C0HxY_1DAP7z8zN2K9D0yH4sJ3VxL5Q6R7S8T9U0V1W2X3Y4Z5"
 		const script = document.createElement("script")
-		script.src = `https://www.paypal.com/sdk/js?client-id=${paypalClientId}&vault=true&intent=subscription&currency=PHP`
+		script.src = `https://www.paypal.com/sdk/js?client-id=${paypalClientId}&vault=true&intent=subscription&currency=PHP&components=buttons`
 		script.async = true
 		script.onload = () => {
 			setIsPayPalLoaded(true)
@@ -154,11 +175,11 @@ export default function HostSubscription() {
 				const userData = userDoc.data()
 				if (userData.subscription) {
 					const sub = userData.subscription
-					
+
 					// Check if subscription has expired (for cancelling subscriptions)
 					if (sub.status === "cancelling" && sub.expiryDate) {
-						const expiryDate = sub.expiryDate.toDate 
-							? sub.expiryDate.toDate() 
+						const expiryDate = sub.expiryDate.toDate
+							? sub.expiryDate.toDate()
 							: new Date(sub.expiryDate)
 						const now = new Date()
 
@@ -183,10 +204,13 @@ export default function HostSubscription() {
 							)
 							const subscriptionsSnapshot = await getDocs(subscriptionsQuery)
 							if (!subscriptionsSnapshot.empty) {
-								await updateDoc(doc(db, "subscriptions", subscriptionsSnapshot.docs[0].id), {
-									status: "expired",
-									expiredAt: serverTimestamp(),
-								})
+								await updateDoc(
+									doc(db, "subscriptions", subscriptionsSnapshot.docs[0].id),
+									{
+										status: "expired",
+										expiredAt: serverTimestamp(),
+									}
+								)
 							}
 
 							// Set to free plan in state
@@ -227,11 +251,11 @@ export default function HostSubscription() {
 			const subscriptionsSnapshot = await getDocs(subscriptionsQuery)
 			if (!subscriptionsSnapshot.empty) {
 				const subData = subscriptionsSnapshot.docs[0].data()
-				
+
 				// Check if cancelling subscription has expired
 				if (subData.status === "cancelling" && subData.expiryDate) {
-					const expiryDate = subData.expiryDate.toDate 
-						? subData.expiryDate.toDate() 
+					const expiryDate = subData.expiryDate.toDate
+						? subData.expiryDate.toDate()
 						: new Date(subData.expiryDate)
 					const now = new Date()
 
@@ -249,10 +273,13 @@ export default function HostSubscription() {
 							},
 						})
 
-						await updateDoc(doc(db, "subscriptions", subscriptionsSnapshot.docs[0].id), {
-							status: "expired",
-							expiredAt: serverTimestamp(),
-						})
+						await updateDoc(
+							doc(db, "subscriptions", subscriptionsSnapshot.docs[0].id),
+							{
+								status: "expired",
+								expiredAt: serverTimestamp(),
+							}
+						)
 
 						setSubscription({
 							planId: "standard",
@@ -332,11 +359,20 @@ export default function HostSubscription() {
 	}
 
 	const handleSubscribe = async (planId) => {
+		console.log("[HostSubscription] Subscribe button clicked", {
+			planId,
+			currentUserUid: currentUser?.uid,
+		})
 		const plan = plans.find((p) => p.id === planId)
-		if (!plan) return
+		if (!plan) {
+			console.warn("[HostSubscription] Plan not found for planId:", planId)
+			return
+		}
+		console.log("[HostSubscription] Resolved plan:", plan)
 
 		// If it's a free plan, activate immediately without PayPal
 		if (plan.price === 0 || plan.isFree) {
+			console.log("[HostSubscription] Activating free plan flow")
 			setIsProcessing(true)
 			setSelectedPlan(planId)
 			try {
@@ -379,46 +415,55 @@ export default function HostSubscription() {
 		}
 
 		// For paid plans, use PayPal
+		console.log("[HostSubscription] Paid plan selected, preparing PayPal buttons", {
+			planId,
+			isPayPalLoaded,
+			hasPaypalRef: !!paypalRef.current,
+		})
+
+		// Validate environment before proceeding
+		if (!ensureEnvConfigured()) {
+			return
+		}
+
 		setSelectedPlan(planId)
 		// PayPal subscription will be initialized in the effect below
 	}
 
-	// Create PayPal billing plan dynamically or use existing plan
-	const getOrCreateBillingPlan = async (plan) => {
-		// For production, you should create billing plans in PayPal and store their IDs
-		// For now, we'll create a plan on-the-fly using PayPal API
-		// Note: This requires backend API. For frontend-only, use predefined plan IDs
-
-		// Option 1: Use predefined plan ID (recommended for production)
-		// You need to create these plans in PayPal Business Dashboard first
-		const planIdMap = {
-			premium: import.meta.env.VITE_PAYPAL_PREMIUM_PLAN_ID || null, // Set this in .env
-		}
-
-		if (planIdMap[plan.id]) {
-			return planIdMap[plan.id]
-		}
-
-		// Option 2: Create plan dynamically (requires backend API endpoint)
-		// For now, we'll use a subscription creation with direct pricing
-		return null
-	}
-
 	useEffect(() => {
 		if (selectedPlan && isPayPalLoaded && paypalRef.current && currentUser) {
+			console.log("[HostSubscription] Initializing PayPal Buttons", {
+				selectedPlan,
+				isPayPalLoaded,
+				currentUserUid: currentUser.uid,
+			})
+
+			if (!window.paypal || !window.paypal.Buttons) {
+				console.error("[HostSubscription] PayPal SDK not available when initializing buttons")
+				toast.error("PayPal failed to load. Please refresh and try again.")
+				return
+			}
+
 			// Clear previous PayPal buttons
 			paypalRef.current.innerHTML = ""
 
 			const plan = plans.find((p) => p.id === selectedPlan)
-			if (!plan || plan.price === 0) return
+			if (!plan || plan.price === 0) {
+				console.warn("[HostSubscription] Selected plan invalid for PayPal init", {
+					selectedPlan,
+					plan,
+				})
+				return
+			}
 
-			// Calculate next billing date
-			const now = new Date()
-			const nextBilling = new Date(now)
-			nextBilling.setMonth(nextBilling.getMonth() + 1)
+			try {
+				// Clear any previously created instance
+				if (paypalButtonsInstanceRef.current && paypalRef.current) {
+					paypalRef.current.innerHTML = ""
+					paypalButtonsInstanceRef.current = null
+				}
 
-			window.paypal
-				.Buttons({
+				const buttons = window.paypal.Buttons({
 					style: {
 						layout: "vertical",
 						color: "gold",
@@ -427,61 +472,15 @@ export default function HostSubscription() {
 					},
 					createSubscription: async (data, actions) => {
 						try {
-							// Check if we have a predefined plan ID
-							const planId = import.meta.env.VITE_PAYPAL_PREMIUM_PLAN_ID
-
-							if (planId) {
-								// Use existing billing plan
-								return actions.subscription.create({
-									plan_id: planId,
-								})
-							} else {
-								// Create subscription with pricing (PayPal will handle billing cycle)
-								// Note: This creates a subscription without a predefined plan
-								// For production, create billing plans in PayPal Dashboard first
-								return actions.subscription.create({
-									plan_id: null, // Will be created dynamically
-									plan: {
-										name: `${plan.name} Plan - AuraStays`,
-										description: `Monthly subscription for ${plan.name} plan at ₱${plan.price}/month`,
-										type: "INFINITE",
-										payment_preferences: {
-											auto_bill_outstanding: true,
-											setup_fee: {
-												value: plan.price.toString(),
-												currency_code: "PHP",
-											},
-											setup_fee_failure_action: "CONTINUE",
-											payment_failure_threshold: 3,
-										},
-										billing_cycles: [
-											{
-												frequency: {
-													interval_unit: "MONTH",
-													interval_count: 1,
-												},
-												tenure_type: "REGULAR",
-												sequence: 1,
-												total_cycles: 0, // Infinite
-												pricing_scheme: {
-													fixed_price: {
-														value: plan.price.toString(),
-														currency_code: "PHP",
-													},
-												},
-											},
-										],
-									},
-									application_context: {
-										brand_name: "AuraStays",
-										locale: "en-US",
-										shipping_preference: "NO_SHIPPING",
-										user_action: "SUBSCRIBE_NOW",
-										return_url: `${window.location.origin}/host/subscription?success=true&planId=${plan.id}`,
-										cancel_url: `${window.location.origin}/host/subscription?cancelled=true`,
-									},
-								})
+							const envPlanId = getPaypalPlanId()
+							console.log("[HostSubscription] createSubscription invoked", {
+								envPlanId,
+							})
+							if (!envPlanId) {
+								toast.error("Subscription plan is not configured. Please contact support.")
+								throw new Error("Missing VITE_PAYPAL_PREMIUM_PLAN_ID")
 							}
+							return actions.subscription.create({ plan_id: envPlanId })
 						} catch (error) {
 							console.error("Error creating subscription:", error)
 							throw error
@@ -489,11 +488,16 @@ export default function HostSubscription() {
 					},
 					onApprove: async (data, actions) => {
 						try {
+							console.log("[HostSubscription] onApprove", {
+								subscriptionID: data?.subscriptionID,
+								orderID: data?.orderID,
+							})
 							setIsProcessing(true)
 							toast("Processing your subscription...", { type: "info" })
 
 							// Get subscription details from PayPal
 							const subscriptionDetails = await actions.subscription.get()
+							console.log("[HostSubscription] subscription details", subscriptionDetails)
 
 							// Calculate billing dates
 							const startDate = new Date()
@@ -567,11 +571,29 @@ export default function HostSubscription() {
 						setSelectedPlan(null)
 					},
 					onCancel: () => {
-						toast.info("Subscription cancelled")
+						toast("Subscription cancelled", { type: "info" })
 						setSelectedPlan(null)
 					},
 				})
-				.render(paypalRef.current)
+
+				paypalButtonsInstanceRef.current = buttons
+				buttons.render(paypalRef.current)
+			} catch (e) {
+				console.error("[HostSubscription] Failed to render PayPal Buttons:", e)
+				toast.error("Failed to initialize PayPal buttons. Please try again.")
+			}
+
+			// Cleanup handler to avoid duplicate buttons
+			return () => {
+				try {
+					if (paypalRef.current) {
+						paypalRef.current.innerHTML = ""
+					}
+					paypalButtonsInstanceRef.current = null
+				} catch (cleanupErr) {
+					console.warn("[HostSubscription] Cleanup warning:", cleanupErr)
+				}
+			}
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedPlan, isPayPalLoaded, currentUser])
@@ -648,7 +670,9 @@ export default function HostSubscription() {
 			})
 
 			toast.success(
-				`Subscription cancelled successfully. You'll continue to have premium access until ${formatDate(expiryDate)}.`
+				`Subscription cancelled successfully. You'll continue to have premium access until ${formatDate(
+					expiryDate
+				)}.`
 			)
 		} catch (error) {
 			console.error("Error cancelling subscription:", error)
@@ -751,7 +775,9 @@ export default function HostSubscription() {
 										<span className="price-amount free-price">FREE</span>
 									) : (
 										<>
-											<span className="subscription-price-amount">₱{plan.price}</span>
+											<span className="subscription-price-amount">
+												₱{plan.price}
+											</span>
 											<span className="price-period">/month</span>
 										</>
 									)}
@@ -781,8 +807,16 @@ export default function HostSubscription() {
 								<>
 									<button
 										className="plan-button"
-										onClick={() => handleSubscribe(plan.id)}
-										disabled={isProcessing}
+										onClick={(e) => {
+											// Ensure no unintended navigation/refresh happens
+											if (e && typeof e.preventDefault === "function") e.preventDefault()
+											if (e && typeof e.stopPropagation === "function") e.stopPropagation()
+											console.log("[HostSubscription] <button.plan-button> clicked", {
+												planId: plan.id,
+											})
+											handleSubscribe(plan.id)
+										}}
+										disabled={isProcessing || (plan.id !== "standard" && (!getPaypalPlanId()))}
 									>
 										{isProcessing && selectedPlan === plan.id ? (
 											<>
@@ -792,6 +826,13 @@ export default function HostSubscription() {
 											<>Subscribe Now</>
 										)}
 									</button>
+
+									{/* Inline guidance if premium plan ID is missing */}
+									{plan.id !== "standard" && !getPaypalPlanId() && (
+										<p className="plan-warning" style={{ marginTop: "8px", color: "#c05621", fontSize: "0.9rem" }}>
+											Subscription plan not configured. Set VITE_PAYPAL_PREMIUM_PLAN_ID in .env.local
+										</p>
+									)}
 
 									{selectedPlan === plan.id &&
 										plan.price > 0 &&
