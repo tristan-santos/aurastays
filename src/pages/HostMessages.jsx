@@ -32,12 +32,13 @@ export default function HostMessages() {
 		}
 
 		// Subscribe to real-time notifications for hosts
+		// Query by userId since createNotification uses userId field
 		// Try with orderBy first, fallback to without orderBy if index missing
 		let notificationsQuery
 		try {
 			notificationsQuery = query(
 				collection(db, "notifications"),
-				where("hostId", "==", currentUser.uid),
+				where("userId", "==", currentUser.uid),
 				orderBy("createdAt", "desc"),
 				limit(50)
 			)
@@ -46,7 +47,7 @@ export default function HostMessages() {
 			console.warn("OrderBy query failed, trying without orderBy:", error)
 			notificationsQuery = query(
 				collection(db, "notifications"),
-				where("hostId", "==", currentUser.uid),
+				where("userId", "==", currentUser.uid),
 				limit(50)
 			)
 		}
@@ -78,7 +79,7 @@ export default function HostMessages() {
 					console.log("Index missing, trying simpler query...")
 					const simpleQuery = query(
 						collection(db, "notifications"),
-						where("hostId", "==", currentUser.uid),
+						where("userId", "==", currentUser.uid),
 						limit(50)
 					)
 					const unsubscribeSimple = onSnapshot(

@@ -22,6 +22,7 @@ import PropertyBookings from "./pages/PropertyBookings"
 import HostSubscription from "./pages/HostSubscription"
 import HostPoints from "./pages/HostPoints"
 import HostAllListings from "./pages/HostAllListings"
+import HostList from "./pages/HostList"
 
 function App() {
 	return (
@@ -51,6 +52,7 @@ function App() {
 					<Route path="/host/subscription" element={<HostSubscription />} />
 					<Route path="/host/points" element={<HostPoints />} />
 					<Route path="/host/all-listings" element={<HostAllListings />} />
+					<Route path="/hostList" element={<HostList />} />
 
 					{/* 404 Route */}
 					<Route path="*" element={<NotFound />} />

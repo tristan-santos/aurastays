@@ -13,6 +13,8 @@ import {
 	query,
 	where,
 	limit,
+	serverTimestamp,
+	orderBy,
 } from "firebase/firestore"
 import { toast } from "react-stacked-toast"
 import { FaCalendarAlt, FaTimes } from "react-icons/fa"
@@ -148,6 +150,10 @@ const AdminDashboard = () => {
 	const [adminPaypalEmail, setAdminPaypalEmail] = useState("")
 	const [showPaypalModal, setShowPaypalModal] = useState(false)
 	const [paypalEmailInput, setPaypalEmailInput] = useState("")
+	const [flaggedProperties, setFlaggedProperties] = useState([])
+	const [loadingFlagged, setLoadingFlagged] = useState(false)
+	const [selectedReport, setSelectedReport] = useState(null)
+	const [showReportModal, setShowReportModal] = useState(false)
 
 	// Calendar state for promo validity dates
 	const [promoCalendarMonth, setPromoCalendarMonth] = useState(new Date())
@@ -165,6 +171,8 @@ const AdminDashboard = () => {
 			fetchWalletData()
 		} else if (activeTab === "manageHost") {
 			fetchHostsData()
+		} else if (activeTab === "flagging") {
+			fetchFlaggedProperties()
 		}
 	}, [activeTab])
 
@@ -565,6 +573,42 @@ const AdminDashboard = () => {
 		} catch (err) {
 			console.error("Error fetching policies:", err)
 			// Keep default values if fetch fails
+		}
+	}
+
+	const fetchFlaggedProperties = async () => {
+		try {
+			setLoadingFlagged(true)
+			const reportsRef = collection(db, "propertyReports")
+			const reportsSnapshot = await getDocs(
+				query(reportsRef, orderBy("createdAt", "desc"))
+			)
+			const reports = reportsSnapshot.docs.map((doc) => ({
+				id: doc.id,
+				...doc.data(),
+			}))
+			setFlaggedProperties(reports)
+		} catch (err) {
+			console.error("Error fetching flagged properties:", err)
+			toast.error("Failed to fetch flagged properties")
+		} finally {
+			setLoadingFlagged(false)
+		}
+	}
+
+	const handleResolveReport = async (reportId, action) => {
+		try {
+			const reportRef = doc(db, "propertyReports", reportId)
+			await updateDoc(reportRef, {
+				status: action, // 'resolved' or 'dismissed'
+				resolvedAt: serverTimestamp(),
+				resolvedBy: currentUser.uid,
+			})
+			toast.success(`Report ${action === "resolved" ? "resolved" : "dismissed"}`)
+			fetchFlaggedProperties()
+		} catch (err) {
+			console.error("Error resolving report:", err)
+			toast.error("Failed to resolve report")
 		}
 	}
 
@@ -1864,6 +1908,15 @@ const AdminDashboard = () => {
 					</button>
 					<button
 						className={`sidebar-item ${
+							activeTab === "flagging" ? "active" : ""
+						}`}
+						onClick={() => setActiveTab("flagging")}
+					>
+						<span className="sidebar-icon">🚩</span>
+						<span className="sidebar-text">Flagging</span>
+					</button>
+					<button
+						className={`sidebar-item ${
 							activeTab === "policies" ? "active" : ""
 						}`}
 						onClick={() => setActiveTab("policies")}
@@ -2158,30 +2211,6 @@ const AdminDashboard = () => {
 							<div className="fee-config">
 								<div className="fee-item">
 									<label>
-										<strong>Host Service Fee</strong>
-										<span className="fee-description">
-											Fee charged to hosts on each booking
-										</span>
-									</label>
-									<div className="fee-input">
-										<input
-											type="number"
-											value={policies.serviceFeeHost}
-											onChange={(e) =>
-												setPolicies({
-													...policies,
-													serviceFeeHost: parseFloat(e.target.value),
-												})
-											}
-											min="0"
-											max="100"
-											step="0.5"
-										/>
-										<span className="fee-unit">%</span>
-									</div>
-								</div>
-								<div className="fee-item">
-									<label>
 										<strong>Guest Service Fee</strong>
 										<span className="fee-description">
 											Fixed fee charged to guests on each booking
@@ -2226,30 +2255,6 @@ const AdminDashboard = () => {
 										/>
 									</div>
 								</div>
-								<div className="fee-item">
-									<label>
-										<strong>Wallet Withdrawal Fee:</strong>
-										<span className="fee-description">
-											Fee deducted from e-wallet withdrawals
-										</span>
-									</label>
-									<div className="fee-input">
-										<input
-											type="number"
-											value={policies.walletWithdrawalFee}
-											onChange={(e) =>
-												setPolicies({
-													...policies,
-													walletWithdrawalFee: parseFloat(e.target.value),
-												})
-											}
-											min="0"
-											max="10"
-											step="0.1"
-										/>
-										<span className="fee-unit">%</span>
-									</div>
-								</div>
 								<button
 									className="save-policies-btn"
 									onClick={handleUpdatePolicies}
@@ -2291,12 +2296,12 @@ const AdminDashboard = () => {
 							</div>
 						</div>
 
-						{/* Property Removal Policy */}
+						{/* Subscription Removal Policy */}
 						<div className="policy-card warning-card">
-							<h3>⚠️ Account Removal Policy</h3>
+							<h3>⚠️ Subscription Removal Policy</h3>
 							<div className="policy-content">
 								<div className="policy-item">
-									<h4>Account Removal</h4>
+									<h4>Subscription Removal</h4>
 									<ul>
 										<li>
 											<strong>Low Rating:</strong> Hosts with average rating
@@ -2369,12 +2374,7 @@ const AdminDashboard = () => {
 											hours before check-in
 										</li>
 										<li>
-											<strong>Moderate:</strong> 50% refund if cancelled 1-7
-											days before check-in
-										</li>
-										<li>
-											<strong>Strict:</strong> No refund if cancelled within 7
-											days of check-in
+											<strong>Strict:</strong> No cancellation after book confirming
 										</li>
 										<li>Service fees are non-refundable in all cases</li>
 									</ul>
@@ -2384,22 +2384,6 @@ const AdminDashboard = () => {
 									<ul>
 										<li>Host cancellations are strongly discouraged</li>
 										<li>Guest receives full refund including all fees</li>
-										<li>Host incurs a cancellation fee of ₱1,000</li>
-										<li>
-											Cancellation impacts host's rating and reliability score
-										</li>
-									</ul>
-								</div>
-								<div className="policy-item">
-									<h4>Emergency Cancellations</h4>
-									<ul>
-										<li>
-											Valid for natural disasters, emergencies, or safety
-											concerns
-										</li>
-										<li>Requires documentation and admin approval</li>
-										<li>No penalties applied if approved</li>
-										<li>Full refund provided to guests</li>
 									</ul>
 								</div>
 							</div>
@@ -3173,7 +3157,7 @@ const AdminDashboard = () => {
 									overview
 								</p>
 								<div className="report-stats full-width">
-									<p className="report-description">
+									<p className="export-format-description">
 										Includes users, properties, bookings, and revenue data in both JSON and CSV formats
 									</p>
 								</div>
@@ -5200,6 +5184,125 @@ const AdminDashboard = () => {
 				)}
 
 
+				{/* Flagging Tab */}
+				{activeTab === "flagging" && (
+					<div className="content-section flagging-section">
+						<div className="section-header">
+							<div>
+								<h2>🚩 Flagged Properties</h2>
+								<p>Review and manage property reports from guests</p>
+							</div>
+						</div>
+
+						{loadingFlagged ? (
+							<div className="loading-state">
+								<p>Loading flagged properties...</p>
+							</div>
+						) : flaggedProperties.length === 0 ? (
+							<div className="empty-state">
+								<div className="empty-icon">✅</div>
+								<p>No flagged properties</p>
+								<p className="empty-subtitle">
+									All properties are in good standing
+								</p>
+							</div>
+						) : (
+							<div className="flagged-properties-list">
+								{flaggedProperties.map((report) => (
+									<div
+										key={report.id}
+										className={`flagged-item ${
+											report.status === "pending"
+												? "pending"
+												: report.status === "resolved"
+												? "resolved"
+												: "dismissed"
+										}`}
+									>
+										<div className="flagged-header">
+											<div className="flagged-info">
+												<h3>{report.propertyTitle}</h3>
+												<div className="flagged-meta">
+													<span className="report-reason">
+														Reason: {report.reason || "Not specified"}
+													</span>
+													<span className="report-date">
+														Reported:{" "}
+														{report.createdAt?.toDate?.()?.toLocaleDateString() ||
+															"N/A"}
+													</span>
+												</div>
+											</div>
+											<div className="flagged-status">
+												<span
+													className={`status-badge ${
+														report.status === "pending"
+															? "pending"
+															: report.status === "resolved"
+															? "resolved"
+															: "dismissed"
+													}`}
+												>
+													{report.status === "pending"
+														? "⏳ Pending"
+														: report.status === "resolved"
+														? "✅ Resolved"
+														: "❌ Dismissed"}
+												</span>
+											</div>
+										</div>
+										<div className="flagged-details">
+											<div className="report-details">
+												<p>
+													<strong>Reporter:</strong> {report.reporterName} (
+													{report.reporterEmail})
+												</p>
+												<p>
+													<strong>Property ID:</strong> {report.propertyId}
+												</p>
+												{report.description && (
+													<div className="report-description">
+														<strong>Description:</strong>
+														<p>{report.description}</p>
+													</div>
+												)}
+											</div>
+											{report.status === "pending" && (
+												<div className="flagged-actions">
+													<button
+														className="btn-resolve"
+														onClick={() =>
+															handleResolveReport(report.id, "resolved")
+														}
+													>
+														✅ Resolve
+													</button>
+													<button
+														className="btn-dismiss"
+														onClick={() =>
+															handleResolveReport(report.id, "dismissed")
+														}
+													>
+														❌ Dismiss
+													</button>
+													<button
+														className="btn-view-property"
+														onClick={() =>
+															navigate(`/property/${report.propertyId}`)
+														}
+													>
+														👁️ View Property
+													</button>
+												</div>
+											)}
+										</div>
+									</div>
+								))}
+							</div>
+						)}
+					</div>
+				)}
+
 				{/* Manage Host Tab */}
 				{activeTab === "manageHost" && (
 					<div className="content-section manage-host-section">
@@ -5223,57 +5326,133 @@ const AdminDashboard = () => {
 								</p>
 							</div>
 						) : (
-							<div className="hosts-table-wrapper">
-								<table className="hosts-table">
-									<thead>
-										<tr>
-											<th>Host Name</th>
-											<th>Email</th>
-											<th>Average Rating</th>
-											<th>Properties</th>
-											<th>Rated Properties</th>
-											<th>Actions</th>
-										</tr>
-									</thead>
-									<tbody>
-										{hosts.map((host) => (
-											<tr key={host.hostId}>
-												<td>
-													<strong>{host.displayName}</strong>
-												</td>
-												<td>{host.email}</td>
-												<td>
-													<div className="rating-display">
-														<span className="rating-value">
-															{host.averageRating > 0
-																? host.averageRating.toFixed(1)
-																: "N/A"}
-														</span>
-														{host.averageRating > 0 && (
-															<span className="rating-stars">
-																{"⭐".repeat(Math.floor(host.averageRating))}
-															</span>
-														)}
-													</div>
-												</td>
-												<td>{host.propertiesCount}</td>
-												<td>{host.ratedPropertiesCount}</td>
-												<td>
-													<button
-														className="btn-view-details"
-														onClick={() => {
-															setSelectedHost(host)
-															setShowHostModal(true)
-														}}
-													>
-														View Details
-													</button>
-												</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
-							</div>
+							<>
+								{/* Top 5 Hosts */}
+								<div className="hosts-section">
+									<div className="hosts-section-header">
+										<h3>⭐ Top 5 Hosts</h3>
+									</div>
+									<div className="hosts-table-wrapper">
+										<table className="hosts-table">
+											<thead>
+												<tr>
+													<th>Host Name</th>
+													<th>Email</th>
+													<th>Average Rating</th>
+													<th>Properties</th>
+													<th>Rated Properties</th>
+													<th>Actions</th>
+												</tr>
+											</thead>
+											<tbody>
+												{hosts.slice(0, 5).map((host) => (
+													<tr key={host.hostId}>
+														<td>
+															<strong>{host.displayName}</strong>
+														</td>
+														<td>{host.email}</td>
+														<td>
+															<div className="rating-display">
+																<span className="rating-value">
+																	{host.averageRating > 0
+																		? host.averageRating.toFixed(1)
+																		: "N/A"}
+																</span>
+																{host.averageRating > 0 && (
+																	<span className="rating-stars">
+																		{"⭐".repeat(Math.floor(host.averageRating))}
+																	</span>
+																)}
+															</div>
+														</td>
+														<td>{host.propertiesCount}</td>
+														<td>{host.ratedPropertiesCount}</td>
+														<td>
+															<button
+																className="btn-view-details"
+																onClick={() => {
+																	setSelectedHost(host)
+																	setShowHostModal(true)
+																}}
+															>
+																View Details
+															</button>
+														</td>
+													</tr>
+												))}
+											</tbody>
+										</table>
+									</div>
+								</div>
+
+								{/* Least 5 Hosts */}
+								<div className="hosts-section">
+									<div className="hosts-section-header">
+										<h3>📉 Least 5 Hosts</h3>
+									</div>
+									<div className="hosts-table-wrapper">
+										<table className="hosts-table">
+											<thead>
+												<tr>
+													<th>Host Name</th>
+													<th>Email</th>
+													<th>Average Rating</th>
+													<th>Properties</th>
+													<th>Rated Properties</th>
+													<th>Actions</th>
+												</tr>
+											</thead>
+											<tbody>
+												{hosts.slice(-5).map((host) => (
+													<tr key={host.hostId}>
+														<td>
+															<strong>{host.displayName}</strong>
+														</td>
+														<td>{host.email}</td>
+														<td>
+															<div className="rating-display">
+																<span className="rating-value">
+																	{host.averageRating > 0
+																		? host.averageRating.toFixed(1)
+																		: "N/A"}
+																</span>
+																{host.averageRating > 0 && (
+																	<span className="rating-stars">
+																		{"⭐".repeat(Math.floor(host.averageRating))}
+																	</span>
+																)}
+															</div>
+														</td>
+														<td>{host.propertiesCount}</td>
+														<td>{host.ratedPropertiesCount}</td>
+														<td>
+															<button
+																className="btn-view-details"
+																onClick={() => {
+																	setSelectedHost(host)
+																	setShowHostModal(true)
+																}}
+															>
+																View Details
+															</button>
+														</td>
+													</tr>
+												))}
+											</tbody>
+										</table>
+									</div>
+								</div>
+
+								{/* View All Button */}
+								<div className="view-all-section">
+									<button
+										className="btn-view-all"
+										onClick={() => navigate("/hostList")}
+									>
+										View All Hosts ({hosts.length})
+									</button>
+								</div>
+							</>
 						)}
 					</div>
 				)}

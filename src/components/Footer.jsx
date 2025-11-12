@@ -14,23 +14,6 @@ export default function Footer() {
 						booking for experiences that refresh the mind and body.
 					</p>
 				</div>
-				<div className="footer-links">
-					<h4>Quick Links</h4>
-					<ul>
-						<li>
-							<a href="#">Explore</a>
-						</li>
-						<li>
-							<a href="#">About Us</a>
-						</li>
-						<li>
-							<a href="/signup">Become a Host</a>
-						</li>
-						<li>
-							<a href="#">Contact</a>
-						</li>
-					</ul>
-				</div>
 				<div className="footer-social">
 					<h4>Connect With Us</h4>
 					<div className="social-icons">

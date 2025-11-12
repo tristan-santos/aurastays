@@ -4,7 +4,7 @@ import { collection, getDocs } from "firebase/firestore"
 import { db } from "./firebaseConfig" // Assuming firebaseConfig.js is in the same directory
 import "../css/Stats.css"
 
-function Counter({ from, to, suffix }) {
+function Counter({ from, to, suffix, className }) {
 	const [scope, animate] = useAnimate()
 	const isInView = useInView(scope, { once: true, amount: 0.5 })
 
@@ -22,7 +22,7 @@ function Counter({ from, to, suffix }) {
 	}, [isInView, from, to, animate, scope])
 
 	return (
-		<span className="stat-value">
+		<span className={className || "stat-value"}>
 			<span ref={scope}>{from}</span>
 			{suffix}
 		</span>
@@ -121,7 +121,7 @@ export default function Stats() {
 					AuraStays
 				</p>
 			</div>
-			<div className="stats-container">
+			<div className="stats-wrapper">
 				<motion.div
 					className="stats-container"
 					variants={containerVariants}
@@ -129,18 +129,46 @@ export default function Stats() {
 					whileInView="visible"
 					viewport={{ once: true, amount: 0.5 }}
 				>
-					{stats.map((stat, index) => (
-						<div key={index} className="stat-item">
-							<motion.div
-								key={index}
-								className="stat-item"
-								variants={itemVariants}
-							>
-								<Counter from={0} to={stat.value} suffix={stat.suffix} />
-								<p className="stat-label">{stat.label}</p>
-							</motion.div>
-						</div>
-					))}
+					{stats.map((stat, index) => {
+						// Generate unique classNames based on stat label
+						const getValueClassName = (label) => {
+							const labelMap = {
+								"Happy Guests": "happy-guests-value",
+								"Properties Listed": "properties-listed-value",
+								Countries: "countries-value",
+								"Average Rating": "overallRating-value",
+							}
+							return labelMap[label] || "stat-value"
+						}
+
+						const getLabelClassName = (label) => {
+							const labelMap = {
+								"Happy Guests": "happy-guests-label",
+								"Properties Listed": "properties-listed-label",
+								Countries: "countries-label",
+								"Average Rating": "overallRating-label",
+							}
+							return labelMap[label] || "stat-label"
+						}
+
+						return (
+							<div key={index} className="stat-item">
+								<motion.div
+									key={index}
+									className="stat-item"
+									variants={itemVariants}
+								>
+									<Counter
+										from={0}
+										to={stat.value}
+										suffix={stat.suffix}
+										className={getValueClassName(stat.label)}
+									/>
+									<p className={getLabelClassName(stat.label)}>{stat.label}</p>
+								</motion.div>
+							</div>
+						)
+					})}
 				</motion.div>
 			</div>
 		</section>

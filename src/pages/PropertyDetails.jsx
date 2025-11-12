@@ -68,6 +68,10 @@ export default function PropertyDetails() {
 	const [isInWishlist, setIsInWishlist] = useState(false)
 	const [selectedImage, setSelectedImage] = useState(0)
 	const [showShareModal, setShowShareModal] = useState(false)
+	const [showReportModal, setShowReportModal] = useState(false)
+	const [reportReason, setReportReason] = useState("")
+	const [reportDescription, setReportDescription] = useState("")
+	const [isSubmittingReport, setIsSubmittingReport] = useState(false)
 	const [showAllPhotos, setShowAllPhotos] = useState(false)
 	const [showWalletPaymentModal, setShowWalletPaymentModal] = useState(false)
 	const [bookedDates, setBookedDates] = useState([])
@@ -1315,6 +1319,45 @@ export default function PropertyDetails() {
 		toast("Promo code removed")
 	}
 
+	const handleSubmitReport = async () => {
+		if (!reportReason) {
+			toast.error("Please select a reason for reporting")
+			return
+		}
+
+		if (!currentUser) {
+			toast.error("Please log in to report a property")
+			return
+		}
+
+		setIsSubmittingReport(true)
+		try {
+			const reportData = {
+				propertyId: propertyId,
+				propertyTitle: property?.title || "Unknown Property",
+				hostId: property?.hostId || "",
+				reporterId: currentUser.uid,
+				reporterEmail: currentUser.email || "",
+				reporterName: currentUser.displayName || "Guest",
+				reason: reportReason,
+				description: reportDescription,
+				status: "pending",
+				createdAt: serverTimestamp(),
+			}
+
+			await addDoc(collection(db, "propertyReports"), reportData)
+			toast.success("Report submitted successfully. Thank you for helping keep AuraStays safe!")
+			setShowReportModal(false)
+			setReportReason("")
+			setReportDescription("")
+		} catch (error) {
+			console.error("Error submitting report:", error)
+			toast.error("Failed to submit report. Please try again.")
+		} finally {
+			setIsSubmittingReport(false)
+		}
+	}
+
 	const copyToClipboard = () => {
 		navigator.clipboard.writeText(shareableUrl)
 		toast.success("Link copied to clipboard!")
@@ -2488,9 +2531,6 @@ export default function PropertyDetails() {
 		<div className="property-details-container">
 			{/* Header */}
 			<header className="property-details-header">
-				<button onClick={() => navigate(-1)} className="back-btn">
-					<FaArrowLeft /> Back
-				</button>
 				<div className="header-actions">
 					<button
 						onClick={() => setShowShareModal(true)}
@@ -2498,6 +2538,14 @@ export default function PropertyDetails() {
 					>
 						<FaShare /> Share
 					</button>
+					{currentUser && !isHost && (
+						<button
+							onClick={() => setShowReportModal(true)}
+							className="action-btn report-btn"
+						>
+							<FaFlag /> Report
+						</button>
+					)}
 					<button
 						onClick={toggleFavorite}
 						className={`action-btn ${isFavorite ? "active" : ""}`}
@@ -3319,6 +3367,81 @@ export default function PropertyDetails() {
 					)}
 				</div>
 			</div>
+
+			{/* Report Modal */}
+			{showReportModal && (
+				<div
+					className="share-modal-overlay"
+					onClick={() => setShowReportModal(false)}
+				>
+					<div
+						className="share-modal-content"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="share-modal-header">
+							<h3>Report Property</h3>
+							<button
+								className="close-share-modal"
+								onClick={() => setShowReportModal(false)}
+							>
+								<FaTimes />
+							</button>
+						</div>
+						<div className="report-form">
+							<p className="report-description">
+								Help us keep AuraStays safe by reporting any issues with this property.
+							</p>
+							<div className="form-group">
+								<label>Reason for Reporting</label>
+								<select
+									value={reportReason}
+									onChange={(e) => setReportReason(e.target.value)}
+									className="report-select"
+								>
+									<option value="">Select a reason</option>
+									<option value="inaccurate">Inaccurate Information</option>
+									<option value="misleading">Misleading Photos</option>
+									<option value="safety">Safety Concerns</option>
+									<option value="fraud">Suspected Fraud</option>
+									<option value="inappropriate">Inappropriate Content</option>
+									<option value="spam">Spam or Scam</option>
+									<option value="other">Other</option>
+								</select>
+							</div>
+							<div className="form-group">
+								<label>Additional Details</label>
+								<textarea
+									value={reportDescription}
+									onChange={(e) => setReportDescription(e.target.value)}
+									placeholder="Please provide more details about the issue..."
+									className="report-textarea"
+									rows="5"
+								/>
+							</div>
+							<div className="report-actions">
+								<button
+									className="cancel-btn"
+									onClick={() => {
+										setShowReportModal(false)
+										setReportReason("")
+										setReportDescription("")
+									}}
+									disabled={isSubmittingReport}
+								>
+									Cancel
+								</button>
+								<button
+									className="submit-report-btn"
+									onClick={handleSubmitReport}
+									disabled={!reportReason || isSubmittingReport}
+								>
+									{isSubmittingReport ? "Submitting..." : "Submit Report"}
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
 
 			{/* Share Modal */}
 			{showShareModal && (

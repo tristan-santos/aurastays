@@ -21,9 +21,13 @@
 	line-height: 1.6;
 }
 
+.stats-wrapper {
+	width: 100%;
+}
+
 .stats-container {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 	gap: 2rem;
 	max-width: 1000px;
 	margin: 0 auto;
@@ -36,15 +40,76 @@
 .stat-value {
 	font-size: 3.5rem;
 	font-weight: 700;
-	color: var(--secondary);
+	color: var(--primary);
 	display: block;
 	margin-bottom: 0.5rem;
 }
 
 .stat-label {
 	font-size: 1rem;
-	color: #6c757d;
+	color: var(--primary);
 	font-weight: 600;
+	white-space: nowrap;
+}
+
+.happy-guests-value {
+	font-size: 3.5rem;
+	font-weight: 700;
+	color: var(--primary);
+	display: block;
+	margin-bottom: 0.5rem;
+}
+
+.happy-guests-label {
+	font-size: 1rem;
+	color: var(--primary);
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.properties-listed-value {
+	font-size: 3.5rem;
+	font-weight: 700;
+	color: var(--primary);
+	display: block;
+	margin-bottom: 0.5rem;
+}
+
+.properties-listed-label {
+	font-size: 1rem;
+	color: var(--primary);
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.countries-value {
+	font-size: 3.5rem;
+	font-weight: 700;
+	color: var(--primary);
+	display: block;
+	margin-bottom: 0.5rem;
+}
+
+.countries-label {
+	font-size: 1rem;
+	color: var(--primary);
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.overallRating-value {
+	font-size: 3.5rem;
+	font-weight: 700;
+	color: var(--primary);
+	display: block;
+	margin-bottom: 0.5rem;
+}
+
+.overallRating-label {
+	font-size: 1rem;
+	color: var(--primary);
+	font-weight: 600;
+	white-space: nowrap;
 }
 
 @media (max-width: 768px) {

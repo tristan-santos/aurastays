@@ -24,6 +24,11 @@ export const createNotification = async (userId, type, title, message, data = {}
 			read: false,
 			createdAt: serverTimestamp(),
 		}
+		
+		// If hostId is provided in data, also set it as a top-level field for compatibility
+		if (data?.hostId) {
+			notificationData.hostId = data.hostId
+		}
 
 		const docRef = await addDoc(collection(db, "notifications"), notificationData)
 		console.log(`✅ Notification created: ${type} for user ${userId}`, docRef.id)

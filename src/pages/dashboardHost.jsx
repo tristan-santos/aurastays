@@ -344,7 +344,7 @@ export default function DashboardHost() {
 
 		const notificationsQuery = query(
 			collection(db, "notifications"),
-			where("hostId", "==", currentUser.uid),
+			where("userId", "==", currentUser.uid),
 			where("read", "==", false)
 		)
 
@@ -358,7 +358,7 @@ export default function DashboardHost() {
 				if (error.code === "failed-precondition") {
 					const simpleQuery = query(
 						collection(db, "notifications"),
-						where("hostId", "==", currentUser.uid)
+						where("userId", "==", currentUser.uid)
 					)
 					const unsubscribeSimple = onSnapshot(
 						simpleQuery,

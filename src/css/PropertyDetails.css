@@ -109,6 +109,17 @@
 	border-color: var(--primary);
 }
 
+.action-btn.report-btn {
+	background: #dc3545;
+	color: white;
+	border-color: #dc3545;
+}
+
+.action-btn.report-btn:hover {
+	background: #c82333;
+	border-color: #bd2130;
+}
+
 /* Title Section */
 .property-title-section {
 	margin-bottom: 2rem;
@@ -1757,6 +1768,111 @@
 	height: 250px;
 	object-fit: cover;
 	border-radius: 8px;
+}
+
+/* Report Form Styles */
+.report-form {
+	padding: 1rem 0;
+}
+
+.report-form .report-description {
+	color: #666;
+	margin-bottom: 1.5rem;
+	font-size: 0.95rem;
+	line-height: 1.6;
+}
+
+.report-form .form-group {
+	margin-bottom: 1.5rem;
+}
+
+.report-form .form-group label {
+	display: block;
+	margin-bottom: 0.5rem;
+	font-weight: 600;
+	color: var(--primary);
+}
+
+.report-select {
+	width: 100%;
+	padding: 0.75rem;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	font-size: 1rem;
+	background: white;
+	cursor: pointer;
+	transition: border-color 0.3s ease;
+}
+
+.report-select:focus {
+	outline: none;
+	border-color: var(--primary);
+}
+
+.report-textarea {
+	width: 100%;
+	padding: 0.75rem;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	font-size: 1rem;
+	font-family: inherit;
+	resize: vertical;
+	transition: border-color 0.3s ease;
+}
+
+.report-textarea:focus {
+	outline: none;
+	border-color: var(--primary);
+}
+
+.report-actions {
+	display: flex;
+	gap: 1rem;
+	justify-content: flex-end;
+	margin-top: 2rem;
+}
+
+.cancel-btn,
+.submit-report-btn {
+	padding: 0.75rem 1.5rem;
+	border: none;
+	border-radius: 8px;
+	font-size: 1rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.3s ease;
+}
+
+.cancel-btn {
+	background: #6c757d;
+	color: white;
+}
+
+.cancel-btn:hover:not(:disabled) {
+	background: #5a6268;
+	transform: translateY(-2px);
+}
+
+.cancel-btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.submit-report-btn {
+	background: #dc3545;
+	color: white;
+}
+
+.submit-report-btn:hover:not(:disabled) {
+	background: #c82333;
+	transform: translateY(-2px);
+	box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+}
+
+.submit-report-btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+	background: #6c757d;
 }
 
 /* Responsive Design */

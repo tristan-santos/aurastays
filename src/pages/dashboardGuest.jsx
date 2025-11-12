@@ -189,10 +189,29 @@ export default function DashboardGuest() {
 			const propertiesRef = collection(db, "properties")
 			const snapshot = await getDocs(propertiesRef)
 
-			const propertiesList = snapshot.docs.map((doc) => ({
-				id: doc.id,
-				...doc.data(),
-			}))
+			const propertiesList = snapshot.docs
+				.map((doc) => ({
+					id: doc.id,
+					...doc.data(),
+				}))
+				.filter((property) => {
+					// Filter out disabled properties
+					if (property.disabled === true) {
+						// Check if disabled period has passed
+						if (property.disabledUntil) {
+							const disabledUntil = property.disabledUntil.toDate
+								? property.disabledUntil.toDate()
+								: new Date(property.disabledUntil)
+							const now = new Date()
+							if (now < disabledUntil) {
+								return false // Still disabled
+							}
+						} else {
+							return false // Permanently disabled or no expiry
+						}
+					}
+					return true
+				})
 
 			setProperties(propertiesList)
 
