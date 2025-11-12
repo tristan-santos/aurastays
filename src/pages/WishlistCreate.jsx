@@ -205,24 +205,6 @@ export default function WishlistCreate() {
 			<div className="wishlist-create-wrapper">
 				{/* Header */}
 				<div className="wishlist-create-header">
-					<button
-						onClick={() => navigate(-1)}
-						style={{
-							background: "none",
-							border: "none",
-							cursor: "pointer",
-							color: "#6c757d",
-							marginBottom: "1rem",
-							display: "flex",
-							alignItems: "center",
-							gap: "0.5rem",
-							fontSize: "0.95rem",
-							fontWeight: 500,
-							padding: 0,
-						}}
-					>
-						<FaArrowLeft /> Back
-					</button>
 					<h1>
 						<FaBookmark style={{ color: "var(--primary)" }} /> Create Wishlist
 					</h1>
@@ -429,9 +411,6 @@ export default function WishlistCreate() {
 
 					{/* Actions */}
 					<div className="form-actions">
-						<button type="button" onClick={() => navigate(-1)} className="btn-cancel">
-							Cancel
-						</button>
 						{wishlistCreated && createdWishlist ? (
 							<button
 								type="button"

@@ -993,13 +993,6 @@ export default function Profile() {
 			{/* Header */}
 			<div className="profile-header">
 				<h1>My Profile</h1>
-				<button
-					className="backButton"
-					onClick={() => navigate(userType === "host" ? "/dashboardHost" : "/dashboardGuest")}
-				>
-					<span>Back to Dashboard</span>
-					<FaArrowLeft style={{ transform: "rotate(180deg)" }} />
-				</button>
 			</div>
 
 			<div className="profile-content">

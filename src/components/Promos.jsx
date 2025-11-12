@@ -19,51 +19,131 @@ export default function Promos({ isOpen, onClose, userId = null }) {
 	const fetchPromos = async () => {
 		setIsLoading(true)
 		try {
-			// If userId is provided, only show promos created by that user (for hosts)
+			// If userId is provided, show promos created by that user (for hosts) AND admin-created vouchers for hosts
 			// If userId is null, show all non-admin promos (for guests)
 			
 			// If userId is provided, filter by createdBy directly in the query
 			if (userId) {
-				const promosQuery = query(
-					collection(db, "promos"),
-					where("createdBy", "==", userId)
-				)
-				const promosSnapshot = await getDocs(promosQuery)
-				
-				const now = new Date()
-				const promosData = promosSnapshot.docs
-					.map((doc) => ({
-						id: doc.id,
-						...doc.data(),
-					}))
-					.filter((promo) => {
-						// Must be active
-						if (!promo.isActive) return false
-						
-						// Filter out expired promos
-						if (promo.validUntil) {
-							const expiryDate = new Date(promo.validUntil)
-							if (expiryDate < now) return false
+				// Fetch host-created promos
+				let hostPromos = []
+				try {
+					const promosQuery = query(
+						collection(db, "promos"),
+						where("createdBy", "==", userId)
+					)
+					const promosSnapshot = await getDocs(promosQuery)
+					
+					const now = new Date()
+					hostPromos = promosSnapshot.docs
+						.map((doc) => ({
+							id: doc.id,
+							...doc.data(),
+						}))
+						.filter((promo) => {
+							// Must be active
+							if (!promo.isActive) return false
+							
+							// Filter out expired promos
+							if (promo.validUntil) {
+								const expiryDate = new Date(promo.validUntil)
+								if (expiryDate < now) return false
+							}
+							
+							// Filter out promos that haven't started yet
+							if (promo.validFrom) {
+								const startDate = new Date(promo.validFrom)
+								if (startDate > now) return false
+							}
+							
+							// Filter out promos that reached their usage limit
+							if (
+								promo.usageLimit > 0 &&
+								(promo.usageCount || 0) >= promo.usageLimit
+							) {
+								return false
+							}
+							
+							return true
+						})
+				} catch (error) {
+					console.error("Error fetching host promos:", error)
+					hostPromos = []
+				}
+
+				// Fetch admin-created vouchers for hosts
+				let adminVouchers = []
+				try {
+					// Get admin user ID
+					let adminUserId = null
+					try {
+						const adminEmail = "adminAurastays@aurastays.com"
+						const usersQuery = query(
+							collection(db, "users"),
+							where("email", "==", adminEmail)
+						)
+						const usersSnapshot = await getDocs(usersQuery)
+						if (!usersSnapshot.empty) {
+							adminUserId = usersSnapshot.docs[0].id
 						}
-						
-						// Filter out promos that haven't started yet
-						if (promo.validFrom) {
-							const startDate = new Date(promo.validFrom)
-							if (startDate > now) return false
-						}
-						
-						// Filter out promos that reached their usage limit
-						if (
-							promo.usageLimit > 0 &&
-							(promo.usageCount || 0) >= promo.usageLimit
-						) {
-							return false
-						}
-						
-						return true
-					})
-				
-				setPromos(promosData)
+					} catch (adminError) {
+						console.error("Error fetching admin user ID:", adminError)
+					}
+
+					if (adminUserId) {
+						// Fetch all promos and filter for admin-created vouchers for hosts
+						const allPromosSnapshot = await getDocs(collection(db, "promos"))
+						const now = new Date()
+						adminVouchers = allPromosSnapshot.docs
+							.map((doc) => ({
+								id: doc.id,
+								...doc.data(),
+							}))
+							.filter((promo) => {
+								// Must be created by admin
+								if (promo.createdBy !== adminUserId) return false
+								
+								// Must be for hosts (applicableTo === "host" OR targetUserId matches current host)
+								const isForHost = 
+									promo.applicableTo === "host" || 
+									promo.targetUserId === userId ||
+									(promo.assignedTo && promo.assignedTo === userId)
+								
+								if (!isForHost) return false
+								
+								// Must be active
+								if (!promo.isActive) return false
+								
+								// Not expired
+								if (promo.validUntil) {
+									const expiryDate = new Date(promo.validUntil)
+									if (expiryDate < now) return false
+								}
+								
+								// Not scheduled for future
+								if (promo.validFrom) {
+									const startDate = new Date(promo.validFrom)
+									if (startDate > now) return false
+								}
+								
+								// Not reached usage limit
+								if (
+									promo.usageLimit > 0 &&
+									(promo.usageCount || 0) >= promo.usageLimit
+								) {
+									return false
+								}
+								
+								return true
+							})
+					}
+				} catch (adminVoucherError) {
+					console.error("Error fetching admin vouchers:", adminVoucherError)
+					adminVouchers = []
+				}
+
+				// Combine host promos and admin vouchers
+				const allPromos = [...hostPromos, ...adminVouchers]
+				setPromos(allPromos)
 				setIsLoading(false)
 				return
 			}

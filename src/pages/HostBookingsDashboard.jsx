@@ -150,12 +150,6 @@ export default function HostBookingsDashboard() {
 	return (
 		<div className="host-bookings-dashboard">
 			<div className="dashboard-header">
-				<button
-					className="back-button"
-					onClick={() => navigate("/dashboardHost")}
-				>
-					← Back to Dashboard
-				</button>
 				<h1>
 					<FaCalendarCheck style={{ marginRight: "0.5rem" }} /> Bookings Calendar
 				</h1>

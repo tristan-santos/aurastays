@@ -710,14 +710,6 @@ export default function HostSubscription() {
 	return (
 		<div className="host-subscription-page">
 			<div className="subscription-container">
-				{/* Back Button */}
-				<button
-					className="host-subscription-back-btn"
-					onClick={() => navigate("/dashboardHost")}
-				>
-					<FaArrowLeft /> Back to Dashboard
-				</button>
-
 				{/* Header */}
 				<div className="subscription-header">
 					<h1>

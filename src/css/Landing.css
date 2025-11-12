@@ -13,6 +13,8 @@
 	padding: 2rem;
 	height: 100vh;
 	overflow: hidden;
+	width: 100%;
+	max-width: 100vw;
 }
 
 @media (max-width: 768px) {

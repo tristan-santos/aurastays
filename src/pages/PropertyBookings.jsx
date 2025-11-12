@@ -310,9 +310,6 @@ export default function PropertyBookings() {
 		<div className="host-dashboard-wrapper">
 			<header className="host-dashboard-header">
 				<div className="host-header-inner">
-					<button className="host-icon-button" onClick={() => navigate(-1)}>
-						<FaArrowLeft /> Back
-					</button>
 					<div className="host-dashboard-title" style={{ gap: "0.5rem" }}>
 						<span className="logo-text">Bookings for</span>
 						<strong>{property?.title || "Property"}</strong>

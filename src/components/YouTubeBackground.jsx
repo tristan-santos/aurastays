@@ -41,13 +41,14 @@ export default function YouTubeBackground({
 			style={{
 				position: scopeToParent ? "absolute" : "fixed",
 				top: 0,
-				left: 0,
-				width: scopeToParent ? "100%" : "100vw",
+				left: scopeToParent ? "50%" : 0,
+				width: scopeToParent ? "100vw" : "100vw",
 				height: scopeToParent ? "100%" : "100vh",
 				overflow: "hidden",
 				zIndex,
 				pointerEvents: "none",
 				backgroundColor: "#000",
+				transform: scopeToParent ? "translateX(-50%)" : "none",
 			}}
 		>
 			<div
@@ -56,10 +57,10 @@ export default function YouTubeBackground({
 					top: "50%",
 					left: "50%",
 					// Scale to cover container or viewport
-					width: scopeToParent ? "100%" : "100vw",
-					height: scopeToParent ? "56.25%" : "56.25vw", // 16:9
-					minHeight: scopeToParent ? "100%" : "100vh",
-					minWidth: scopeToParent ? "177.78%" : "177.78vh", // 16/9
+					width: "100vw",
+					height: "56.25vw", // 16:9
+					minHeight: "100vh",
+					minWidth: "177.78vh", // 16/9
 					transform: "translate(-50%, -50%)",
 				}}
 			>

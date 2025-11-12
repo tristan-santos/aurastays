@@ -84,12 +84,6 @@ export default function HostAllListings() {
 	return (
 		<div className="dashboard-container">
 			<div className="dashboard-header">
-				<button
-					className="back-button"
-					onClick={() => navigate("/dashboardHost")}
-				>
-					<FaArrowLeft /> Back to Dashboard
-				</button>
 				<h1>All My Listings</h1>
 			</div>
 

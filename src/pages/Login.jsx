@@ -139,10 +139,6 @@ export default function Login() {
 							<p>Find your place, feel the aura.</p>
 						</div>
 					</div>
-					<Link to="/" className="back-button">
-						<FaArrowLeft />
-						<span>Back</span>
-					</Link>
 					<div className="signup-form-container">
 						<div className="signup-header">
 							<h2>Login</h2>

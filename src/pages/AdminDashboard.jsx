@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore"
 import { toast } from "react-stacked-toast"
 import { FaCalendarAlt, FaTimes } from "react-icons/fa"
+import housePlaceholder from "../assets/housePlaceholder.png"
 import {
 	Chart as ChartJS,
 	CategoryScale,
@@ -90,12 +91,10 @@ const AdminDashboard = () => {
 		totalProperties: 0,
 		totalBookings: 0,
 		totalRevenue: 0,
-		pendingPayouts: 0,
 	})
 	const [recentBookings, setRecentBookings] = useState([])
 	const [bestReviews, setBestReviews] = useState([])
 	const [lowestReviews, setLowestReviews] = useState([])
-	const [pendingPayouts, setPendingPayouts] = useState([])
 	const [hosts, setHosts] = useState([])
 	const [selectedHost, setSelectedHost] = useState(null)
 	const [showHostModal, setShowHostModal] = useState(false)
@@ -177,7 +176,6 @@ const AdminDashboard = () => {
 			let usersSnapshot,
 				propertiesSnapshot,
 				bookingsSnapshot,
-				payoutsSnapshot,
 				promosSnapshot
 
 			try {
@@ -185,7 +183,6 @@ const AdminDashboard = () => {
 					getDocs(collection(db, "users")),
 					getDocs(collection(db, "properties")),
 					getDocs(collection(db, "bookings")).catch(() => ({ docs: [] })),
-					getDocs(collection(db, "payouts")).catch(() => ({ docs: [] })),
 					getDocs(collection(db, "promos")).catch(() => ({ docs: [] })),
 				])
 
@@ -195,17 +192,14 @@ const AdminDashboard = () => {
 					results[1].status === "fulfilled" ? results[1].value : { docs: [] }
 				bookingsSnapshot =
 					results[2].status === "fulfilled" ? results[2].value : { docs: [] }
-				payoutsSnapshot =
-					results[3].status === "fulfilled" ? results[3].value : { docs: [] }
 				promosSnapshot =
-					results[4].status === "fulfilled" ? results[4].value : { docs: [] }
+					results[3].status === "fulfilled" ? results[3].value : { docs: [] }
 			} catch (err) {
 				console.error("Error fetching collections:", err)
 				// Set empty defaults
 				usersSnapshot = { docs: [] }
 				propertiesSnapshot = { docs: [] }
 				bookingsSnapshot = { docs: [] }
-				payoutsSnapshot = { docs: [] }
 				promosSnapshot = { docs: [] }
 			}
 
@@ -260,17 +254,6 @@ const AdminDashboard = () => {
 				) || 0
 			setRecentBookings(allBookings.slice(0, 10))
 
-			// Process payouts with defaults
-			const payoutsList = payoutsSnapshot.docs
-				.map((doc) => ({
-					id: doc.id,
-					...doc.data(),
-				}))
-				.filter((payout) => payout.status === "pending")
-			setPendingPayouts(payoutsList)
-			const pendingPayoutsTotal =
-				payoutsList.reduce((sum, payout) => sum + (payout.amount || 0), 0) || 0
-
 			// Process promos
 			const allPromos = promosSnapshot.docs.map((doc) => ({
 				id: doc.id,
@@ -285,7 +268,6 @@ const AdminDashboard = () => {
 				totalProperties: totalProperties || 0,
 				totalBookings: totalBookings || 0,
 				totalRevenue: totalRevenue || 0,
-				pendingPayouts: pendingPayoutsTotal || 0,
 			})
 
 			// Prepare chart data
@@ -302,12 +284,10 @@ const AdminDashboard = () => {
 				totalProperties: 0,
 				totalBookings: 0,
 				totalRevenue: 0,
-				pendingPayouts: 0,
 			})
 			setBestReviews([])
 			setLowestReviews([])
 			setRecentBookings([])
-			setPendingPayouts([])
 
 			// Prepare empty chart data
 			prepareChartData([], [])
@@ -419,35 +399,6 @@ const AdminDashboard = () => {
 		})
 	}
 
-	const handleApprovePayout = async (payoutId, amount) => {
-		try {
-			await updateDoc(doc(db, "payouts", payoutId), {
-				status: "approved",
-				approvedAt: new Date(),
-				approvedBy: currentUser.uid,
-			})
-			toast.success(`Payout of ₱${amount.toLocaleString()} approved`)
-			fetchAdminData()
-		} catch (err) {
-			console.error("Error approving payout:", err)
-			toast.error("Failed to approve payout")
-		}
-	}
-
-	const handleRejectPayout = async (payoutId) => {
-		try {
-			await updateDoc(doc(db, "payouts", payoutId), {
-				status: "rejected",
-				rejectedAt: new Date(),
-				rejectedBy: currentUser.uid,
-			})
-			toast.success("Payout rejected")
-			fetchAdminData()
-		} catch (err) {
-			console.error("Error rejecting payout:", err)
-			toast.error("Failed to reject payout")
-		}
-	}
 
 	const fetchHostsData = async () => {
 		try {
@@ -1379,24 +1330,6 @@ const AdminDashboard = () => {
 					break
 				}
 
-				case "payouts":
-					reportTitle = "Payouts_Report"
-					reportData = {
-						generatedAt: new Date().toISOString(),
-						summary: {
-							pendingPayouts: stats.pendingPayouts,
-							totalRequests: pendingPayouts.length,
-						},
-						pending: pendingPayouts.map((p) => ({
-							host: p.hostName || "Host",
-							email: p.hostEmail,
-							amount: p.amount || 0,
-							method: p.method || "PayPal",
-							requestedAt:
-								p.createdAt?.toDate?.()?.toLocaleDateString() || "N/A",
-						})),
-					}
-					break
 
 				case "complete":
 				case "system": {
@@ -1424,7 +1357,6 @@ const AdminDashboard = () => {
 							totalProperties: stats.totalProperties,
 							totalBookings: stats.totalBookings,
 							totalRevenue: stats.totalRevenue,
-							pendingPayouts: stats.pendingPayouts,
 						},
 						users: {
 							summary: {
@@ -1494,20 +1426,6 @@ const AdminDashboard = () => {
 									2
 								),
 							},
-						},
-						payouts: {
-							summary: {
-								pendingAmount: stats.pendingPayouts,
-								pendingRequests: pendingPayouts.length,
-							},
-							pending: pendingPayouts.map((p) => ({
-								host: p.hostName || "Host",
-								email: p.hostEmail,
-								amount: p.amount || 0,
-								method: p.method || "PayPal",
-								requestedAt:
-									p.createdAt?.toDate?.()?.toLocaleDateString() || "N/A",
-							})),
 						},
 						policies: {
 							serviceFeeHost: policies.serviceFeeHost,
@@ -1863,50 +1781,6 @@ const AdminDashboard = () => {
 							</View>
 						)}
 
-						{/* Payouts Table */}
-						{type === "payouts" && data.pending && (
-							<View style={styles.section}>
-								<Text style={styles.sectionTitle}>Pending Payouts</Text>
-								<View style={styles.table}>
-									<View style={[styles.tableRow, styles.tableHeader]}>
-										<Text style={[styles.tableCell, { width: "25%" }]}>
-											Host
-										</Text>
-										<Text style={[styles.tableCell, { width: "30%" }]}>
-											Email
-										</Text>
-										<Text style={[styles.tableCell, { width: "15%" }]}>
-											Amount
-										</Text>
-										<Text style={[styles.tableCell, { width: "15%" }]}>
-											Method
-										</Text>
-										<Text style={[styles.tableCell, { width: "15%" }]}>
-											Requested
-										</Text>
-									</View>
-									{data.pending.slice(0, 15).map((payout, idx) => (
-										<View key={idx} style={styles.tableRow}>
-											<Text style={[styles.tableCell, { width: "25%" }]}>
-												{payout.host}
-											</Text>
-											<Text style={[styles.tableCell, { width: "30%" }]}>
-												{payout.email}
-											</Text>
-											<Text style={[styles.tableCell, { width: "15%" }]}>
-												₱{payout.amount}
-											</Text>
-											<Text style={[styles.tableCell, { width: "15%" }]}>
-												{payout.method}
-											</Text>
-											<Text style={[styles.tableCell, { width: "15%" }]}>
-												{payout.requestedAt}
-											</Text>
-										</View>
-									))}
-								</View>
-							</View>
-						)}
 					</Page>
 				</Document>
 			)
@@ -1960,12 +1834,6 @@ const AdminDashboard = () => {
 					<div className="admin-user-info">
 						<span>Welcome, {userData?.displayName || "Admin"}</span>
 
-						<button
-							onClick={() => navigate("/")}
-							className="back-to-landing-btn"
-						>
-							Back to Landing
-						</button>
 						<button onClick={handleLogout} className="logout-btn">
 							Logout
 						</button>
@@ -2041,13 +1909,6 @@ const AdminDashboard = () => {
 					>
 						<span className="sidebar-icon">💰</span>
 						<span className="sidebar-text">E-Wallet</span>
-					</button>
-					<button
-						className={`sidebar-item ${activeTab === "payout" ? "active" : ""}`}
-						onClick={() => setActiveTab("payout")}
-					>
-						<span className="sidebar-icon">💸</span>
-						<span className="sidebar-text">Payout</span>
 					</button>
 				</nav>
 			</aside>
@@ -2277,65 +2138,6 @@ const AdminDashboard = () => {
 							</div>
 
 							{/* Payment Review Section */}
-							<div className="bento-card payouts-card">
-								<h2>💳 Pending Payouts</h2>
-								<div className="payout-summary">
-									<div className="payout-total">
-										<span>Total Pending:</span>
-										<strong>₱{stats.pendingPayouts.toLocaleString()}</strong>
-									</div>
-								</div>
-								<div className="payouts-list">
-									{pendingPayouts.length === 0 ? (
-										<div className="empty-payouts">
-											<p>✅ No pending payouts</p>
-										</div>
-									) : (
-										pendingPayouts.map((payout) => (
-											<div key={payout.id} className="payout-item">
-												<div className="payout-info">
-													<div className="payout-host">
-														<strong>{payout.hostName || "Host"}</strong>
-														<span className="payout-email">
-															{payout.hostEmail}
-														</span>
-													</div>
-													<div className="payout-details">
-														<span className="payout-amount">
-															₱{(payout.amount || 0).toLocaleString()}
-														</span>
-														<span className="payout-date">
-															{payout.createdAt
-																?.toDate?.()
-																?.toLocaleDateString() || "N/A"}
-														</span>
-													</div>
-													<div className="payout-method">
-														<span>Method: {payout.method || "PayPal"}</span>
-														<span>Account: {payout.accountId || "N/A"}</span>
-													</div>
-												</div>
-												<div className="payout-actions">
-													<button
-														className="approve-btn"
-														onClick={() =>
-															handleApprovePayout(payout.id, payout.amount)
-														}
-													>
-														✓ Approve
-													</button>
-													<button
-														className="reject-btn"
-														onClick={() => handleRejectPayout(payout.id)}
-													>
-														✗ Reject
-													</button>
-												</div>
-											</div>
-										))
-									)}
-								</div>
-							</div>
 						</div>
 					</>
 				)}
@@ -2750,11 +2552,7 @@ const AdminDashboard = () => {
 										Hosts agree to pay a service fee of{" "}
 										{policies.serviceFeeHost}% per booking
 									</li>
-									<li>Service fees are automatically deducted from payouts</li>
 									<li>Hosts are responsible for applicable taxes</li>
-									<li>
-										Payouts processed within 24 hours after guest check-in
-									</li>
 								</ul>
 							</div>
 
@@ -3365,33 +3163,6 @@ const AdminDashboard = () => {
 								</button>
 							</div>
 
-							{/* Payouts Report */}
-							<div className="report-card">
-								<div className="report-icon">💳</div>
-								<h3>Payouts Report</h3>
-								<p>
-									Host payout requests with amounts, methods, and processing
-									status
-								</p>
-								<div className="report-stats">
-									<div className="stat">
-										<span className="stat-value">
-											₱{stats.pendingPayouts.toLocaleString()}
-										</span>
-										<span className="stat-label">Pending Amount</span>
-									</div>
-									<div className="stat">
-										<span className="stat-value">{pendingPayouts.length}</span>
-										<span className="stat-label">Requests</span>
-									</div>
-								</div>
-								<button
-									className="generate-report-btn"
-									onClick={() => openReportModal("payouts")}
-								>
-									📊 Generate Payouts Report
-								</button>
-							</div>
 
 							{/* All Reports Combined */}
 							<div className="report-card featured">
@@ -3403,8 +3174,7 @@ const AdminDashboard = () => {
 								</p>
 								<div className="report-stats full-width">
 									<p className="report-description">
-										Includes users, properties, bookings, revenue, and payouts
-										data in both JSON and CSV formats
+										Includes users, properties, bookings, and revenue data in both JSON and CSV formats
 									</p>
 								</div>
 								<button
@@ -4132,36 +3902,6 @@ const AdminDashboard = () => {
 										</div>
 									)}
 
-								{reportModal.type === "payouts" &&
-									reportModal.data?.pending && (
-										<div className="report-section">
-											<h3>💳 Pending Payouts</h3>
-											<div className="report-table-wrapper">
-												<table className="report-table">
-													<thead>
-														<tr>
-															<th>Host</th>
-															<th>Email</th>
-															<th>Amount</th>
-															<th>Method</th>
-															<th>Requested At</th>
-														</tr>
-													</thead>
-													<tbody>
-														{reportModal.data.pending.map((payout, idx) => (
-															<tr key={idx}>
-																<td>{payout.host}</td>
-																<td>{payout.email}</td>
-																<td>₱{payout.amount}</td>
-																<td>{payout.method}</td>
-																<td>{payout.requestedAt}</td>
-															</tr>
-														))}
-													</tbody>
-												</table>
-											</div>
-										</div>
-									)}
 
 								{/* Complete System Report */}
 								{(reportModal.type === "complete" ||
@@ -4328,22 +4068,6 @@ const AdminDashboard = () => {
 												</div>
 											)}
 
-											{/* Payouts Summary */}
-											{reportModal.data.payouts && (
-												<div className="report-section">
-													<h3>💳 Payouts Overview</h3>
-													<div className="summary-grid">
-														<div className="summary-item">
-															<strong>Pending Amount:</strong> ₱
-															{reportModal.data.payouts.summary.pendingAmount.toLocaleString()}
-														</div>
-														<div className="summary-item">
-															<strong>Pending Requests:</strong>{" "}
-															{reportModal.data.payouts.summary.pendingRequests}
-														</div>
-													</div>
-												</div>
-											)}
 
 											{/* Policies Summary */}
 											{reportModal.data.policies && (
@@ -4538,15 +4262,10 @@ const AdminDashboard = () => {
 													}
 												}}
 											>
-												<option value="all">
-													All Categories (except Host)
-												</option>
+												<option value="all">All Categories</option>
 												<option value="properties">Properties Only</option>
 												<option value="experiences">Experiences Only</option>
 												<option value="service">Service Only</option>
-												<option value="host">
-													Host (Subscription Discount)
-												</option>
 											</select>
 										</div>
 									</div>
@@ -5311,7 +5030,6 @@ const AdminDashboard = () => {
 															"top_up",
 														].includes(tx.type)
 														const isOutgoing = [
-															"withdrawal_payout",
 															"payment",
 														].includes(tx.type)
 
@@ -5334,13 +5052,10 @@ const AdminDashboard = () => {
 																	<span className={`tx-type ${tx.type}`}>
 																		{tx.type === "booking_received" &&
 																			"📥 Booking"}
-																		{tx.type === "withdrawal_payout" &&
-																			"📤 Payout"}
 																		{tx.type === "top_up" && "➕ Top Up"}
 																		{tx.type === "payment" && "💳 Payment"}
 																		{![
 																			"booking_received",
-																			"withdrawal_payout",
 																			"top_up",
 																			"payment",
 																		].includes(tx.type) && `📝 ${tx.type}`}
@@ -5484,54 +5199,6 @@ const AdminDashboard = () => {
 					</div>
 				)}
 
-				{/* Payout Tab */}
-				{activeTab === "payout" && (
-					<div className="content-section payout-section">
-						<div className="section-header">
-							<div>
-								<h2>💸 Payout Management</h2>
-								<p>View and process guest withdrawal requests</p>
-							</div>
-						</div>
-
-						<div className="payout-stats">
-							<div className="stat-card">
-								<div className="stat-icon">⏳</div>
-								<div className="stat-content">
-									<h3>Pending Payouts</h3>
-									<p className="stat-value">0</p>
-								</div>
-							</div>
-							<div className="stat-card">
-								<div className="stat-icon">✅</div>
-								<div className="stat-content">
-									<h3>Completed Today</h3>
-									<p className="stat-value">0</p>
-								</div>
-							</div>
-							<div className="stat-card">
-								<div className="stat-icon">💰</div>
-								<div className="stat-content">
-									<h3>Total Processed</h3>
-									<p className="stat-value">₱0</p>
-								</div>
-							</div>
-						</div>
-
-						<div className="payout-requests">
-							<h3 className="withdrawal-requests-header">
-								📋 Withdrawal Requests
-							</h3>
-							<div className="empty-state">
-								<div className="empty-icon">📭</div>
-								<p>No pending withdrawal requests</p>
-								<p className="empty-subtitle">
-									Guest withdrawal requests will appear here
-								</p>
-							</div>
-						</div>
-					</div>
-				)}
 
 				{/* Manage Host Tab */}
 				{activeTab === "manageHost" && (
@@ -5720,6 +5387,13 @@ const AdminDashboard = () => {
 												<div className="properties-list">
 													{displayProperties.map((property) => (
 														<div key={property.id} className="property-item">
+															<div className="property-image-container">
+																<img
+																	src={property.images?.[0] || housePlaceholder}
+																	alt={property.title || "Property"}
+																	className="property-image"
+																/>
+															</div>
 															<div className="property-header">
 																<div>
 																	<span className="property-label">

@@ -91,6 +91,7 @@ export default function DashboardHost() {
 	const [upcomingBookings, setUpcomingBookings] = useState([])
 	const [walletBalance, setWalletBalance] = useState(0)
 	const [activePromos, setActivePromos] = useState([])
+	const [adminVouchers, setAdminVouchers] = useState([])
 	const [showWalletModal, setShowWalletModal] = useState(false)
 	const [showPromosModal, setShowPromosModal] = useState(false)
 	const [drafts, setDrafts] = useState([])
@@ -1652,9 +1653,6 @@ export default function DashboardHost() {
 					<div className="host-user-info">
 						<span className="host-user-name">{displayName.split(" ")[0]}</span>
 						{isFreeTrial() && (
-							<span className="host-free-trial-text">Free Trial</span>
-						)}
-						{isFreeTrial() && (
 							<span className="host-plan-badge free-trial">
 								⏱️ Free Trial
 							</span>
@@ -1814,13 +1812,6 @@ export default function DashboardHost() {
 						>
 							<FaStar />
 							<span>Points</span>
-						</button>
-						<button
-							className="action-btn promo-btn"
-							onClick={() => setShowPromosModal(true)}
-						>
-							<FaGift />
-							<span>Coupons</span>
 						</button>
 					</div>
 				</div>

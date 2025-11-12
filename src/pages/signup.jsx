@@ -368,10 +368,6 @@ export default function Signup() {
 						</div>
 						{/* <img src={image2} alt="Signup Visual" className="carousel-image" /> */}
 					</div>
-					<Link to="/" className="back-button">
-						<FaArrowLeft />
-						<span>Back</span>
-					</Link>
 					<div className="signup-form-container">
 						{/* Step Navigation */}
 						<h2 className="signup-header-title">Create Account</h2>

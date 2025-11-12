@@ -244,9 +244,6 @@ export default function Messages() {
 		<div className="messages-container">
 			{/* Header */}
 			<div className="messages-header">
-				<button className="messages-back-btn" onClick={() => navigate(-1)}>
-					<FaArrowLeft />
-				</button>
 				<div className="header-title">
 					<h1>Messages</h1>
 					{unreadCount > 0 && (

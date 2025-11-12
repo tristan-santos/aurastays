@@ -583,13 +583,6 @@ export default function HostPoints() {
 		<div className="host-points-container">
 			{/* Header */}
 			<div className="points-header">
-				<button
-					className="host-points-back-button"
-					onClick={() => navigate("/dashboardHost")}
-				>
-					<FaArrowLeft />
-					<span>Back to Dashboard</span>
-				</button>
 				<div className="header-logo">
 					<img src={logoPlain} alt="AuraStays" />
 					<span className="logo-text">AuraStays</span>

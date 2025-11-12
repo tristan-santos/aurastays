@@ -1088,12 +1088,6 @@ export default function PropertyListingWizard() {
 	return (
 		<div className="listing-wizard-container">
 			<div className="listing-wizard-header">
-				<button
-					className="back-to-dashboard"
-					onClick={() => navigate("/dashboardHost")}
-				>
-					<FaChevronLeft /> Back to Dashboard
-				</button>
 				<h1>Create a New Listing</h1>
 				<div className="progress-bar-container">
 					<div
