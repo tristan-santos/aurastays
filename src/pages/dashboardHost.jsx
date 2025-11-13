@@ -611,6 +611,14 @@ export default function DashboardHost() {
 		}
 	}
 
+	// Get appropriate dashboard route based on user type
+	const getDashboardRoute = () => {
+		if (!userData?.userType) return "/dashboardHost"
+		if (userData.userType === "admin") return "/admin"
+		if (userData.userType === "host") return "/dashboardHost"
+		return "/dashboardGuest"
+	}
+
 	// Get user's display name
 	const displayName =
 		userData?.displayName || currentUser?.displayName || "Host"
@@ -858,6 +866,66 @@ export default function DashboardHost() {
 			return `₱${price.toLocaleString()}`
 		}
 		return `$${price.toLocaleString()}`
+	}
+
+	// Calculate best voucher discount for a property (for listing cards)
+	const getBestVoucherDiscount = (property) => {
+		if (!property?.vouchers || !property.vouchers.types || !Array.isArray(property.vouchers.types)) {
+			return { discount: 0, discountedPrice: property?.pricing?.basePrice || property?.pricing?.price || 0 }
+		}
+
+		const basePrice = property?.pricing?.basePrice || property?.pricing?.price || 0
+		let bestDiscount = 0
+		const now = new Date()
+
+		// Check all voucher types
+		property.vouchers.types.forEach((voucherType) => {
+			const voucherDetails = property.vouchers.details?.[voucherType]
+			if (!voucherDetails) return
+
+			// Check if voucher is active
+			const isActive = voucherDetails.isActive !== undefined
+				? typeof voucherDetails.isActive === "boolean"
+					? voucherDetails.isActive
+					: String(voucherDetails.isActive).toLowerCase() === "true"
+				: true
+
+			if (!isActive) return
+
+			// For listing cards, we show vouchers that are currently valid (if they have dates)
+			// or always show if no dates specified
+			if (voucherDetails.startDate && voucherDetails.endDate) {
+				const voucherStart = new Date(voucherDetails.startDate)
+				const voucherEnd = new Date(voucherDetails.endDate)
+				// Only show if current date is within voucher date range
+				if (now < voucherStart || now > voucherEnd) {
+					return
+				}
+			}
+
+			// Calculate discount per night
+			let discount = 0
+			const discountType = voucherDetails.discountType || "percent"
+			const discountValue = parseFloat(voucherDetails.discount || voucherDetails.discountValue || 0)
+
+			if (discountType === "percent" || discountType === "percentage") {
+				discount = (basePrice * discountValue) / 100
+				// Check max discount if specified
+				if (voucherDetails.maxDiscount && discount > voucherDetails.maxDiscount) {
+					discount = voucherDetails.maxDiscount
+				}
+			} else {
+				discount = discountValue
+			}
+
+			// Keep the voucher with the highest discount
+			if (discount > bestDiscount) {
+				bestDiscount = discount
+			}
+		})
+
+		const discountedPrice = Math.max(0, basePrice - bestDiscount)
+		return { discount: bestDiscount, discountedPrice }
 	}
 
 	const getPropertyTypeName = (property) => {
@@ -1646,7 +1714,7 @@ export default function DashboardHost() {
 			{/* Header */}
 			<header className="host-dashboard-header">
 				<div className="host-header-inner">
-					<div className="host-dashboard-title">
+					<div className="host-dashboard-title" onClick={() => navigate(getDashboardRoute())} style={{ cursor: "pointer" }}>
 						<img src={logoPlain} alt="AuraStays" />
 						<span className="logo-text">AuraStays</span>
 					</div>
@@ -2190,21 +2258,36 @@ export default function DashboardHost() {
 
 												<div className="listing-footer">
 													<div className="listing-price">
-														<span className="listing-price-amount">
-															{formatPrice(
-																property.pricing?.basePrice ||
-																	property.pricing?.price ||
-																	0,
-																property.pricing?.currency
-															)}
-														</span>
-														<span className="price-period">
-															{property.category === "home"
-																? "/ night"
-																: property.category === "experience"
-																? "/ person"
-																: ""}
-														</span>
+														{(() => {
+															const basePrice = property.pricing?.basePrice || property.pricing?.price || 0
+															const { discount, discountedPrice } = getBestVoucherDiscount(property)
+															const hasDiscount = discount > 0 && discountedPrice < basePrice
+															
+															return (
+																<>
+																	{hasDiscount ? (
+																		<>
+																			<div className="listing-price-original">
+																				<span className="listing-price-amount original-price">
+																					{formatPrice(basePrice, property.pricing?.currency)}
+																				</span>
+																			</div>
+																			<div className="listing-price-discounted">
+																				<span className="listing-price-amount discounted-price">
+																					{formatPrice(discountedPrice, property.pricing?.currency)}
+																				</span>
+																			</div>
+																		</>
+																	) : (
+																		<>
+																			<span className="listing-price-amount">
+																				{formatPrice(basePrice, property.pricing?.currency)}
+																			</span>
+																		</>
+																	)}
+																</>
+															)
+														})()}
 													</div>
 													<div className="listing-actions">
 														<button
@@ -2233,21 +2316,29 @@ export default function DashboardHost() {
 								{/* Show total count */}
 								{filteredProperties.length > 0 && (
 									<div className="view-all-container">
-										<p
-											style={{
-												textAlign: "center",
-												color: "#666",
-												marginTop: "1rem",
-											}}
-										>
-											Showing {filteredProperties.length}{" "}
-											{filteredProperties.length === 1
-												? "property"
-												: "properties"}
-											{activeCategory !== "all" &&
-												filteredProperties.length === properties.length &&
-												" (all categories)"}
-										</p>
+										<div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
+											<p
+												style={{
+													textAlign: "center",
+													color: "#666",
+													margin: 0,
+												}}
+											>
+												Showing {filteredProperties.length}{" "}
+												{filteredProperties.length === 1
+													? "property"
+													: "properties"}
+												{activeCategory !== "all" &&
+													filteredProperties.length === properties.length &&
+													" (all categories)"}
+											</p>
+											<button
+												className="view-all-properties-btn"
+												onClick={() => navigate("/host/all-listings")}
+											>
+												View All Properties
+											</button>
+										</div>
 									</div>
 								)}
 								
@@ -2777,7 +2868,7 @@ export default function DashboardHost() {
 						onClick={(e) => e.stopPropagation()}
 					>
 						<div className="modal-header">
-							<h2>
+							<h2 className="bookings-modal-title">
 								{bookingsModalType === "upcoming"
 									? "✈️ Upcoming Bookings"
 									: bookingsModalType === "today"

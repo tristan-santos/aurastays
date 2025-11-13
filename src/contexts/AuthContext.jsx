@@ -3,6 +3,7 @@ import { auth, db } from "../components/firebaseConfig"
 import { onAuthStateChanged } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
 import { toast } from "react-stacked-toast"
+import { getFirebaseErrorMessage } from "../utils/errorMessages"
 
 const AuthContext = createContext()
 
@@ -66,7 +67,7 @@ export const AuthProvider = ({ children }) => {
 						setCurrentUser(null)
 						setUserData(null)
 						setIsAuthenticated(false)
-						toast.error("Authentication error. Please try again.")
+						toast.error(getFirebaseErrorMessage(error))
 					}
 				}
 			} else {

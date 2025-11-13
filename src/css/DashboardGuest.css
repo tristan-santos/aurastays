@@ -1085,8 +1085,33 @@
 
 .listing-price {
 	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.listing-price-original {
+	display: flex;
 	align-items: baseline;
 	gap: 0.25rem;
+}
+
+.listing-price-discounted {
+	display: flex;
+	align-items: baseline;
+	gap: 0.25rem;
+}
+
+.listing-price .original-price {
+	text-decoration: line-through;
+	color: #999;
+	font-size: 0.9rem;
+	font-weight: normal;
+}
+
+.listing-price .discounted-price {
+	color: var(--primary);
+	font-size: 1.1rem;
+	font-weight: bold;
 }
 
 .listing-actions {
@@ -2202,8 +2227,9 @@
 
 [data-theme="dark"] .modal-header h2,
 [data-theme="dark"] .bookings-modal-content .modal-header h2,
+[data-theme="dark"] .bookings-modal-content .modal-header .bookings-modal-title,
 [data-theme="dark"] .favorites-modal-header h2 {
-	color: var(--text-primary);
+	color: white;
 }
 
 [data-theme="dark"] .close-modal-btn {
@@ -2572,20 +2598,24 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
+	background: linear-gradient(135deg, var(--primary), var(--secondary));
 }
 
-.bookings-modal-content .modal-header h2 {
+.bookings-modal-content .modal-header h2,
+.bookings-modal-content .modal-header .bookings-modal-title {
 	margin: 0;
 	font-size: 24px;
-	color: #333;
+	color: white;
+	font-weight: 600;
 }
 
 .bookings-modal-content .close-modal-btn {
 	position: absolute;
 	top: 16px;
 	right: 16px;
-	background: #f5f5f5;
-	border: none;
+	background: rgba(255, 255, 255, 0.2);
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	color: white;
 	width: 32px;
 	height: 32px;
 	border-radius: 50%;
@@ -2596,12 +2626,12 @@
 	justify-content: center;
 	transition: all 0.3s ease;
 	z-index: 1;
-	color: #666;
 }
 
 .bookings-modal-content .close-modal-btn:hover {
-	background: #e0e0e0;
+	background: rgba(255, 255, 255, 0.3);
 	transform: rotate(90deg);
+	border-color: rgba(255, 255, 255, 0.5);
 }
 
 .bookings-modal-content .modal-body {

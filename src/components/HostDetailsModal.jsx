@@ -14,6 +14,7 @@ import { toast } from "react-stacked-toast"
 import { FaTimes } from "react-icons/fa"
 import housePlaceholder from "../assets/housePlaceholder.png"
 import { createNotification } from "../utils/notifications"
+import { getFirebaseErrorMessage } from "../utils/errorMessages"
 
 export default function HostDetailsModal({ host, onClose, onRefresh }) {
 	const [isRevoking, setIsRevoking] = useState(false)
@@ -24,6 +25,8 @@ export default function HostDetailsModal({ host, onClose, onRefresh }) {
 	const [isHostDisabled, setIsHostDisabled] = useState(false)
 	const [disabledUntil, setDisabledUntil] = useState(null)
 	const [isDisabling, setIsDisabling] = useState(false)
+	const [isBoosted, setIsBoosted] = useState(false)
+	const [isBoosting, setIsBoosting] = useState(false)
 
 	useEffect(() => {
 		if (host) {
@@ -84,6 +87,9 @@ export default function HostDetailsModal({ host, onClose, onRefresh }) {
 			} else {
 				setIsHostDisabled(false)
 			}
+
+			// Check if host is boosted
+			setIsBoosted(host.userData?.boosted === true)
 
 			// Check if free trial
 			const isTrial = checkIfFreeTrial(subData, host)
@@ -267,7 +273,7 @@ export default function HostDetailsModal({ host, onClose, onRefresh }) {
 					hostId: host.hostId,
 					subscriptionData: subscriptionData,
 				})
-				toast.error("Failed to revoke subscription. Please try again.")
+				toast.error(getFirebaseErrorMessage(error))
 			} finally {
 				setIsRevoking(false)
 				console.log("🏁 Revoke operation completed")
@@ -430,7 +436,7 @@ export default function HostDetailsModal({ host, onClose, onRefresh }) {
 					previousSubscription: previousSubscription,
 					subscriptionData: subscriptionData,
 				})
-				toast.error("Failed to restore subscription. Please try again.")
+				toast.error(getFirebaseErrorMessage(error))
 			} finally {
 				setIsRevoking(false)
 				console.log("🏁 Restore operation completed")
@@ -530,7 +536,7 @@ export default function HostDetailsModal({ host, onClose, onRefresh }) {
 					stack: error.stack,
 					hostId: host.hostId,
 				})
-				toast.error("Failed to disable host. Please try again.")
+				toast.error(getFirebaseErrorMessage(error))
 			} finally {
 				setIsDisabling(false)
 				console.log("🏁 Disable operation completed")
@@ -600,9 +606,135 @@ export default function HostDetailsModal({ host, onClose, onRefresh }) {
 				onRefresh()
 			} catch (error) {
 				console.error("Error enabling host:", error)
-				toast.error("Failed to re-enable host. Please try again.")
+				toast.error(getFirebaseErrorMessage(error))
 			} finally {
 				setIsDisabling(false)
+			}
+		}
+	}
+
+	const handleBoostHost = async () => {
+		if (
+			window.confirm(
+				`Are you sure you want to boost ${host.displayName}? Their properties will be featured and shown at the top of the guest dashboard.`
+			)
+		) {
+			setIsBoosting(true)
+			try {
+				const batch = writeBatch(db)
+
+				// Update user document to mark host as boosted
+				const userRef = doc(db, "users", host.hostId)
+				batch.update(userRef, {
+					boosted: true,
+					boostedAt: serverTimestamp(),
+				})
+
+				// Boost all properties (mark as featured and boosted)
+				const propertiesRef = collection(db, "properties")
+				const propertiesQuery = query(
+					propertiesRef,
+					where("hostId", "==", host.hostId)
+				)
+				const propertiesSnapshot = await getDocs(propertiesQuery)
+
+				propertiesSnapshot.docs.forEach((propertyDoc) => {
+					const propertyRef = doc(db, "properties", propertyDoc.id)
+					batch.update(propertyRef, {
+						featured: true,
+						boosted: true,
+						boostedAt: serverTimestamp(),
+					})
+				})
+
+				await batch.commit()
+
+				// Create notification for host
+				try {
+					await createNotification(
+						host.hostId,
+						"host_boosted",
+						"Host Boosted",
+						"Your account has been boosted by the administrator. All your properties are now featured and will appear at the top of the guest dashboard.",
+						{
+							hostId: host.hostId,
+						}
+					)
+				} catch (notifError) {
+					console.error("Error creating notification:", notifError)
+				}
+
+				toast.success("Host boosted successfully. All properties are now featured.")
+				setIsBoosted(true)
+				onRefresh()
+			} catch (error) {
+				console.error("Error boosting host:", error)
+				toast.error(getFirebaseErrorMessage(error))
+			} finally {
+				setIsBoosting(false)
+			}
+		}
+	}
+
+	const handleUnboostHost = async () => {
+		if (
+			window.confirm(
+				`Are you sure you want to remove boost from ${host.displayName}? Their properties will no longer be featured.`
+			)
+		) {
+			setIsBoosting(true)
+			try {
+				const batch = writeBatch(db)
+
+				// Update user document to remove boost
+				const userRef = doc(db, "users", host.hostId)
+				batch.update(userRef, {
+					boosted: false,
+					unboostedAt: serverTimestamp(),
+				})
+
+				// Unboost all properties (remove featured and boosted flags)
+				const propertiesRef = collection(db, "properties")
+				const propertiesQuery = query(
+					propertiesRef,
+					where("hostId", "==", host.hostId)
+				)
+				const propertiesSnapshot = await getDocs(propertiesQuery)
+
+				propertiesSnapshot.docs.forEach((propertyDoc) => {
+					const propertyRef = doc(db, "properties", propertyDoc.id)
+					batch.update(propertyRef, {
+						featured: false,
+						boosted: false,
+						unboostedAt: serverTimestamp(),
+					})
+				})
+
+				await batch.commit()
+
+				// Create notification for host
+				try {
+					await createNotification(
+						host.hostId,
+						"host_unboosted",
+						"Boost Removed",
+						"Your account boost has been removed by the administrator. Your properties are no longer featured.",
+						{
+							hostId: host.hostId,
+						}
+					)
+				} catch (notifError) {
+					console.error("Error creating notification:", notifError)
+				}
+
+				toast.success("Boost removed successfully.")
+				setIsBoosted(false)
+				onRefresh()
+			} catch (error) {
+				console.error("Error unboosting host:", error)
+				toast.error(getFirebaseErrorMessage(error))
+			} finally {
+				setIsBoosting(false)
 			}
 		}
 	}
@@ -805,6 +937,16 @@ export default function HostDetailsModal({ host, onClose, onRefresh }) {
 										)}
 									</span>
 								</div>
+								<div className="detail-item">
+									<label>Boost Status:</label>
+									<span
+										className={`boost-status-badge ${
+											isBoosted ? "boosted" : "not-boosted"
+										}`}
+									>
+										{isBoosted ? "⭐ Boosted" : "⚪ Not Boosted"}
+									</span>
+								</div>
 							</div>
 						</div>
 					)}
@@ -848,6 +990,23 @@ export default function HostDetailsModal({ host, onClose, onRefresh }) {
 								disabled={isRevoking}
 							>
 								{isRevoking ? "Restoring..." : "Restore Subscription"}
+							</button>
+						)}
+						{!isBoosted ? (
+							<button
+								className="btn-boost-host"
+								onClick={handleBoostHost}
+								disabled={isBoosting || isHostDisabled}
+							>
+								{isBoosting ? "Boosting..." : "Boost Host"}
+							</button>
+						) : (
+							<button
+								className="btn-unboost-host"
+								onClick={handleUnboostHost}
+								disabled={isBoosting}
+							>
+								{isBoosting ? "Removing..." : "Remove Boost"}
 							</button>
 						)}
 					</div>

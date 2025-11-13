@@ -1277,8 +1277,33 @@
 
 .property-price {
 	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.property-price-original {
+	display: flex;
 	align-items: baseline;
 	gap: 0.25rem;
+}
+
+.property-price-discounted {
+	display: flex;
+	align-items: baseline;
+	gap: 0.25rem;
+}
+
+.property-price .original-price {
+	text-decoration: line-through;
+	color: #999;
+	font-size: 0.9rem;
+	font-weight: normal;
+}
+
+.property-price .discounted-price {
+	color: var(--primary);
+	font-size: 1.1rem;
+	font-weight: bold;
 }
 
 .property-price-amount {

@@ -19,6 +19,7 @@ import { doc, setDoc } from "firebase/firestore"
 import hideIcon from "../assets/icons/hide.png"
 import viewIcon from "../assets/icons/view.png"
 import { sendVerificationEmail } from "../utils/emailService"
+import { getFirebaseErrorMessage } from "../utils/errorMessages"
 
 export default function Signup() {
 	const [currentStep, setCurrentStep] = useState(1)
@@ -55,6 +56,8 @@ export default function Signup() {
 
 	function selectUserType(type) {
 		setUserType(type)
+		// Automatically proceed to next step when user type is selected
+		setCurrentStep(2)
 	}
 
 	function validateStep2() {
@@ -134,8 +137,7 @@ export default function Signup() {
 			setCurrentStep(3)
 			toast.success(`Welcome, ${user.displayName}!`)
 		} catch (error) {
-			const errorMessage = error?.message || error?.toString() || "An error occurred. Please try again."
-			toast.error(errorMessage)
+			toast.error(getFirebaseErrorMessage(error))
 			console.error(error)
 		}
 	}
@@ -201,8 +203,7 @@ export default function Signup() {
 				navigate("/login")
 			}, 100)
 		} catch (error) {
-			const errorMessage = error?.message || error?.toString() || "An error occurred. Please try again."
-			toast.error(errorMessage)
+			toast.error(getFirebaseErrorMessage(error))
 			console.error(error)
 		}
 	}
@@ -327,8 +328,7 @@ export default function Signup() {
 				}, 100)
 			}
 		} catch (error) {
-			const errorMessage = error?.message || error?.toString() || "An error occurred. Please try again."
-			toast.error(errorMessage)
+			toast.error(getFirebaseErrorMessage(error))
 			console.error(error)
 		}
 	}

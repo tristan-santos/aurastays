@@ -58,6 +58,7 @@ export default function Search() {
 	const [sortBy, setSortBy] = useState("relevance")
 	const [showFilters, setShowFilters] = useState(false)
 	const [showQuickFilters, setShowQuickFilters] = useState(false)
+	const [voucherFilter, setVoucherFilter] = useState("")
 	// Calendar states (modal like booking page)
 	const [showDateModal, setShowDateModal] = useState(false)
 	const [selectingCheckIn, setSelectingCheckIn] = useState(true)
@@ -89,8 +90,10 @@ export default function Search() {
 		const query =
 			params.get("q") || params.get("query") || location.state?.query || ""
 		const category = params.get("category") || "all"
+		const voucher = params.get("voucher") || ""
 		setSearchQuery(query)
 		setSelectedCategory(category)
+		setVoucherFilter(voucher)
 		const guestsParam = parseInt(params.get("guests") || "0")
 		setGuests(Number.isFinite(guestsParam) ? guestsParam : 0)
 		setCheckIn(params.get("checkIn") || "")
@@ -204,6 +207,88 @@ export default function Search() {
 			// Rating filter
 			if (selectedRating > 0) {
 				filtered = filtered.filter((p) => p.rating >= selectedRating)
+			}
+
+			// Voucher filter (e.g., early_bird)
+			if (voucherFilter) {
+				filtered = filtered.filter((p) => {
+					// Check if property has vouchers
+					if (!p.vouchers) {
+						return false
+					}
+
+					// Check if property has vouchers.types array
+					if (!p.vouchers.types || !Array.isArray(p.vouchers.types)) {
+						return false
+					}
+
+					// Check if the voucher type exists in the types array
+					const hasVoucherType = p.vouchers.types.includes(voucherFilter)
+					if (!hasVoucherType) {
+						return false
+					}
+
+					// If voucher type exists, check if it's active (if details exist)
+					const voucherDetails = p.vouchers.details?.[voucherFilter]
+					if (voucherDetails) {
+						// Check isActive field - this is the main indicator
+						const isActive = voucherDetails.isActive !== undefined
+							? typeof voucherDetails.isActive === "boolean"
+								? voucherDetails.isActive
+								: String(voucherDetails.isActive).toLowerCase() === "true"
+							: true // Default to active if not specified
+						
+						// If explicitly set to inactive, exclude the property
+						if (isActive === false) {
+							return false
+						}
+
+						// For early_bird promos, we show properties with active vouchers
+						// The date range indicates when the discount is valid for bookings,
+						// not when the property should appear in search results
+						// So we don't filter by date range for search display
+					}
+
+					// If voucher type exists in types array and is active, include it
+					return true
+				})
+				
+				// Debug logging
+				console.log(`[Search] Filtering by voucher: ${voucherFilter}`)
+				console.log(`[Search] Total properties before filter: ${properties.length}`)
+				
+				// Log all properties with vouchers to help debug
+				const propertiesWithVouchers = properties.filter(p => p.vouchers && p.vouchers.types)
+				console.log(`[Search] Properties with vouchers: ${propertiesWithVouchers.length}`)
+				if (propertiesWithVouchers.length > 0) {
+					propertiesWithVouchers.forEach(p => {
+						const hasVoucher = p.vouchers.types.includes(voucherFilter)
+						const voucherDetails = p.vouchers.details?.[voucherFilter]
+						const isActive = voucherDetails?.isActive !== undefined
+							? typeof voucherDetails.isActive === "boolean"
+								? voucherDetails.isActive
+								: String(voucherDetails.isActive).toLowerCase() === "true"
+							: true
+						console.log(`[Search] Property "${p.title}" (${p.id}):`, {
+							voucherTypes: p.vouchers.types,
+							hasEarlyBird: hasVoucher,
+							isActive: isActive,
+							earlyBirdDetails: voucherDetails
+						})
+					})
+				}
+				
+				console.log(`[Search] Properties with ${voucherFilter} voucher: ${filtered.length}`)
+				if (filtered.length > 0) {
+					console.log(`[Search] Sample property with ${voucherFilter}:`, {
+						id: filtered[0].id,
+						title: filtered[0].title,
+						vouchers: filtered[0].vouchers
+					})
+				} else {
+					console.log(`[Search] No properties found with ${voucherFilter} voucher.`)
+					console.log(`[Search] Make sure the property has "${voucherFilter}" in vouchers.types array and isActive is not false.`)
+				}
 			}
 
 			// Sort
@@ -409,6 +494,14 @@ export default function Search() {
 		}
 	}
 
+	// Get appropriate dashboard route based on user type
+	const getDashboardRoute = () => {
+		if (!userData?.userType) return "/dashboardGuest"
+		if (userData.userType === "admin") return "/admin"
+		if (userData.userType === "host") return "/dashboardHost"
+		return "/dashboardGuest"
+	}
+
 	const toggleFavorite = async (propertyId) => {
 		if (!currentUser?.uid) {
 			toast.error("Please login to add favorites")
@@ -447,6 +540,66 @@ export default function Search() {
 		return `$${price.toLocaleString()}`
 	}
 
+	// Calculate best voucher discount for a property (for listing cards)
+	const getBestVoucherDiscount = (property) => {
+		if (!property?.vouchers || !property.vouchers.types || !Array.isArray(property.vouchers.types)) {
+			return { discount: 0, discountedPrice: property?.pricing?.basePrice || property?.pricing?.price || 0 }
+		}
+
+		const basePrice = property?.pricing?.basePrice || property?.pricing?.price || 0
+		let bestDiscount = 0
+		const now = new Date()
+
+		// Check all voucher types
+		property.vouchers.types.forEach((voucherType) => {
+			const voucherDetails = property.vouchers.details?.[voucherType]
+			if (!voucherDetails) return
+
+			// Check if voucher is active
+			const isActive = voucherDetails.isActive !== undefined
+				? typeof voucherDetails.isActive === "boolean"
+					? voucherDetails.isActive
+					: String(voucherDetails.isActive).toLowerCase() === "true"
+				: true
+
+			if (!isActive) return
+
+			// For listing cards, we show vouchers that are currently valid (if they have dates)
+			// or always show if no dates specified
+			if (voucherDetails.startDate && voucherDetails.endDate) {
+				const voucherStart = new Date(voucherDetails.startDate)
+				const voucherEnd = new Date(voucherDetails.endDate)
+				// Only show if current date is within voucher date range
+				if (now < voucherStart || now > voucherEnd) {
+					return
+				}
+			}
+
+			// Calculate discount per night
+			let discount = 0
+			const discountType = voucherDetails.discountType || "percent"
+			const discountValue = parseFloat(voucherDetails.discount || voucherDetails.discountValue || 0)
+
+			if (discountType === "percent" || discountType === "percentage") {
+				discount = (basePrice * discountValue) / 100
+				// Check max discount if specified
+				if (voucherDetails.maxDiscount && discount > voucherDetails.maxDiscount) {
+					discount = voucherDetails.maxDiscount
+				}
+			} else {
+				discount = discountValue
+			}
+
+			// Keep the voucher with the highest discount
+			if (discount > bestDiscount) {
+				bestDiscount = discount
+			}
+		})
+
+		const discountedPrice = Math.max(0, basePrice - bestDiscount)
+		return { discount: bestDiscount, discountedPrice }
+	}
+
 	const getPropertyTypeName = (property) => {
 		if (property.category === "home") {
 			return property.propertyType || "Property"
@@ -466,6 +619,11 @@ export default function Search() {
 		setGuests(0)
 		setCheckIn("")
 		setCheckOut("")
+		setVoucherFilter("")
+		// Clear voucher from URL
+		const params = new URLSearchParams(location.search)
+		params.delete("voucher")
+		navigate(`/search?${params.toString()}`, { replace: true })
 	}
 
 	const applyQuickFilters = () => {
@@ -545,7 +703,7 @@ export default function Search() {
 				{/* Logo */}
 				<div
 					className="navbar-logo"
-					onClick={() => navigate("/dashboardGuest")}
+					onClick={() => navigate(getDashboardRoute())}
 				>
 					<img src={logoPlain} alt="AuraStays" />
 					<span className="logo-text">AuraStays</span>
@@ -621,7 +779,7 @@ export default function Search() {
 					<button
 						className="icon-button favorites-btn"
 						title="Favorites"
-						onClick={() => navigate("/dashboardGuest")}
+						onClick={() => navigate(getDashboardRoute())}
 					>
 						<FaHeart />
 						{favorites.length > 0 && (
@@ -820,13 +978,32 @@ export default function Search() {
 					{/* Results Header */}
 					<div className="results-header">
 						<div className="results-info">
+							{voucherFilter && (
+								<div className="voucher-filter-badge" style={{ marginBottom: "1rem", padding: "0.75rem 1rem", background: "linear-gradient(135deg, var(--primary), var(--secondary))", borderRadius: "8px", color: "white", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+									<span>✨</span>
+									<span><strong>Early Bird Promo</strong> - Showing properties with Early Bird discounts</span>
+									<button 
+										onClick={() => {
+											setVoucherFilter("")
+											const params = new URLSearchParams(location.search)
+											params.delete("voucher")
+											navigate(`/search?${params.toString()}`, { replace: true })
+										}}
+										style={{ marginLeft: "auto", background: "rgba(255,255,255,0.2)", border: "none", color: "white", padding: "0.25rem 0.5rem", borderRadius: "4px", cursor: "pointer" }}
+									>
+										<FaTimes />
+									</button>
+								</div>
+							)}
 							<h2>
 								{searchQuery
 									? `Search results for "${searchQuery}"`
+									: voucherFilter
+									? "Early Bird Promo Properties"
 									: "All Properties"}
 							</h2>
 							<p className="results-count">
-								{filteredProperties.length} properties found
+								{filteredProperties.length} {voucherFilter ? "Early Bird " : ""}{filteredProperties.length === 1 ? "property" : "properties"} found
 							</p>
 						</div>
 
@@ -1194,21 +1371,36 @@ export default function Search() {
 
 										<div className="property-footer">
 											<div className="property-price">
-												<span className="property-price-amount">
-													{formatPrice(
-														property.pricing?.basePrice ||
-															property.pricing?.price ||
-															0,
-														property.pricing?.currency
-													)}
-												</span>
-												<span className="price-period">
-													{property.category === "home"
-														? "/ night"
-														: property.category === "experience"
-														? "/ person"
-														: ""}
-												</span>
+												{(() => {
+													const basePrice = property.pricing?.basePrice || property.pricing?.price || 0
+													const { discount, discountedPrice } = getBestVoucherDiscount(property)
+													const hasDiscount = discount > 0 && discountedPrice < basePrice
+													
+													return (
+														<>
+															{hasDiscount ? (
+																<>
+																	<div className="property-price-original">
+																		<span className="property-price-amount original-price">
+																			{formatPrice(basePrice, property.pricing?.currency)}
+																		</span>
+																	</div>
+																	<div className="property-price-discounted">
+																		<span className="property-price-amount discounted-price">
+																			{formatPrice(discountedPrice, property.pricing?.currency)}
+																		</span>
+																	</div>
+																</>
+															) : (
+																<>
+																	<span className="property-price-amount">
+																		{formatPrice(basePrice, property.pricing?.currency)}
+																	</span>
+																</>
+															)}
+														</>
+													)
+												})()}
 											</div>
 											<div className="property-actions">
 												<button

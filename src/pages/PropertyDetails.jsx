@@ -20,6 +20,7 @@ import {
 import { toast } from "react-stacked-toast"
 import emailjs from "@emailjs/browser"
 import { sendHostBookingConfirmation } from "../utils/hostEmailService"
+import { getFirebaseErrorMessage } from "../utils/errorMessages"
 import {
 	FaArrowLeft,
 	FaHeart,
@@ -46,11 +47,22 @@ import {
 	FaGift,
 	FaHistory,
 	FaUsers,
+	FaFlag,
+	FaBars,
+	FaSignOutAlt,
+	FaEnvelope,
+	FaCrown,
+	FaChevronLeft,
+	FaChevronRight,
+	FaHome,
 } from "react-icons/fa"
 import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
 import "../css/PropertyDetails.css"
+import "../css/DashboardGuest.css"
 import housePlaceholder from "../assets/housePlaceholder.png"
+import logoPlain from "../assets/logoPlain.png"
+import ContactHostModal from "../components/ContactHostModal"
 
 // Mapbox token
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN
@@ -61,7 +73,7 @@ emailjs.init(import.meta.env.VITE_EMAILJS_GUEST_PUBLIC_KEY)
 export default function PropertyDetails() {
 	const { propertyId } = useParams()
 	const navigate = useNavigate()
-	const { currentUser } = useAuth()
+	const { currentUser, userData, logout } = useAuth()
 	const [property, setProperty] = useState(null)
 	const [loading, setLoading] = useState(true)
 	const [isFavorite, setIsFavorite] = useState(false)
@@ -73,7 +85,10 @@ export default function PropertyDetails() {
 	const [reportDescription, setReportDescription] = useState("")
 	const [isSubmittingReport, setIsSubmittingReport] = useState(false)
 	const [showAllPhotos, setShowAllPhotos] = useState(false)
+	const [showFullSizeImage, setShowFullSizeImage] = useState(false)
+	const [fullSizeImageIndex, setFullSizeImageIndex] = useState(0)
 	const [showWalletPaymentModal, setShowWalletPaymentModal] = useState(false)
+	const [showContactHostModal, setShowContactHostModal] = useState(false)
 	const [bookedDates, setBookedDates] = useState([])
 	const [propertyBlockedDates, setPropertyBlockedDates] = useState([])
 	const [bookingDates, setBookingDates] = useState([])
@@ -95,6 +110,7 @@ export default function PropertyDetails() {
 	const [appliedPromo, setAppliedPromo] = useState(null)
 	const [promoDiscount, setPromoDiscount] = useState(0)
 	const [isValidatingPromo, setIsValidatingPromo] = useState(false)
+	const [autoAppliedVoucher, setAutoAppliedVoucher] = useState(null) // Automatically applied voucher from property.vouchers
 
 	// Platform policies from admin
 	const [platformPolicies, setPlatformPolicies] = useState({
@@ -133,6 +149,88 @@ export default function PropertyDetails() {
 		value: 5,
 	})
 	const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const [theme, setTheme] = useState(localStorage.getItem("theme") || "light")
+
+	// Get user's display name
+	const displayName =
+		userData?.displayName || currentUser?.displayName || "User"
+	const userEmail = userData?.email || currentUser?.email || ""
+
+	// Get initials for default avatar
+	const getInitials = (name) => {
+		return name
+			.split(" ")
+			.map((n) => n[0])
+			.join("")
+			.toUpperCase()
+			.slice(0, 2)
+	}
+
+	// Theme effect
+	useEffect(() => {
+		document.documentElement.setAttribute("data-theme", theme)
+		localStorage.setItem("theme", theme)
+	}, [theme])
+
+	// Close menu when clicking outside
+	useEffect(() => {
+		const handleClickOutside = (event) => {
+			if (isMenuOpen && !event.target.closest(".user-menu")) {
+				setIsMenuOpen(false)
+			}
+		}
+
+		document.addEventListener("mousedown", handleClickOutside)
+		return () => {
+			document.removeEventListener("mousedown", handleClickOutside)
+		}
+	}, [isMenuOpen])
+
+	// Keyboard navigation for full-size image modal
+	useEffect(() => {
+		if (!showFullSizeImage || !property) return
+
+		const imagesList = property.images || []
+		if (imagesList.length === 0) return
+
+		const handleKeyDown = (e) => {
+			if (e.key === "Escape") {
+				setShowFullSizeImage(false)
+			} else if (e.key === "ArrowLeft" && imagesList.length > 1) {
+				setFullSizeImageIndex((prev) => (prev === 0 ? imagesList.length - 1 : prev - 1))
+			} else if (e.key === "ArrowRight" && imagesList.length > 1) {
+				setFullSizeImageIndex((prev) => (prev === imagesList.length - 1 ? 0 : prev + 1))
+			}
+		}
+
+		document.addEventListener("keydown", handleKeyDown)
+		return () => {
+			document.removeEventListener("keydown", handleKeyDown)
+		}
+	}, [showFullSizeImage, property])
+
+	// Toggle theme
+	const toggleTheme = (newTheme) => {
+		setTheme(newTheme)
+	}
+
+	const handleLogout = async () => {
+		try {
+			await logout()
+			navigate("/")
+		} catch (error) {
+			console.error("Error logging out:", error)
+		}
+	}
+
+	// Get appropriate dashboard route based on user type
+	const getDashboardRoute = () => {
+		if (!userData?.userType) return "/dashboardGuest"
+		if (userData.userType === "admin") return "/admin"
+		if (userData.userType === "host") return "/dashboardHost"
+		return "/dashboardGuest"
+	}
 
 	// Map ref
 	const mapContainer = useRef(null)
@@ -179,6 +277,16 @@ export default function PropertyDetails() {
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [property, currentUser])
+
+	// Auto-apply vouchers when dates change
+	useEffect(() => {
+		if (!isHost && property && checkInDate && checkOutDate) {
+			findAndApplyBestVoucher()
+		} else {
+			setAutoAppliedVoucher(null)
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [checkInDate, checkOutDate, property, numberOfGuests])
 
 	// Load PayPal script
 	useEffect(() => {
@@ -395,12 +503,12 @@ export default function PropertyDetails() {
 							console.log("🔄 Navigating to /dashboardHost")
 							navigate("/dashboardHost")
 						} else {
-							console.log("🔄 Navigating to /dashboardGuest")
-							navigate("/dashboardGuest")
+							console.log("🔄 Navigating to appropriate dashboard")
+							navigate(getDashboardRoute())
 						}
 					} catch (navError) {
 						console.error("❌ Error checking user properties:", navError)
-						navigate("/dashboardGuest")
+						navigate(getDashboardRoute())
 					}
 				} else {
 					console.log("🔄 No user logged in, navigating to /dashboardGuest")
@@ -417,8 +525,8 @@ export default function PropertyDetails() {
 			toast.error("Failed to load property details")
 			// Navigate to appropriate dashboard on error
 			if (currentUser?.uid) {
-				console.log("🔄 Navigating to /dashboardGuest (error fallback)")
-				navigate("/dashboardGuest")
+				console.log("🔄 Navigating to appropriate dashboard (error fallback)")
+				navigate(getDashboardRoute())
 			} else {
 				console.log("🔄 Navigating to / (error fallback)")
 				navigate("/")
@@ -1013,7 +1121,7 @@ export default function PropertyDetails() {
 				code: error.code,
 				stack: error.stack,
 			})
-			toast.error("Failed to update voucher: " + error.message)
+			toast.error(getFirebaseErrorMessage(error))
 		} finally {
 			setIsUpdatingPromo(false)
 		}
@@ -1032,7 +1140,7 @@ export default function PropertyDetails() {
 			fetchPropertyPromos(property.id)
 		} catch (error) {
 			console.error("Error deleting promo:", error)
-			toast.error("Failed to delete promo: " + error.message)
+			toast.error(getFirebaseErrorMessage(error))
 		}
 	}
 
@@ -1049,7 +1157,7 @@ export default function PropertyDetails() {
 			fetchPropertyPromos(property.id)
 		} catch (error) {
 			console.error("Error updating promo:", error)
-			toast.error("Failed to update promo: " + error.message)
+			toast.error(getFirebaseErrorMessage(error))
 		}
 	}
 
@@ -1378,6 +1486,94 @@ export default function PropertyDetails() {
 		return diffDays
 	}
 
+	// Automatically find and apply the best active voucher
+	const findAndApplyBestVoucher = () => {
+		if (!property?.vouchers || !checkInDate || !checkOutDate) {
+			setAutoAppliedVoucher(null)
+			return
+		}
+
+		const now = new Date()
+		const checkIn = new Date(checkInDate)
+		const checkOut = new Date(checkOutDate)
+		const nights = calculateNights()
+		
+		if (nights <= 0) {
+			setAutoAppliedVoucher(null)
+			return
+		}
+		
+		const basePrice = property?.pricing?.basePrice || 0
+		const subtotal = basePrice * nights
+
+		let bestVoucher = null
+		let bestDiscount = 0
+
+		// Check all voucher types
+		if (property.vouchers.types && Array.isArray(property.vouchers.types)) {
+			property.vouchers.types.forEach((voucherType) => {
+				const voucherDetails = property.vouchers.details?.[voucherType]
+				if (!voucherDetails) return
+
+				// Check if voucher is active
+				const isActive = voucherDetails.isActive !== undefined
+					? typeof voucherDetails.isActive === "boolean"
+						? voucherDetails.isActive
+						: String(voucherDetails.isActive).toLowerCase() === "true"
+					: true
+
+				if (!isActive) return
+
+				// Check date validity for date-based vouchers
+				if (voucherDetails.startDate && voucherDetails.endDate) {
+					const voucherStart = new Date(voucherDetails.startDate)
+					const voucherEnd = new Date(voucherDetails.endDate)
+					// Check if booking dates overlap with voucher dates
+					if (checkOut < voucherStart || checkIn > voucherEnd) {
+						return // Booking dates don't overlap with voucher dates
+					}
+				}
+
+				// Check minimum days for long_stay vouchers
+				if (voucherType === "long_stay" && voucherDetails.minDays) {
+					const minDays = parseInt(voucherDetails.minDays) || 0
+					if (nights < minDays) {
+						return // Doesn't meet minimum days requirement
+					}
+				}
+
+				// Calculate discount
+				let discount = 0
+				const discountType = voucherDetails.discountType || "percent"
+				const discountValue = parseFloat(voucherDetails.discount || voucherDetails.discountValue || 0)
+
+				if (discountType === "percent" || discountType === "percentage") {
+					discount = (subtotal * discountValue) / 100
+					// Check max discount if specified
+					if (voucherDetails.maxDiscount && discount > voucherDetails.maxDiscount) {
+						discount = voucherDetails.maxDiscount
+					}
+				} else {
+					discount = discountValue
+				}
+
+				// Keep the voucher with the highest discount
+				if (discount > bestDiscount) {
+					bestDiscount = discount
+					bestVoucher = {
+						type: voucherType,
+						details: voucherDetails,
+						discount: discount,
+						discountType: discountType,
+						discountValue: discountValue,
+					}
+				}
+			})
+		}
+
+		setAutoAppliedVoucher(bestVoucher)
+	}
+
 	// Calculate prices
 	const calculatePrices = () => {
 		const nights = calculateNights()
@@ -1390,7 +1586,34 @@ export default function PropertyDetails() {
 
 		const subtotal = basePrice * nights
 		const totalBeforeDiscount = subtotal + cleaningFee + serviceFee + guestFee
-		const total = totalBeforeDiscount - promoDiscount
+		
+		// Use auto-applied voucher discount if no manual promo is applied
+		// Manual promo takes precedence
+		// Recalculate discount if voucher exists and nights > 0 (to ensure it's up to date)
+		let totalDiscount = 0
+		if (appliedPromo) {
+			totalDiscount = promoDiscount
+		} else if (autoAppliedVoucher && nights > 0) {
+			// Recalculate discount to ensure it's based on current subtotal
+			const discountType = autoAppliedVoucher.discountType || "percent"
+			const discountValue = autoAppliedVoucher.discountValue || 0
+			
+			if (discountType === "percent" || discountType === "percentage") {
+				totalDiscount = (subtotal * discountValue) / 100
+				// Check max discount if specified
+				if (autoAppliedVoucher.details?.maxDiscount && totalDiscount > autoAppliedVoucher.details.maxDiscount) {
+					totalDiscount = autoAppliedVoucher.details.maxDiscount
+				}
+			} else {
+				totalDiscount = discountValue
+			}
+		}
+		
+		const total = totalBeforeDiscount - totalDiscount
+
+		// Calculate discounted price per night
+		const discountPerNight = nights > 0 ? totalDiscount / nights : 0
+		const discountedPricePerNight = Math.max(0, basePrice - discountPerNight)
 
 		return {
 			nights,
@@ -1400,9 +1623,11 @@ export default function PropertyDetails() {
 			serviceFee,
 			guestFee,
 			numberOfGuests,
-			promoDiscount,
+			promoDiscount: totalDiscount,
 			totalBeforeDiscount,
 			total,
+			originalPrice: basePrice, // Original price per night
+			discountedPrice: discountedPricePerNight, // Discounted price per night
 		}
 	}
 
@@ -1889,7 +2114,7 @@ export default function PropertyDetails() {
 
 			// Redirect to dashboard after 3 seconds (increased to show messages)
 			setTimeout(() => {
-				navigate("/dashboardGuest")
+				navigate(getDashboardRoute())
 			}, 3000)
 
 			return docRef.id
@@ -2529,38 +2754,175 @@ export default function PropertyDetails() {
 
 	return (
 		<div className="property-details-container">
-			{/* Header */}
-			<header className="property-details-header">
-				<div className="header-actions">
+			{/* Navigation Header */}
+			<nav className="top-navbar">
+				{/* Logo */}
+				<div className="navbar-logo" onClick={() => navigate(getDashboardRoute())}>
+					<img src={logoPlain} alt="AuraStays" />
+					<span className="logo-text">AuraStays</span>
+				</div>
+
+				{/* Right Section */}
+				<div className="navbar-right">
+					{/* Action Buttons */}
 					<button
 						onClick={() => setShowShareModal(true)}
-						className="action-btn"
+						className="icon-button"
+						title="Share"
 					>
-						<FaShare /> Share
+						<FaShare />
 					</button>
 					{currentUser && !isHost && (
 						<button
 							onClick={() => setShowReportModal(true)}
-							className="action-btn report-btn"
+							className="icon-button"
+							title="Report"
 						>
-							<FaFlag /> Report
+							<FaFlag />
 						</button>
 					)}
 					<button
 						onClick={toggleFavorite}
-						className={`action-btn ${isFavorite ? "active" : ""}`}
+						className={`icon-button ${isFavorite ? "active" : ""}`}
+						title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
 					>
-						<FaHeart /> {isFavorite ? "Favorited" : "Favorite"}
+						<FaHeart />
 					</button>
 					<button
 						onClick={toggleWishlist}
-						className={`action-btn ${isInWishlist ? "active" : ""}`}
+						className={`icon-button ${isInWishlist ? "active" : ""}`}
+						title={isInWishlist ? "Remove from Wishlist" : "Add to Wishlist"}
 					>
-						<FaBookmark /> {isInWishlist ? "Saved" : "Save"}
+						<FaBookmark />
 					</button>
-				</div>
-			</header>
 
+					{/* Messages */}
+					{currentUser && (
+						<button
+							className="icon-button messages-btn"
+							title="Messages"
+							onClick={() => navigate("/messages")}
+						>
+							<FaEnvelope />
+						</button>
+					)}
+
+					{/* User Menu */}
+					{currentUser ? (
+						<div className="user-menu">
+							<button
+								className="user-menu-button"
+								onClick={() => setIsMenuOpen(!isMenuOpen)}
+							>
+								<FaBars className="menu-icon" />
+								<div className="user-avatar">
+									{userData?.photoURL || currentUser?.photoURL ? (
+										<img
+											src={userData?.photoURL || currentUser.photoURL}
+											alt={displayName}
+										/>
+									) : (
+										<div className="avatar-initials">
+											{getInitials(displayName)}
+										</div>
+									)}
+								</div>
+							</button>
+
+							{/* Dropdown Menu */}
+							{isMenuOpen && (
+								<div
+									className="user-dropdown"
+									onClick={(e) => e.stopPropagation()}
+								>
+									<div className="dropdown-header">
+										<div className="dropdown-avatar">
+											{userData?.photoURL || currentUser?.photoURL ? (
+												<img
+													src={userData?.photoURL || currentUser.photoURL}
+													alt={displayName}
+												/>
+											) : (
+												<div className="avatar-initials-large">
+													{getInitials(displayName)}
+												</div>
+											)}
+										</div>
+										<div className="dropdown-info">
+											<div className="dropdown-name">{displayName}</div>
+											<div className="dropdown-email">{userEmail}</div>
+										</div>
+									</div>
+
+									<div className="dropdown-divider"></div>
+
+									<button
+										className="dropdown-item"
+										onClick={() => {
+											navigate("/profile")
+											setIsMenuOpen(false)
+										}}
+									>
+										<FaUser />
+										<span>My Profile</span>
+									</button>
+									<button
+										className="dropdown-item"
+										onClick={() => {
+											navigate(getDashboardRoute())
+											setIsMenuOpen(false)
+										}}
+									>
+										<FaHome />
+										<span>Dashboard</span>
+									</button>
+									<div className="dropdown-theme-section">
+										<span className="theme-label">THEME</span>
+										<div className="theme-buttons">
+											<button
+												className={`theme-btn ${
+													theme === "light" ? "active" : ""
+												}`}
+												onClick={() => toggleTheme("light")}
+											>
+												☀️ Light
+											</button>
+											<button
+												className={`theme-btn ${
+													theme === "dark" ? "active" : ""
+												}`}
+												onClick={() => toggleTheme("dark")}
+											>
+												🌙 Dark
+											</button>
+										</div>
+									</div>
+
+									<div className="dropdown-divider"></div>
+
+									<button
+										className="dropdown-item logout"
+										onClick={handleLogout}
+									>
+										<FaSignOutAlt />
+										<span>Logout</span>
+									</button>
+								</div>
+							)}
+						</div>
+					) : (
+						<button
+							className="login-btn"
+							onClick={() => navigate("/login")}
+						>
+							Log in
+						</button>
+					)}
+				</div>
+			</nav>
+
+			{/* Main Content */}
+			<div className="property-details-content">
 			{/* Title Section */}
 			<div className="property-title-section">
 				<h1>{property.title || property.name}</h1>
@@ -2584,12 +2946,26 @@ export default function PropertyDetails() {
 
 			{/* Photo Gallery */}
 			<div className="photo-gallery">
-				<div className="main-photo" onClick={() => setShowAllPhotos(true)}>
+				<div 
+					className="main-photo" 
+					onClick={() => {
+						setFullSizeImageIndex(selectedImage)
+						setShowFullSizeImage(true)
+					}}
+					style={{ cursor: "pointer" }}
+				>
 					<img
 						src={images[selectedImage] || housePlaceholder}
 						alt="Main view"
+						style={{ cursor: "pointer" }}
 					/>
-					<button className="view-all-photos-btn">
+					<button 
+						className="view-all-photos-btn"
+						onClick={(e) => {
+							e.stopPropagation()
+							setShowAllPhotos(true)
+						}}
+					>
 						View all {images.length} photos
 					</button>
 				</div>
@@ -2598,15 +2974,30 @@ export default function PropertyDetails() {
 						<div
 							key={index}
 							className={`thumbnail ${selectedImage === index ? "active" : ""}`}
-							onClick={() => setSelectedImage(index)}
+							onClick={(e) => {
+								e.stopPropagation()
+								setSelectedImage(index)
+							}}
 						>
-							<img src={img} alt={`View ${index + 1}`} />
+							<img 
+								src={img} 
+								alt={`View ${index + 1}`}
+								style={{ cursor: "pointer" }}
+								onClick={(e) => {
+									e.stopPropagation()
+									setFullSizeImageIndex(index)
+									setShowFullSizeImage(true)
+								}}
+							/>
 						</div>
 					))}
 					{images.length > 4 && (
 						<div
 							className="thumbnail more"
-							onClick={() => setShowAllPhotos(true)}
+							onClick={(e) => {
+								e.stopPropagation()
+								setShowAllPhotos(true)
+							}}
 						>
 							<span>+{images.length - 4}</span>
 						</div>
@@ -3044,8 +3435,36 @@ export default function PropertyDetails() {
 						<div className="booking-card">
 							<div className="price-section">
 								<div className="price">
-									₱{property.pricing?.basePrice?.toLocaleString() || "N/A"}
-									<span className="per-night">/ night</span>
+									{(() => {
+										const prices = calculatePrices()
+										const hasAutoDiscount = autoAppliedVoucher && !appliedPromo
+										
+										if (hasAutoDiscount && prices.discountedPrice < prices.originalPrice) {
+											return (
+												<>
+													<span className="original-price">
+														₱{prices.originalPrice.toLocaleString()}
+													</span>
+													<span className="discounted-price">
+														₱{Math.max(0, prices.discountedPrice).toLocaleString()}
+													</span>
+													<span className="per-night">/ night</span>
+													{autoAppliedVoucher && (
+														<span className="voucher-badge">
+															{autoAppliedVoucher.type.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())} Promo
+														</span>
+													)}
+												</>
+											)
+										} else {
+											return (
+												<>
+													₱{property.pricing?.basePrice?.toLocaleString() || "N/A"}
+													<span className="per-night">/ night</span>
+												</>
+											)
+										}
+									})()}
 								</div>
 								{property.rating && (
 									<div className="rating-small">
@@ -3080,7 +3499,19 @@ export default function PropertyDetails() {
 										)}
 									</div>
 								</div>
-								<button className="contact-host-btn">Contact Host</button>
+								<button 
+									className="contact-host-btn"
+									onClick={() => {
+										if (!currentUser) {
+											toast.error("Please login to contact the host")
+											navigate("/login")
+											return
+										}
+										setShowContactHostModal(true)
+									}}
+								>
+									Contact Host
+								</button>
 							</div>
 
 							<div className="booking-form">
@@ -3336,10 +3767,12 @@ export default function PropertyDetails() {
 												<span>₱{prices.guestFee.toLocaleString()}</span>
 											</div>
 
-											{/* Show discount in breakdown if promo is applied */}
-											{appliedPromo && (
+											{/* Show discount in breakdown if promo or auto-voucher is applied */}
+											{(appliedPromo || autoAppliedVoucher) && prices.promoDiscount > 0 && (
 												<div className="breakdown-item promo-discount">
-													<span className="promo-label">🎁 Promo Discount</span>
+													<span className="promo-label">
+														🎁 {appliedPromo ? "Promo" : autoAppliedVoucher?.type.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())} Discount
+													</span>
 													<span className="discount-amount">
 														-₱{prices.promoDiscount.toLocaleString()}
 													</span>
@@ -3528,7 +3961,17 @@ export default function PropertyDetails() {
 						<h2>All Photos</h2>
 						<div className="all-photos-grid">
 							{images.map((img, index) => (
-								<img key={index} src={img} alt={`Property view ${index + 1}`} />
+								<img 
+									key={index} 
+									src={img} 
+									alt={`Property view ${index + 1}`}
+									style={{ cursor: "pointer" }}
+									onClick={() => {
+										setFullSizeImageIndex(index)
+										setShowAllPhotos(false)
+										setShowFullSizeImage(true)
+									}}
+								/>
 							))}
 						</div>
 					</div>
@@ -4563,6 +5006,70 @@ export default function PropertyDetails() {
 					</div>
 				</div>
 			)}
+
+			{/* Contact Host Modal */}
+			<ContactHostModal
+				isOpen={showContactHostModal}
+				onClose={() => setShowContactHostModal(false)}
+				property={property}
+				hostId={property?.hostId || property?.host?.hostId}
+			/>
+
+			{/* Full Size Image Modal */}
+			{showFullSizeImage && (
+				<div
+					className="full-size-image-modal-overlay"
+					onClick={() => setShowFullSizeImage(false)}
+				>
+					<button
+						className="full-size-image-close"
+						onClick={() => setShowFullSizeImage(false)}
+						title="Close (ESC)"
+					>
+						<FaTimes />
+					</button>
+					{images.length > 1 && (
+						<button
+							className="full-size-image-nav full-size-image-prev"
+							onClick={(e) => {
+								e.stopPropagation()
+								setFullSizeImageIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1))
+							}}
+							title="Previous (←)"
+						>
+							<FaChevronLeft />
+						</button>
+					)}
+					<div
+						className="full-size-image-container"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<img
+							src={images[fullSizeImageIndex] || housePlaceholder}
+							alt={`Property view ${fullSizeImageIndex + 1}`}
+							className="full-size-image"
+						/>
+						<div className="full-size-image-info">
+							<span className="full-size-image-counter">
+								{fullSizeImageIndex + 1} / {images.length}
+							</span>
+						</div>
+					</div>
+					{images.length > 1 && (
+						<button
+							className="full-size-image-nav full-size-image-next"
+							onClick={(e) => {
+								e.stopPropagation()
+								setFullSizeImageIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1))
+							}}
+							title="Next (→)"
+						>
+							<FaChevronRight />
+						</button>
+					)}
+				</div>
+			)}
+			</div>
 		</div>
 	)
 }

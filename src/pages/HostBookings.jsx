@@ -7,23 +7,209 @@ import {
 	getDocs,
 	query,
 	where,
+	doc,
+	getDoc,
+	updateDoc,
 } from "firebase/firestore"
-import { FaCalendarAlt, FaHome, FaUsers } from "react-icons/fa"
+import {
+	FaCalendarAlt,
+	FaHome,
+	FaUsers,
+	FaBars,
+	FaUser,
+	FaSignOutAlt,
+	FaEnvelope,
+	FaCrown,
+} from "react-icons/fa"
 import { toast } from "react-stacked-toast"
 import "../css/DashboardHost.css"
 import housePlaceholder from "../assets/housePlaceholder.png"
+import logoPlain from "../assets/logoPlain.png"
 
 export default function HostBookings() {
-	const { currentUser } = useAuth()
+	const { currentUser, userData, logout } = useAuth()
 	const navigate = useNavigate()
 	const [loading, setLoading] = useState(true)
 	const [properties, setProperties] = useState([])
 	const [bookingsByPropertyId, setBookingsByPropertyId] = useState({})
 	const [activeCategory, setActiveCategory] = useState("all")
+	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const [theme, setTheme] = useState(localStorage.getItem("theme") || "light")
+	const [userSubscription, setUserSubscription] = useState(null)
+
+	// Get user's display name
+	const displayName =
+		userData?.displayName || currentUser?.displayName || "Host User"
+	const userEmail = userData?.email || currentUser?.email || ""
+
+	// Get initials for default avatar
+	const getInitials = (name) => {
+		return name
+			.split(" ")
+			.map((n) => n[0])
+			.join("")
+			.toUpperCase()
+			.slice(0, 2)
+	}
+
+	// Theme effect
+	useEffect(() => {
+		document.documentElement.setAttribute("data-theme", theme)
+		localStorage.setItem("theme", theme)
+	}, [theme])
+
+	// Close menu when clicking outside
+	useEffect(() => {
+		const handleClickOutside = (event) => {
+			if (isMenuOpen && !event.target.closest(".user-menu")) {
+				setIsMenuOpen(false)
+			}
+		}
+
+		document.addEventListener("mousedown", handleClickOutside)
+		return () => {
+			document.removeEventListener("mousedown", handleClickOutside)
+		}
+	}, [isMenuOpen])
+
+	// Toggle theme
+	const toggleTheme = (newTheme) => {
+		setTheme(newTheme)
+	}
+
+	const handleLogout = async () => {
+		try {
+			await logout()
+			navigate("/")
+		} catch (error) {
+			console.error("Error logging out:", error)
+		}
+	}
+
+	// Get appropriate dashboard route based on user type
+	const getDashboardRoute = () => {
+		if (!userData?.userType) return "/dashboardHost"
+		if (userData.userType === "admin") return "/admin"
+		if (userData.userType === "host") return "/dashboardHost"
+		return "/dashboardGuest"
+	}
+
+	// Fetch user subscription status
+	const fetchUserSubscription = async () => {
+		if (!currentUser?.uid) return
+
+		try {
+			const userDoc = await getDoc(doc(db, "users", currentUser.uid))
+			if (userDoc.exists()) {
+				const userData = userDoc.data()
+				const subscription = userData.subscription || null
+
+				// Check if cancelling subscription has expired
+				if (
+					subscription &&
+					subscription.status === "cancelling" &&
+					subscription.expiryDate
+				) {
+					const expiryDate = subscription.expiryDate.toDate
+						? subscription.expiryDate.toDate()
+						: new Date(subscription.expiryDate)
+					const now = new Date()
+
+					if (expiryDate <= now) {
+						// Expired - revert to free plan
+						await updateDoc(doc(db, "users", currentUser.uid), {
+							subscription: {
+								planId: "standard",
+								planName: "Standard",
+								price: 0,
+								status: "active",
+								isDefault: true,
+								startDate: new Date(),
+								nextBillingDate: null,
+							},
+						})
+
+						setUserSubscription({
+							planId: "standard",
+							status: "active",
+							price: 0,
+						})
+						return
+					}
+				}
+
+				setUserSubscription(subscription)
+			} else {
+				// Default to free plan if no subscription found
+				setUserSubscription({
+					planId: "standard",
+					status: "active",
+					price: 0,
+				})
+			}
+		} catch (error) {
+			console.error("Error fetching subscription:", error)
+			// Default to free plan on error
+			setUserSubscription({
+				planId: "standard",
+				status: "active",
+				price: 0,
+			})
+		}
+	}
+
+	// Check if user is in free trial mode
+	const isFreeTrial = () => {
+		if (!userSubscription || hasPremium()) return false
+
+		// User is in free trial if:
+		// 1. On free/standard plan
+		// 2. Account created within last 14 days (trial period)
+		if (userSubscription.planId === "standard" || !userSubscription.planId) {
+			// Use Firebase Auth metadata for account creation time
+			if (currentUser?.metadata?.creationTime) {
+				const createdAt = new Date(currentUser.metadata.creationTime)
+				const now = new Date()
+				const daysSinceCreation = (now - createdAt) / (1000 * 60 * 60 * 24)
+				return daysSinceCreation <= 14
+			}
+		}
+
+		return false
+	}
+
+	// Check if user has premium subscription
+	const hasPremium = () => {
+		if (!userSubscription) return false
+
+		// Premium access if:
+		// 1. Active premium subscription
+		// 2. Cancelling premium subscription that hasn't expired yet
+		if (userSubscription.planId === "premium") {
+			if (userSubscription.status === "active") {
+				return true
+			}
+
+			// Check if cancelling subscription is still valid (not expired)
+			if (
+				userSubscription.status === "cancelling" &&
+				userSubscription.expiryDate
+			) {
+				const expiryDate = userSubscription.expiryDate.toDate
+					? userSubscription.expiryDate.toDate()
+					: new Date(userSubscription.expiryDate)
+				const now = new Date()
+				return expiryDate > now // Still has premium access until expiry
+			}
+		}
+
+		return false
+	}
 
 	useEffect(() => {
 		if (!currentUser?.uid) return
 		loadData()
+		fetchUserSubscription()
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [currentUser])
 
@@ -96,21 +282,162 @@ export default function HostBookings() {
 
 	return (
 		<div className="host-dashboard-wrapper">
+			{/* Header */}
 			<header className="host-dashboard-header">
 				<div className="host-header-inner">
-					<div className="host-dashboard-title">
-						<FaCalendarAlt style={{ marginRight: "8px" }} />
-						<span className="logo-text">Bookings</span>
+					<div className="host-dashboard-title" onClick={() => navigate(getDashboardRoute())} style={{ cursor: "pointer" }}>
+						<img src={logoPlain} alt="AuraStays" />
+						<span className="logo-text">AuraStays</span>
+					</div>
+					<div className="host-user-info">
+						<span className="host-user-name">{displayName.split(" ")[0]}</span>
+						{isFreeTrial() && (
+							<span className="host-plan-badge free-trial">
+								⏱️ Free Trial
+							</span>
+						)}
+						{userSubscription && !isFreeTrial() && (
+							<span
+								className={`host-plan-badge ${
+									userSubscription.planId === "premium" ? "premium" : "free"
+								}`}
+							>
+								{userSubscription.planId === "premium" && (
+									<FaCrown className="plan-icon" />
+								)}
+								{userSubscription.planId === "premium"
+									? "Premium"
+									: "Free Plan"}
+							</span>
+						)}
 					</div>
 					<div className="host-header-buttons">
-						<button className="host-icon-button" onClick={() => navigate("/dashboardHost")}>
-							← Back
+						{/* Messages */}
+						<button
+							className="host-icon-button host-messages-btn"
+							title="Messages"
+							onClick={() => navigate("/hostMessage")}
+						>
+							<FaEnvelope />
 						</button>
+						{/* User Menu */}
+						<div className="user-menu">
+							<button
+								className="user-menu-button"
+								onClick={() => setIsMenuOpen(!isMenuOpen)}
+							>
+								<FaBars className="menu-icon" />
+								<div className="user-avatar">
+									{userData?.photoURL || currentUser?.photoURL ? (
+										<img
+											src={userData?.photoURL || currentUser.photoURL}
+											alt={displayName}
+										/>
+									) : (
+										<div className="avatar-initials">
+											{getInitials(displayName)}
+										</div>
+									)}
+								</div>
+							</button>
+
+							{/* Dropdown Menu */}
+							{isMenuOpen && (
+								<div
+									className="user-dropdown"
+									onClick={(e) => e.stopPropagation()}
+								>
+									<div className="dropdown-header">
+										<div className="dropdown-avatar">
+											{userData?.photoURL || currentUser?.photoURL ? (
+												<img
+													src={userData?.photoURL || currentUser.photoURL}
+													alt={displayName}
+												/>
+											) : (
+												<div className="avatar-initials-large">
+													{getInitials(displayName)}
+												</div>
+											)}
+										</div>
+										<div className="dropdown-info">
+											<div className="dropdown-name">{displayName}</div>
+											<div className="dropdown-email">{userEmail}</div>
+										</div>
+									</div>
+
+									<div className="dropdown-divider"></div>
+
+									<button
+										className="dropdown-item"
+										onClick={() => {
+											navigate("/host/subscription")
+											setIsMenuOpen(false)
+										}}
+									>
+										<FaCrown />
+										<span>Subscription</span>
+									</button>
+									<button
+										className="dropdown-item"
+										onClick={() => {
+											navigate("/profile")
+											setIsMenuOpen(false)
+										}}
+									>
+										<FaUser />
+										<span>My Profile</span>
+									</button>
+									<div className="dropdown-theme-section">
+										<span className="theme-label">THEME</span>
+										<div className="theme-buttons">
+											<button
+												className={`theme-btn ${
+													theme === "light" ? "active" : ""
+												}`}
+												onClick={() => toggleTheme("light")}
+											>
+												☀️ Light
+											</button>
+											<button
+												className={`theme-btn ${
+													theme === "dark" ? "active" : ""
+												}`}
+												onClick={() => toggleTheme("dark")}
+											>
+												🌙 Dark
+											</button>
+										</div>
+									</div>
+
+									<div className="dropdown-divider"></div>
+
+									<button
+										className="dropdown-item logout"
+										onClick={handleLogout}
+									>
+										<FaSignOutAlt />
+										<span>Logout</span>
+									</button>
+								</div>
+							)}
+						</div>
 					</div>
 				</div>
 			</header>
 
 			<main className="dashboard-main">
+				{/* Page Header */}
+				<div className="page-header-section">
+					<div className="page-header-content">
+						<h1 className="page-title">
+							Bookings
+						</h1>
+						<p className="page-subtitle">
+							View and manage all bookings for your properties
+						</p>
+					</div>
+				</div>
 				<section className="categories-section">
 					<h2>Your Properties and Bookings</h2>
 					<p className="section-subtitle">

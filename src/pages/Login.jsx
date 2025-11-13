@@ -15,6 +15,7 @@ import {
 import hideIcon from "../assets/icons/hide.png"
 import viewIcon from "../assets/icons/view.png"
 import { doc, getDoc, setDoc } from "firebase/firestore"
+import { getFirebaseErrorMessage } from "../utils/errorMessages"
 
 export default function Login() {
 	const [formdata, setFormdata] = useState({
@@ -62,7 +63,7 @@ export default function Login() {
 				navigate("/dashboardGuest")
 			}
 		} catch (error) {
-			toast.error(error.message)
+			toast.error(getFirebaseErrorMessage(error))
 			console.error(error)
 		}
 	}
@@ -103,7 +104,7 @@ export default function Login() {
 				navigate("/dashboardGuest")
 			}
 		} catch (error) {
-			toast.error(error.message)
+			toast.error(getFirebaseErrorMessage(error))
 			console.error(error)
 		}
 	}

@@ -28,13 +28,51 @@ export default function FeaturedProperties() {
 			try {
 				console.log("Fetching featured properties...")
 				const propertiesRef = collection(db, "properties")
-				const q = query(propertiesRef, orderBy("rating", "desc"), limit(3))
-				const querySnapshot = await getDocs(q)
+				// Fetch all properties to sort by boost status
+				const querySnapshot = await getDocs(propertiesRef)
 				console.log("Query snapshot size:", querySnapshot.size)
-				const propertiesData = querySnapshot.docs.map((doc) => ({
+				let propertiesData = querySnapshot.docs.map((doc) => ({
 					id: doc.id,
 					...doc.data(),
 				}))
+
+				// Filter out disabled properties
+				propertiesData = propertiesData.filter((property) => {
+					if (property.disabled === true) {
+						if (property.disabledUntil) {
+							const disabledUntil = property.disabledUntil.toDate
+								? property.disabledUntil.toDate()
+								: new Date(property.disabledUntil)
+							const now = new Date()
+							if (now < disabledUntil) {
+								return false // Still disabled
+							}
+						} else {
+							return false // Permanently disabled
+						}
+					}
+					return true
+				})
+
+				// Sort: boosted first, then featured, then by rating
+				propertiesData.sort((a, b) => {
+					// Boosted properties first
+					if (a.boosted && !b.boosted) return -1
+					if (!a.boosted && b.boosted) return 1
+					
+					// Then featured properties
+					if (a.featured && !b.featured) return -1
+					if (!a.featured && b.featured) return 1
+					
+					// Then by rating
+					const ratingA = a.rating || 0
+					const ratingB = b.rating || 0
+					return ratingB - ratingA
+				})
+
+				// Limit to top 3
+				propertiesData = propertiesData.slice(0, 3)
+				
 				console.log("Fetched properties:", propertiesData)
 				setProperties(propertiesData)
 			} catch (error) {

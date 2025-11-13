@@ -30,14 +30,134 @@ import {
 	FaMinus,
 	FaFire,
 	FaBook,
+	FaBars,
+	FaUser,
+	FaSignOutAlt,
+	FaEnvelope,
+	FaCrown,
 } from "react-icons/fa"
 import "../css/HostPoints.css"
+import "../css/DashboardHost.css"
 import logoPlain from "../assets/logoPlain.png"
 
 export default function HostPoints() {
 	const navigate = useNavigate()
-	const { currentUser } = useAuth()
+	const { currentUser, userData, logout } = useAuth()
 	const [loading, setLoading] = useState(true)
+	const [isMenuOpen, setIsMenuOpen] = useState(false)
+	const [theme, setTheme] = useState(localStorage.getItem("theme") || "light")
+	const [userSubscription, setUserSubscription] = useState(null)
+
+	// Get user's display name
+	const displayName =
+		userData?.displayName || currentUser?.displayName || "Host User"
+	const userEmail = userData?.email || currentUser?.email || ""
+
+	// Get initials for default avatar
+	const getInitials = (name) => {
+		return name
+			.split(" ")
+			.map((n) => n[0])
+			.join("")
+			.toUpperCase()
+			.slice(0, 2)
+	}
+
+	// Theme effect
+	useEffect(() => {
+		document.documentElement.setAttribute("data-theme", theme)
+		localStorage.setItem("theme", theme)
+	}, [theme])
+
+	// Close menu when clicking outside
+	useEffect(() => {
+		const handleClickOutside = (event) => {
+			if (isMenuOpen && !event.target.closest(".user-menu")) {
+				setIsMenuOpen(false)
+			}
+		}
+
+		document.addEventListener("mousedown", handleClickOutside)
+		return () => {
+			document.removeEventListener("mousedown", handleClickOutside)
+		}
+	}, [isMenuOpen])
+
+	// Toggle theme
+	const toggleTheme = (newTheme) => {
+		setTheme(newTheme)
+	}
+
+	const handleLogout = async () => {
+		try {
+			await logout()
+			navigate("/")
+		} catch (error) {
+			console.error("Error logging out:", error)
+		}
+	}
+
+	// Fetch user subscription status
+	const fetchUserSubscription = async () => {
+		if (!currentUser?.uid) return
+
+		try {
+			const userDoc = await getDoc(doc(db, "users", currentUser.uid))
+			if (userDoc.exists()) {
+				const userData = userDoc.data()
+				const subscription = userData.subscription || null
+				setUserSubscription(subscription)
+			} else {
+				setUserSubscription({
+					planId: "standard",
+					status: "active",
+					price: 0,
+				})
+			}
+		} catch (error) {
+			console.error("Error fetching subscription:", error)
+			setUserSubscription({
+				planId: "standard",
+				status: "active",
+				price: 0,
+			})
+		}
+	}
+
+	// Check if user is in free trial mode
+	const isFreeTrial = () => {
+		if (!userSubscription || hasPremium()) return false
+		if (userSubscription.planId === "standard" || !userSubscription.planId) {
+			if (currentUser?.metadata?.creationTime) {
+				const createdAt = new Date(currentUser.metadata.creationTime)
+				const now = new Date()
+				const daysSinceCreation = (now - createdAt) / (1000 * 60 * 60 * 24)
+				return daysSinceCreation <= 14
+			}
+		}
+		return false
+	}
+
+	// Check if user has premium subscription
+	const hasPremium = () => {
+		if (!userSubscription) return false
+		if (userSubscription.planId === "premium") {
+			if (userSubscription.status === "active") {
+				return true
+			}
+			if (
+				userSubscription.status === "cancelling" &&
+				userSubscription.expiryDate
+			) {
+				const expiryDate = userSubscription.expiryDate.toDate
+					? userSubscription.expiryDate.toDate()
+					: new Date(userSubscription.expiryDate)
+				const now = new Date()
+				return expiryDate > now
+			}
+		}
+		return false
+	}
 	const [pointsData, setPointsData] = useState({
 		totalPoints: 0,
 		lifetimePoints: 0,
@@ -54,6 +174,8 @@ export default function HostPoints() {
 	const [monthlyGoalRewardClaimed, setMonthlyGoalRewardClaimed] =
 		useState(false)
 	const [isClaimingReward, setIsClaimingReward] = useState(false)
+	const [exchangePoints, setExchangePoints] = useState("")
+	const [isExchanging, setIsExchanging] = useState(false)
 	const [availableRewards] = useState([
 		{
 			id: 1,
@@ -299,24 +421,45 @@ export default function HostPoints() {
 			}
 
 			// Fetch transaction history
-			const transactionsQuery = query(
-				collection(db, "pointsTransactions"),
-				where("userId", "==", currentUser.uid),
-				orderBy("createdAt", "desc"),
-				limit(20)
-			)
-
 			try {
+				const transactionsQuery = query(
+					collection(db, "pointsTransactions"),
+					where("userId", "==", currentUser.uid),
+					orderBy("createdAt", "desc"),
+					limit(50)
+				)
 				const transactionsSnapshot = await getDocs(transactionsQuery)
 				const transactionsList = transactionsSnapshot.docs.map((doc) => ({
 					id: doc.id,
 					...doc.data(),
 				}))
 				setTransactions(transactionsList)
-			} catch {
-				// Collection might not exist yet
-				console.log("Points transactions collection may not exist")
-				setTransactions([])
+			} catch (error) {
+				// If orderBy fails (index not created), try without it
+				console.log("Ordered query failed, trying without orderBy:", error)
+				try {
+					const transactionsQuery2 = query(
+						collection(db, "pointsTransactions"),
+						where("userId", "==", currentUser.uid),
+						limit(50)
+					)
+					const transactionsSnapshot2 = await getDocs(transactionsQuery2)
+					const transactionsList2 = transactionsSnapshot2.docs.map((doc) => ({
+						id: doc.id,
+						...doc.data(),
+					}))
+					// Sort manually by createdAt descending
+					transactionsList2.sort((a, b) => {
+						const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt || 0)
+						const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt || 0)
+						return dateB - dateA
+					})
+					setTransactions(transactionsList2)
+				} catch (error2) {
+					// Collection might not exist yet or no transactions
+					console.log("Points transactions collection may not exist:", error2)
+					setTransactions([])
+				}
 			}
 
 			// Fetch redeemed rewards
@@ -408,18 +551,34 @@ export default function HostPoints() {
 		}
 	}
 
-	const handleRedeemReward = async (reward) => {
+	const handleExchangePoints = async () => {
 		if (!currentUser?.uid) {
-			toast.error("Please log in to redeem rewards")
+			toast.error("Please log in to exchange points")
 			return
 		}
 
-		if (pointsData.totalPoints < reward.points) {
-			toast.error("Insufficient points to redeem this reward")
+		const pointsToExchange = parseInt(exchangePoints)
+		
+		if (!pointsToExchange || pointsToExchange <= 0) {
+			toast.error("Please enter a valid amount of points")
 			return
 		}
+
+		if (pointsToExchange < 100) {
+			toast.error("Minimum exchange is 100 points")
+			return
+		}
+
+		if (pointsToExchange > pointsData.totalPoints) {
+			toast.error("Insufficient points")
+			return
+		}
+
+		// Exchange rate: 100 points = 100 pesos (1:1 ratio)
+		const pesoAmount = pointsToExchange
 
 		try {
+			setIsExchanging(true)
 			const userDocRef = doc(db, "users", currentUser.uid)
 			const userDoc = await getDoc(userDocRef)
 
@@ -428,40 +587,50 @@ export default function HostPoints() {
 				return
 			}
 
-			const currentPoints = userDoc.data().points || 0
-			const currentRedeemed = userDoc.data().redeemedPoints || 0
+			const userData = userDoc.data()
+			const currentPoints = userData.points || 0
+			const currentRedeemed = userData.redeemedPoints || 0
+			const currentWalletBalance = userData.walletBalance || 0
 
-			// Update user points
+			// Update user points and add to wallet balance
+			const newWalletBalance = currentWalletBalance + pesoAmount
 			await updateDoc(userDocRef, {
-				points: currentPoints - reward.points,
-				redeemedPoints: currentRedeemed + reward.points,
+				points: currentPoints - pointsToExchange,
+				redeemedPoints: currentRedeemed + pointsToExchange,
+				walletBalance: newWalletBalance,
 			})
 
-			// Add transaction record
+			// Add points transaction record
 			await addDoc(collection(db, "pointsTransactions"), {
 				userId: currentUser.uid,
-				type: "redeem",
-				amount: -reward.points,
-				description: `Redeemed: ${reward.name}`,
+				type: "exchange",
+				amount: -pointsToExchange,
+				description: `Exchanged ${pointsToExchange} points for ₱${pesoAmount.toLocaleString()}`,
+				pesoAmount: pesoAmount,
 				createdAt: serverTimestamp(),
 			})
 
-			// Add redeemed reward record
-			await addDoc(collection(db, "redeemedRewards"), {
+			// Add wallet transaction record
+			await addDoc(collection(db, "walletTransactions"), {
 				userId: currentUser.uid,
-				rewardId: reward.id,
-				rewardName: reward.name,
-				rewardType: reward.type,
-				pointsSpent: reward.points,
-				redeemedAt: serverTimestamp(),
-				status: "active",
+				type: "points_exchange",
+				amount: pesoAmount,
+				description: "Points Redeemed",
+				pointsExchanged: pointsToExchange,
+				balanceBefore: currentWalletBalance,
+				balanceAfter: newWalletBalance,
+				status: "completed",
+				createdAt: serverTimestamp(),
 			})
 
-			toast.success(`Successfully redeemed ${reward.name}!`)
+			toast.success(`Successfully exchanged ${pointsToExchange} points for ₱${pesoAmount.toLocaleString()}! Amount added to your e-wallet.`)
+			setExchangePoints("")
 			fetchPointsData()
 		} catch (error) {
-			console.error("Error redeeming reward:", error)
-			toast.error("Failed to redeem reward. Please try again.")
+			console.error("Error exchanging points:", error)
+			toast.error("Failed to exchange points. Please try again.")
+		} finally {
+			setIsExchanging(false)
 		}
 	}
 
@@ -530,6 +699,8 @@ export default function HostPoints() {
 				return <FaStar className="earn-icon" />
 			case "redeem":
 				return <FaMinus className="redeem-icon" />
+			case "exchange":
+				return <FaCoins className="redeem-icon" />
 			default:
 				return isEarningTransaction(type) ? (
 					<FaPlus className="earn-icon" />
@@ -558,6 +729,8 @@ export default function HostPoints() {
 				return "Points earned for receiving a 5-star review"
 			case "redeem":
 				return transaction.description || "Redeemed reward"
+			case "exchange":
+				return transaction.description || `Exchanged ${Math.abs(transaction.amount || 0)} points for ₱${transaction.pesoAmount || 0}`
 			default:
 				return transaction.description || "Transaction"
 		}
@@ -566,6 +739,14 @@ export default function HostPoints() {
 	// Helper function to get transaction amount
 	const getTransactionAmount = (transaction) => {
 		return transaction.amount || transaction.points || 0
+	}
+
+	// Get appropriate dashboard route based on user type
+	const getDashboardRoute = () => {
+		if (!userData?.userType) return "/dashboardHost"
+		if (userData.userType === "admin") return "/admin"
+		if (userData.userType === "host") return "/dashboardHost"
+		return "/dashboardGuest"
 	}
 
 	if (loading) {
@@ -580,17 +761,155 @@ export default function HostPoints() {
 	}
 
 	return (
-		<div className="host-points-container">
+		<div className="host-dashboard-wrapper">
 			{/* Header */}
-			<div className="points-header">
-				<div className="header-logo">
-					<img src={logoPlain} alt="AuraStays" />
-					<span className="logo-text">AuraStays</span>
-				</div>
-			</div>
+			<header className="host-dashboard-header">
+				<div className="host-header-inner">
+					<div className="host-dashboard-title" onClick={() => navigate(getDashboardRoute())} style={{ cursor: "pointer" }}>
+						<img src={logoPlain} alt="AuraStays" />
+						<span className="logo-text">AuraStays</span>
+					</div>
+					<div className="host-user-info">
+						<span className="host-user-name">{displayName.split(" ")[0]}</span>
+						{isFreeTrial() && (
+							<span className="host-plan-badge free-trial">
+								⏱️ Free Trial
+							</span>
+						)}
+						{userSubscription && !isFreeTrial() && (
+							<span
+								className={`host-plan-badge ${
+									userSubscription.planId === "premium" ? "premium" : "free"
+								}`}
+							>
+								{userSubscription.planId === "premium" && (
+									<FaCrown className="plan-icon" />
+								)}
+								{userSubscription.planId === "premium"
+									? "Premium"
+									: "Free Plan"}
+							</span>
+						)}
+					</div>
+					<div className="host-header-buttons">
+						{/* Messages */}
+						<button
+							className="host-icon-button host-messages-btn"
+							title="Messages"
+							onClick={() => navigate("/hostMessage")}
+						>
+							<FaEnvelope />
+						</button>
+						{/* User Menu */}
+						<div className="user-menu">
+							<button
+								className="user-menu-button"
+								onClick={() => setIsMenuOpen(!isMenuOpen)}
+							>
+								<FaBars className="menu-icon" />
+								<div className="user-avatar">
+									{userData?.photoURL || currentUser?.photoURL ? (
+										<img
+											src={userData?.photoURL || currentUser.photoURL}
+											alt={displayName}
+										/>
+									) : (
+										<div className="avatar-initials">
+											{getInitials(displayName)}
+										</div>
+									)}
+								</div>
+							</button>
 
-			{/* Main Content */}
-			<div className="points-main-content">
+							{/* Dropdown Menu */}
+							{isMenuOpen && (
+								<div
+									className="user-dropdown"
+									onClick={(e) => e.stopPropagation()}
+								>
+									<div className="dropdown-header">
+										<div className="dropdown-avatar">
+											{userData?.photoURL || currentUser?.photoURL ? (
+												<img
+													src={userData?.photoURL || currentUser.photoURL}
+													alt={displayName}
+												/>
+											) : (
+												<div className="avatar-initials-large">
+													{getInitials(displayName)}
+												</div>
+											)}
+										</div>
+										<div className="dropdown-info">
+											<div className="dropdown-name">{displayName}</div>
+											<div className="dropdown-email">{userEmail}</div>
+										</div>
+									</div>
+
+									<div className="dropdown-divider"></div>
+
+									<button
+										className="dropdown-item"
+										onClick={() => {
+											navigate("/host/subscription")
+											setIsMenuOpen(false)
+										}}
+									>
+										<FaCrown />
+										<span>Subscription</span>
+									</button>
+									<button
+										className="dropdown-item"
+										onClick={() => {
+											navigate("/profile")
+											setIsMenuOpen(false)
+										}}
+									>
+										<FaUser />
+										<span>My Profile</span>
+									</button>
+									<div className="dropdown-theme-section">
+										<span className="theme-label">THEME</span>
+										<div className="theme-buttons">
+											<button
+												className={`theme-btn ${
+													theme === "light" ? "active" : ""
+												}`}
+												onClick={() => toggleTheme("light")}
+											>
+												☀️ Light
+											</button>
+											<button
+												className={`theme-btn ${
+													theme === "dark" ? "active" : ""
+												}`}
+												onClick={() => toggleTheme("dark")}
+											>
+												🌙 Dark
+											</button>
+										</div>
+									</div>
+
+									<div className="dropdown-divider"></div>
+
+									<button
+										className="dropdown-item logout"
+										onClick={handleLogout}
+									>
+										<FaSignOutAlt />
+										<span>Logout</span>
+									</button>
+								</div>
+							)}
+						</div>
+					</div>
+				</div>
+			</header>
+
+			<main className="dashboard-main">
+				<div className="host-points-container">
+					{/* Main Content */}
+					<div className="points-main-content">
 				{/* Points Overview */}
 				<div className="points-overview-section">
 					<h1 className="points-title">
@@ -598,36 +917,85 @@ export default function HostPoints() {
 						Points & Rewards
 					</h1>
 
-					{/* Points Balance Card */}
-					<div className="points-balance-card">
-						<div className="balance-header">
-							<h2>Available Points</h2>
-							<div
-								className="tier-badge"
-								style={{ borderColor: getTierColor(pointsData.tier) }}
-							>
-								{getTierIcon(pointsData.tier)}
-								<span style={{ color: getTierColor(pointsData.tier) }}>
-									{pointsData.tier}
-								</span>
+					{/* Points Balance Card - Compact Design */}
+					<div className="points-balance-card-compact" style={{
+						background: "white",
+						borderRadius: "16px",
+						padding: "1.5rem",
+						marginBottom: "2rem",
+						boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
+						border: "2px solid #e9ecef",
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "space-between",
+						gap: "1.5rem",
+						flexWrap: "wrap"
+					}}>
+						<div style={{ display: "flex", alignItems: "center", gap: "1rem", flex: "1", minWidth: "200px" }}>
+							<div style={{
+								background: "linear-gradient(135deg, var(--primary), var(--secondary))",
+								borderRadius: "12px",
+								padding: "1rem",
+								display: "flex",
+								alignItems: "center",
+								justifyContent: "center",
+								minWidth: "60px",
+								height: "60px"
+							}}>
+								<FaCoins style={{ fontSize: "2rem", color: "white" }} />
+							</div>
+							<div>
+								<div style={{ fontSize: "0.875rem", color: "#666", marginBottom: "0.25rem" }}>
+									Available Points
+								</div>
+								<div style={{ fontSize: "2rem", fontWeight: 700, color: "var(--primary)" }}>
+									{pointsData.totalPoints.toLocaleString()}
+								</div>
 							</div>
 						</div>
-						<div className="balance-amount">
-							<FaCoins className="coins-icon" />
-							<span>{pointsData.totalPoints.toLocaleString()}</span>
-						</div>
-						<div className="balance-stats">
-							<div className="stat-item">
-								<span className="stat-label">Lifetime Points</span>
-								<span className="stat-value">
+						<div style={{
+							display: "flex",
+							gap: "1.5rem",
+							flexWrap: "wrap",
+							alignItems: "center"
+						}}>
+							<div style={{ textAlign: "center" }}>
+								<div style={{ fontSize: "0.75rem", color: "#666", marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+									Tier
+								</div>
+								<div
+									style={{
+										display: "inline-flex",
+										alignItems: "center",
+										gap: "0.5rem",
+										padding: "0.5rem 1rem",
+										background: "rgba(97, 191, 156, 0.1)",
+										border: `2px solid ${getTierColor(pointsData.tier)}`,
+										borderRadius: "20px",
+										fontWeight: 600,
+										fontSize: "0.875rem",
+										color: getTierColor(pointsData.tier)
+									}}
+								>
+									{getTierIcon(pointsData.tier)}
+									<span>{pointsData.tier}</span>
+								</div>
+							</div>
+							<div style={{ textAlign: "center" }}>
+								<div style={{ fontSize: "0.75rem", color: "#666", marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+									Lifetime
+								</div>
+								<div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#374151" }}>
 									{pointsData.lifetimePoints.toLocaleString()}
-								</span>
+								</div>
 							</div>
-							<div className="stat-item">
-								<span className="stat-label">Redeemed</span>
-								<span className="stat-value">
+							<div style={{ textAlign: "center" }}>
+								<div style={{ fontSize: "0.75rem", color: "#666", marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+									Redeemed
+								</div>
+								<div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#374151" }}>
 									{pointsData.redeemedPoints.toLocaleString()}
-								</span>
+								</div>
 							</div>
 						</div>
 					</div>
@@ -757,38 +1125,152 @@ export default function HostPoints() {
 					</div>
 				</div>
 
-				{/* Available Rewards */}
+				{/* Exchange Points Section */}
 				<div className="rewards-section">
 					<h2 className="section-title">
-						<FaGift /> Available Rewards
+						<FaCoins /> Exchange Points
 					</h2>
-					<div className="rewards-grid">
-						{availableRewards.map((reward) => (
-							<div key={reward.id} className="reward-card">
-								<div className="reward-icon">{reward.icon}</div>
-								<h3>{reward.name}</h3>
-								<p>{reward.description}</p>
-								<div className="reward-cost">
-									<FaCoins />
-									<span>{reward.points.toLocaleString()} points</span>
-								</div>
-								<button
-									className={`redeem-button ${
-										pointsData.totalPoints >= reward.points ? "" : "disabled"
-									}`}
-									onClick={() => handleRedeemReward(reward)}
-									disabled={pointsData.totalPoints < reward.points}
-								>
-									{pointsData.totalPoints >= reward.points ? (
-										<>
-											<FaCheckCircle /> Redeem Now
-										</>
-									) : (
-										"Not Enough Points"
-									)}
-								</button>
+					<div className="exchange-points-card" style={{
+						background: "white",
+						borderRadius: "16px",
+						padding: "2rem",
+						boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
+						border: "2px solid #e9ecef",
+						maxWidth: "600px",
+						margin: "0 auto"
+					}}>
+						<div style={{
+							textAlign: "center",
+							marginBottom: "2rem"
+						}}>
+							<p style={{
+								fontSize: "1.1rem",
+								color: "#666",
+								marginBottom: "0.5rem"
+							}}>
+								Exchange Rate
+							</p>
+							<h3 style={{
+								fontSize: "1.8rem",
+								color: "var(--primary)",
+								margin: 0,
+								fontWeight: 700
+							}}>
+								100 points = ₱100
+							</h3>
+						</div>
+						
+						<div style={{
+							marginBottom: "1.5rem"
+						}}>
+							<label style={{
+								display: "block",
+								marginBottom: "0.5rem",
+								fontWeight: 600,
+								color: "#374151"
+							}}>
+								Points to Exchange
+							</label>
+							<input
+								type="number"
+								value={exchangePoints}
+								onChange={(e) => {
+									const value = e.target.value
+									if (value === "" || (parseInt(value) >= 0 && parseInt(value) <= pointsData.totalPoints)) {
+										setExchangePoints(value)
+									}
+								}}
+								placeholder="Enter points (minimum 100)"
+								min="100"
+								max={pointsData.totalPoints}
+								style={{
+									width: "100%",
+									padding: "0.75rem 1rem",
+									border: "2px solid #e5e7eb",
+									borderRadius: "8px",
+									fontSize: "1rem",
+									outline: "none",
+									transition: "all 0.3s ease"
+								}}
+								onFocus={(e) => e.target.style.borderColor = "var(--primary)"}
+								onBlur={(e) => e.target.style.borderColor = "#e5e7eb"}
+							/>
+							<p style={{
+								marginTop: "0.5rem",
+								fontSize: "0.875rem",
+								color: "#6b7280"
+							}}>
+								Available: {pointsData.totalPoints.toLocaleString()} points
+							</p>
+						</div>
+
+						{exchangePoints && parseInt(exchangePoints) >= 100 && (
+							<div style={{
+								background: "#f0f9ff",
+								padding: "1rem",
+								borderRadius: "8px",
+								marginBottom: "1.5rem",
+								textAlign: "center"
+							}}>
+								<p style={{
+									margin: 0,
+									color: "#1e40af",
+									fontSize: "0.95rem"
+								}}>
+									You will receive: <strong style={{ fontSize: "1.2rem" }}>₱{parseInt(exchangePoints || 0).toLocaleString()}</strong>
+								</p>
 							</div>
-						))}
+						)}
+
+						<button
+							onClick={handleExchangePoints}
+							disabled={
+								isExchanging ||
+								!exchangePoints ||
+								parseInt(exchangePoints) < 100 ||
+								parseInt(exchangePoints) > pointsData.totalPoints
+							}
+							style={{
+								width: "100%",
+								padding: "1rem",
+								background: pointsData.totalPoints >= 100 && parseInt(exchangePoints || 0) >= 100 && parseInt(exchangePoints || 0) <= pointsData.totalPoints
+									? "linear-gradient(135deg, var(--primary), var(--secondary))"
+									: "#e5e7eb",
+								color: pointsData.totalPoints >= 100 && parseInt(exchangePoints || 0) >= 100 && parseInt(exchangePoints || 0) <= pointsData.totalPoints
+									? "white"
+									: "#9ca3af",
+								border: "none",
+								borderRadius: "8px",
+								fontSize: "1.1rem",
+								fontWeight: 600,
+								cursor: pointsData.totalPoints >= 100 && parseInt(exchangePoints || 0) >= 100 && parseInt(exchangePoints || 0) <= pointsData.totalPoints
+									? "pointer"
+									: "not-allowed",
+								transition: "all 0.3s ease",
+								display: "flex",
+								alignItems: "center",
+								justifyContent: "center",
+								gap: "0.5rem"
+							}}
+							onMouseEnter={(e) => {
+								if (pointsData.totalPoints >= 100 && parseInt(exchangePoints || 0) >= 100 && parseInt(exchangePoints || 0) <= pointsData.totalPoints) {
+									e.target.style.transform = "translateY(-2px)"
+									e.target.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)"
+								}
+							}}
+							onMouseLeave={(e) => {
+								e.target.style.transform = "translateY(0)"
+								e.target.style.boxShadow = "none"
+							}}
+						>
+							{isExchanging ? (
+								<>Processing...</>
+							) : (
+								<>
+									<FaCoins /> Exchange Points
+								</>
+							)}
+						</button>
 					</div>
 				</div>
 
@@ -809,6 +1291,7 @@ export default function HostPoints() {
 								const isEarn = isEarningTransaction(transaction.type)
 								const amount = getTransactionAmount(transaction)
 								const description = getTransactionDescription(transaction)
+								const isExchange = transaction.type === "exchange"
 
 								return (
 									<div key={transaction.id} className="transaction-item">
@@ -821,6 +1304,11 @@ export default function HostPoints() {
 											{transaction.propertyTitle && (
 												<p className="transaction-property">
 													Property: {transaction.propertyTitle}
+												</p>
+											)}
+											{isExchange && transaction.pesoAmount && (
+												<p className="transaction-property" style={{ color: "var(--primary)", fontWeight: 600 }}>
+													Added ₱{transaction.pesoAmount.toLocaleString()} to e-wallet
 												</p>
 											)}
 										</div>
@@ -863,7 +1351,9 @@ export default function HostPoints() {
 						</div>
 					</div>
 				)}
-			</div>
+					</div>
+				</div>
+			</main>
 		</div>
 	)
 }

@@ -6,6 +6,7 @@ import { doc, getDoc, updateDoc, collection, query, where, getDocs } from "fireb
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth"
 import { toast } from "react-stacked-toast"
 import "../css/Profile.css"
+import { getFirebaseErrorMessage } from "../utils/errorMessages"
 import {
 	FaArrowLeft,
 	FaUser,
@@ -165,63 +166,172 @@ export default function Profile() {
 		if (!currentUser?.uid) return
 
 		try {
-			let totalBookings = 0
-			let reviewsWritten = 0
-			let wishlistItems = 0
-			let totalSpent = 0
+			// Check if user is a host
+			const isHost = userType === "host"
 
-			// Fetch bookings to calculate total bookings and total spent
-			try {
-				const bookingsQuery = query(
-					collection(db, "bookings"),
-					where("guestId", "==", currentUser.uid)
-				)
-				const bookingsSnapshot = await getDocs(bookingsQuery)
-				const bookings = bookingsSnapshot.docs.map((doc) => doc.data())
-				
-				totalBookings = bookings.length
-				
-				// Calculate total spent from all bookings
-				totalSpent = bookings.reduce((sum, booking) => {
-					return sum + (booking.pricing?.total || 0)
-				}, 0)
-			} catch (bookingError) {
-				console.log("Bookings collection may not exist yet:", bookingError)
-			}
+			if (isHost) {
+				// Host stats
+				let totalListings = 0
+				let totalBookings = 0
+				let totalRatings = 0
+				let totalEarned = 0
 
-			// Fetch reviews to calculate reviews written
-			try {
-				const reviewsQuery = query(
-					collection(db, "reviews"),
-					where("reviewerId", "==", currentUser.uid)
-				)
-				const reviewsSnapshot = await getDocs(reviewsQuery)
-				reviewsWritten = reviewsSnapshot.docs.length
-			} catch (reviewError) {
-				console.log("Reviews collection may not exist yet:", reviewError)
-			}
+				// Fetch properties to calculate total listings and average rating
+				try {
+					// Try querying by top-level hostId first
+					let properties = []
+					const propertyIds = new Set() // Track document IDs to avoid duplicates
+					
+					try {
+						const propertiesQuery = query(
+							collection(db, "properties"),
+							where("hostId", "==", currentUser.uid)
+						)
+						const propertiesSnapshot = await getDocs(propertiesQuery)
+						properties = propertiesSnapshot.docs.map((doc) => {
+							propertyIds.add(doc.id)
+							return { id: doc.id, ...doc.data() }
+						})
+						console.log("[Profile] Found properties by hostId:", properties.length)
+					} catch (hostIdError) {
+						console.log("Error querying by hostId:", hostIdError)
+					}
 
-			// Fetch wishlist items from user document
-			try {
-				const userDocRef = doc(db, "users", currentUser.uid)
-				const userDoc = await getDoc(userDocRef)
-				if (userDoc.exists()) {
-					const userData = userDoc.data()
-					const wishes = userData.wishes || []
-					wishlistItems = Array.isArray(wishes) ? wishes.length : 0
+					// Also check for properties with host.hostId (fallback for older properties)
+					try {
+						const propertiesQuery2 = query(
+							collection(db, "properties"),
+							where("host.hostId", "==", currentUser.uid)
+						)
+						const propertiesSnapshot2 = await getDocs(propertiesQuery2)
+						const properties2 = propertiesSnapshot2.docs
+							.map((doc) => ({ id: doc.id, ...doc.data() }))
+							.filter(p => !propertyIds.has(p.id)) // Only add if not already found
+						
+						properties2.forEach(p => propertyIds.add(p.id))
+						properties = [...properties, ...properties2]
+						console.log("[Profile] Found additional properties by host.hostId:", properties2.length)
+					} catch (hostHostIdError) {
+						console.log("Error querying by host.hostId:", hostHostIdError)
+					}
+
+					// If still no properties, try fetching all and filtering in memory (fallback)
+					if (properties.length === 0) {
+						try {
+							const allPropertiesSnapshot = await getDocs(collection(db, "properties"))
+							properties = allPropertiesSnapshot.docs
+								.map((doc) => ({ id: doc.id, ...doc.data() }))
+								.filter(p => 
+									(p.hostId === currentUser.uid) || 
+									(p.host?.hostId === currentUser.uid)
+								)
+							console.log("[Profile] Found properties by fetching all:", properties.length)
+						} catch (allPropertiesError) {
+							console.log("Error fetching all properties:", allPropertiesError)
+						}
+					}
+					
+					totalListings = properties.length
+					console.log("[Profile] Host properties found:", totalListings, properties.map(p => ({ id: p.id, title: p.title, hostId: p.hostId, hostHostId: p.host?.hostId })))
+					
+					// Calculate average rating from all properties
+					const propertiesWithRatings = properties.filter(p => p.rating && p.rating > 0)
+					if (propertiesWithRatings.length > 0) {
+						const sumRatings = propertiesWithRatings.reduce((sum, p) => sum + (p.rating || 0), 0)
+						totalRatings = sumRatings / propertiesWithRatings.length
+					}
+				} catch (propertiesError) {
+					console.error("Error fetching properties:", propertiesError)
+					console.log("Properties collection may not exist yet:", propertiesError)
 				}
-			} catch (wishlistError) {
-				console.log("Error fetching wishlist items:", wishlistError)
-			}
 
-			// Update profile data with calculated stats
-			setProfileData((prev) => ({
-				...prev,
-				totalBookings,
-				reviewsWritten,
-				wishlistItems,
-				totalSpent,
-			}))
+				// Fetch bookings to calculate total bookings and total earned
+				try {
+					const bookingsQuery = query(
+						collection(db, "bookings"),
+						where("hostId", "==", currentUser.uid)
+					)
+					const bookingsSnapshot = await getDocs(bookingsQuery)
+					const bookings = bookingsSnapshot.docs.map((doc) => doc.data())
+					
+					totalBookings = bookings.length
+					
+					// Calculate total earned from all bookings
+					totalEarned = bookings.reduce((sum, booking) => {
+						return sum + (booking.pricing?.total || 0)
+					}, 0)
+				} catch (bookingError) {
+					console.log("Bookings collection may not exist yet:", bookingError)
+				}
+
+				// Update profile data with calculated host stats
+				setProfileData((prev) => ({
+					...prev,
+					totalListings,
+					totalBookings,
+					totalRatings: totalRatings.toFixed(1),
+					totalEarned,
+				}))
+			} else {
+				// Guest stats (keep existing logic)
+				let totalBookings = 0
+				let reviewsWritten = 0
+				let wishlistItems = 0
+				let totalSpent = 0
+
+				// Fetch bookings to calculate total bookings and total spent
+				try {
+					const bookingsQuery = query(
+						collection(db, "bookings"),
+						where("guestId", "==", currentUser.uid)
+					)
+					const bookingsSnapshot = await getDocs(bookingsQuery)
+					const bookings = bookingsSnapshot.docs.map((doc) => doc.data())
+					
+					totalBookings = bookings.length
+					
+					// Calculate total spent from all bookings
+					totalSpent = bookings.reduce((sum, booking) => {
+						return sum + (booking.pricing?.total || 0)
+					}, 0)
+				} catch (bookingError) {
+					console.log("Bookings collection may not exist yet:", bookingError)
+				}
+
+				// Fetch reviews to calculate reviews written
+				try {
+					const reviewsQuery = query(
+						collection(db, "reviews"),
+						where("reviewerId", "==", currentUser.uid)
+					)
+					const reviewsSnapshot = await getDocs(reviewsQuery)
+					reviewsWritten = reviewsSnapshot.docs.length
+				} catch (reviewError) {
+					console.log("Reviews collection may not exist yet:", reviewError)
+				}
+
+				// Fetch wishlist items from user document
+				try {
+					const userDocRef = doc(db, "users", currentUser.uid)
+					const userDoc = await getDoc(userDocRef)
+					if (userDoc.exists()) {
+						const userData = userDoc.data()
+						const wishes = userData.wishes || []
+						wishlistItems = Array.isArray(wishes) ? wishes.length : 0
+					}
+				} catch (wishlistError) {
+					console.log("Error fetching wishlist items:", wishlistError)
+				}
+
+				// Update profile data with calculated guest stats
+				setProfileData((prev) => ({
+					...prev,
+					totalBookings,
+					reviewsWritten,
+					wishlistItems,
+					totalSpent,
+				}))
+			}
 		} catch (error) {
 			console.error("Error fetching user stats:", error)
 		}
@@ -879,13 +989,7 @@ export default function Profile() {
 			setShowPasswordModal(false)
 		} catch (error) {
 			console.error("Error updating password:", error)
-			if (error.code === "auth/wrong-password") {
-				toast.error("Current password is incorrect")
-			} else if (error.code === "auth/weak-password") {
-				toast.error("New password is too weak")
-			} else {
-				toast.error(error.message || "Failed to update password")
-			}
+			toast.error(getFirebaseErrorMessage(error))
 		} finally {
 			setIsUpdatingPassword(false)
 		}
@@ -1394,58 +1498,140 @@ export default function Profile() {
 							</div>
 
 							{/* Stats Section */}
-							<div className="stats-section">
-								<h3>Account Stats</h3>
-								<div className="stats-grid">
-									<div className="stat-box">
-										<div className="stat-number">
-											{profileData.totalBookings}
-										</div>
-										<div className="stat-label">Total Bookings</div>
-									</div>
-									<div className="stat-box">
-										<div className="stat-number">
-											{profileData.reviewsWritten}
-										</div>
-										<div className="stat-label">Reviews Written</div>
-									</div>
-									<div className="stat-box">
-										<div className="stat-number">
-											{profileData.wishlistItems}
-										</div>
-										<div className="stat-label">Wishlist Items</div>
-									</div>
-									<div className="stat-box">
-										<div className="stat-number">
-											{profileData.currency === "PHP (₱)"
-												? `₱${profileData.totalSpent.toLocaleString(undefined, {
-														minimumFractionDigits: 2,
-														maximumFractionDigits: 2,
-												  })}`
-												: profileData.currency === "USD ($)"
-												? `$${profileData.totalSpent.toLocaleString(undefined, {
-														minimumFractionDigits: 2,
-														maximumFractionDigits: 2,
-												  })}`
-												: profileData.currency === "EUR (€)"
-												? `€${profileData.totalSpent.toLocaleString(undefined, {
-														minimumFractionDigits: 2,
-														maximumFractionDigits: 2,
-												  })}`
-												: profileData.currency === "GBP (£)"
-												? `£${profileData.totalSpent.toLocaleString(undefined, {
-														minimumFractionDigits: 2,
-														maximumFractionDigits: 2,
-												  })}`
-												: profileData.currency === "JPY (¥)"
-												? `¥${Math.round(profileData.totalSpent).toLocaleString()}`
-												: `₱${profileData.totalSpent.toLocaleString(undefined, {
-														minimumFractionDigits: 2,
-														maximumFractionDigits: 2,
-												  })}`}
-										</div>
-										<div className="stat-label">Total Spent</div>
-									</div>
+							<div className="profile-stats-section">
+								<h3 className="profile-stats-title">
+									{userType === "host" ? "Host Stats" : "Account Stats"}
+								</h3>
+								<div className="profile-stats-grid">
+									{userType === "host" ? (
+										<>
+											<div className="profile-stat-box">
+												<div className="profile-stat-icon">🏠</div>
+												<div className="profile-stat-content">
+													<div className="profile-stat-number">
+														{profileData.totalListings || 0}
+													</div>
+													<div className="profile-stat-label">Total Listings</div>
+												</div>
+											</div>
+											<div className="profile-stat-box">
+												<div className="profile-stat-icon">📋</div>
+												<div className="profile-stat-content">
+													<div className="profile-stat-number">
+														{profileData.totalBookings || 0}
+													</div>
+													<div className="profile-stat-label">Total Bookings</div>
+												</div>
+											</div>
+											<div className="profile-stat-box">
+												<div className="profile-stat-icon">⭐</div>
+												<div className="profile-stat-content">
+													<div className="profile-stat-number">
+														{profileData.totalRatings || "0.0"}
+													</div>
+													<div className="profile-stat-label">Total Ratings</div>
+												</div>
+											</div>
+											<div className="profile-stat-box">
+												<div className="profile-stat-icon">💰</div>
+												<div className="profile-stat-content">
+													<div className="profile-stat-number">
+														{profileData.currency === "PHP (₱)"
+															? `₱${(profileData.totalEarned || 0).toLocaleString(undefined, {
+																	minimumFractionDigits: 2,
+																	maximumFractionDigits: 2,
+															  })}`
+															: profileData.currency === "USD ($)"
+															? `$${(profileData.totalEarned || 0).toLocaleString(undefined, {
+																	minimumFractionDigits: 2,
+																	maximumFractionDigits: 2,
+															  })}`
+															: profileData.currency === "EUR (€)"
+															? `€${(profileData.totalEarned || 0).toLocaleString(undefined, {
+																	minimumFractionDigits: 2,
+																	maximumFractionDigits: 2,
+															  })}`
+															: profileData.currency === "GBP (£)"
+															? `£${(profileData.totalEarned || 0).toLocaleString(undefined, {
+																	minimumFractionDigits: 2,
+																	maximumFractionDigits: 2,
+															  })}`
+															: profileData.currency === "JPY (¥)"
+															? `¥${Math.round(profileData.totalEarned || 0).toLocaleString()}`
+															: `₱${(profileData.totalEarned || 0).toLocaleString(undefined, {
+																	minimumFractionDigits: 2,
+																	maximumFractionDigits: 2,
+															  })}`}
+													</div>
+													<div className="profile-stat-label">Total Earned</div>
+												</div>
+											</div>
+										</>
+									) : (
+										<>
+											<div className="profile-stat-box">
+												<div className="profile-stat-icon">📋</div>
+												<div className="profile-stat-content">
+													<div className="profile-stat-number">
+														{profileData.totalBookings || 0}
+													</div>
+													<div className="profile-stat-label">Total Bookings</div>
+												</div>
+											</div>
+											<div className="profile-stat-box">
+												<div className="profile-stat-icon">⭐</div>
+												<div className="profile-stat-content">
+													<div className="profile-stat-number">
+														{profileData.reviewsWritten || 0}
+													</div>
+													<div className="profile-stat-label">Reviews Written</div>
+												</div>
+											</div>
+											<div className="profile-stat-box">
+												<div className="profile-stat-icon">❤️</div>
+												<div className="profile-stat-content">
+													<div className="profile-stat-number">
+														{profileData.wishlistItems || 0}
+													</div>
+													<div className="profile-stat-label">Wishlist Items</div>
+												</div>
+											</div>
+											<div className="profile-stat-box">
+												<div className="profile-stat-icon">💰</div>
+												<div className="profile-stat-content">
+													<div className="profile-stat-number">
+														{profileData.currency === "PHP (₱)"
+															? `₱${(profileData.totalSpent || 0).toLocaleString(undefined, {
+																	minimumFractionDigits: 2,
+																	maximumFractionDigits: 2,
+															  })}`
+															: profileData.currency === "USD ($)"
+															? `$${(profileData.totalSpent || 0).toLocaleString(undefined, {
+																	minimumFractionDigits: 2,
+																	maximumFractionDigits: 2,
+															  })}`
+															: profileData.currency === "EUR (€)"
+															? `€${(profileData.totalSpent || 0).toLocaleString(undefined, {
+																	minimumFractionDigits: 2,
+																	maximumFractionDigits: 2,
+															  })}`
+															: profileData.currency === "GBP (£)"
+															? `£${(profileData.totalSpent || 0).toLocaleString(undefined, {
+																	minimumFractionDigits: 2,
+																	maximumFractionDigits: 2,
+															  })}`
+															: profileData.currency === "JPY (¥)"
+															? `¥${Math.round(profileData.totalSpent || 0).toLocaleString()}`
+															: `₱${(profileData.totalSpent || 0).toLocaleString(undefined, {
+																	minimumFractionDigits: 2,
+																	maximumFractionDigits: 2,
+															  })}`}
+													</div>
+													<div className="profile-stat-label">Total Spent</div>
+												</div>
+											</div>
+										</>
+									)}
 								</div>
 							</div>
 						</div>

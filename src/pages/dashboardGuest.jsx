@@ -213,16 +213,37 @@ export default function DashboardGuest() {
 					return true
 				})
 
+			// Sort properties: boosted first, then featured, then by rating
+			propertiesList.sort((a, b) => {
+				// Boosted properties first
+				if (a.boosted && !b.boosted) return -1
+				if (!a.boosted && b.boosted) return 1
+				
+				// Then featured properties
+				if (a.featured && !b.featured) return -1
+				if (!a.featured && b.featured) return 1
+				
+				// Then by rating
+				const ratingA = a.rating || 0
+				const ratingB = b.rating || 0
+				return ratingB - ratingA
+			})
+
 			setProperties(propertiesList)
 
 			// Get popular properties (high ratings and reviews)
 			const popular = propertiesList
 				.filter((p) => p.rating >= 4.8)
-				.sort((a, b) => b.reviewsCount - a.reviewsCount)
+				.sort((a, b) => {
+					// Boosted first in popular too
+					if (a.boosted && !b.boosted) return -1
+					if (!a.boosted && b.boosted) return 1
+					return b.reviewsCount - a.reviewsCount
+				})
 				.slice(0, 8)
 			setPopularProperties(popular)
 
-			// Set initial filtered properties (homes)
+			// Set initial filtered properties (homes) - already sorted by boost/featured/rating
 			const homes = propertiesList.filter((p) => p.category === "home")
 			setFilteredProperties(homes)
 
@@ -514,11 +535,79 @@ const fetchUserWishes = async () => {
 		}
 	}
 
+	// Get appropriate dashboard route based on user type
+	const getDashboardRoute = () => {
+		if (!userData?.userType) return "/dashboardGuest"
+		if (userData.userType === "admin") return "/admin"
+		if (userData.userType === "host") return "/dashboardHost"
+		return "/dashboardGuest"
+	}
+
 	const formatPrice = (price, currency = "PHP") => {
 		if (currency === "PHP") {
 			return `₱${price.toLocaleString()}`
 		}
 		return `$${price.toLocaleString()}`
+	}
+
+	// Calculate best voucher discount for a property (for listing cards)
+	const getBestVoucherDiscount = (property) => {
+		if (!property?.vouchers || !property.vouchers.types || !Array.isArray(property.vouchers.types)) {
+			return { discount: 0, discountedPrice: property?.pricing?.basePrice || property?.pricing?.price || 0 }
+		}
+
+		const basePrice = property?.pricing?.basePrice || property?.pricing?.price || 0
+		let bestDiscount = 0
+		const now = new Date()
+
+		// Check all voucher types
+		property.vouchers.types.forEach((voucherType) => {
+			const voucherDetails = property.vouchers.details?.[voucherType]
+			if (!voucherDetails) return
+
+			// Check if voucher is active
+			const isActive = voucherDetails.isActive !== undefined
+				? typeof voucherDetails.isActive === "boolean"
+					? voucherDetails.isActive
+					: String(voucherDetails.isActive).toLowerCase() === "true"
+				: true
+
+			if (!isActive) return
+
+			// For listing cards, we show vouchers that are currently valid (if they have dates)
+			// or always show if no dates specified
+			if (voucherDetails.startDate && voucherDetails.endDate) {
+				const voucherStart = new Date(voucherDetails.startDate)
+				const voucherEnd = new Date(voucherDetails.endDate)
+				// Only show if current date is within voucher date range
+				if (now < voucherStart || now > voucherEnd) {
+					return
+				}
+			}
+
+			// Calculate discount per night
+			let discount = 0
+			const discountType = voucherDetails.discountType || "percent"
+			const discountValue = parseFloat(voucherDetails.discount || voucherDetails.discountValue || 0)
+
+			if (discountType === "percent" || discountType === "percentage") {
+				discount = (basePrice * discountValue) / 100
+				// Check max discount if specified
+				if (voucherDetails.maxDiscount && discount > voucherDetails.maxDiscount) {
+					discount = voucherDetails.maxDiscount
+				}
+			} else {
+				discount = discountValue
+			}
+
+			// Keep the voucher with the highest discount
+			if (discount > bestDiscount) {
+				bestDiscount = discount
+			}
+		})
+
+		const discountedPrice = Math.max(0, basePrice - bestDiscount)
+		return { discount: bestDiscount, discountedPrice }
 	}
 
 	// Fetch bookings and show modal
@@ -899,7 +988,7 @@ const fetchUserWishes = async () => {
 			{/* Top Navigation Bar */}
 			<nav className="top-navbar">
 				{/* Logo */}
-				<div className="navbar-logo">
+				<div className="navbar-logo" onClick={() => navigate(getDashboardRoute())} style={{ cursor: "pointer" }}>
 					<img src={logoPlain} alt="AuraStays" />
 					<span className="logo-text">AuraStays</span>
 				</div>
@@ -1099,10 +1188,13 @@ const fetchUserWishes = async () => {
 				<section className="promo-banner">
 					<div className="promo-content-guest">
 						<div className="promo-text">
-							<h3>✨ Special Weekend Offer!</h3>
-							<p>Get up to 30% off on selected properties this weekend</p>
+							<h3>✨ Early Bird Promo!</h3>
+							<p>Get exclusive discounts on properties with Early Bird special offers</p>
 						</div>
-						<button className="promo-btn">
+						<button 
+							className="promo-btn"
+							onClick={() => navigate("/search?voucher=early_bird")}
+						>
 							<FaPlus />
 							<span>View Deals</span>
 						</button>
@@ -1292,32 +1384,47 @@ const fetchUserWishes = async () => {
 
 												<div className="listing-footer">
 													<div className="listing-price">
-														<span className="listing-price-amount">
-															{formatPrice(
-																property.pricing?.basePrice ||
-																	property.pricing?.price ||
-																	0,
-																property.pricing?.currency
-															)}
-														</span>
-														<span className="price-period">
-															{property.category === "home"
-																? "/ night"
-																: property.category === "experience"
-																? "/ person"
-																: ""}
-														</span>
+														{(() => {
+															const basePrice = property.pricing?.basePrice || property.pricing?.price || 0
+															const { discount, discountedPrice } = getBestVoucherDiscount(property)
+															const hasDiscount = discount > 0 && discountedPrice < basePrice
+															
+															return (
+																<>
+																	{hasDiscount ? (
+																		<>
+																			<div className="listing-price-original">
+																				<span className="listing-price-amount original-price">
+																					{formatPrice(basePrice, property.pricing?.currency)}
+																				</span>
+																			</div>
+																			<div className="listing-price-discounted">
+																				<span className="listing-price-amount discounted-price">
+																					{formatPrice(discountedPrice, property.pricing?.currency)}
+																				</span>
+																			</div>
+																		</>
+																	) : (
+																		<>
+																			<span className="listing-price-amount">
+																				{formatPrice(basePrice, property.pricing?.currency)}
+																			</span>
+																		</>
+																	)}
+																</>
+															)
+														})()}
 													</div>
-								<div className="listing-actions">
-									<button
-										className="view-btn"
-										onClick={() =>
-											navigate(`/property/${property.id}`)
-										}
-									>
-										View Details
-									</button>
-								</div>
+													<div className="listing-actions">
+														<button
+															className="view-btn"
+															onClick={() =>
+																navigate(`/property/${property.id}`)
+															}
+														>
+															View Details
+														</button>
+													</div>
 												</div>
 											</div>
 										</div>

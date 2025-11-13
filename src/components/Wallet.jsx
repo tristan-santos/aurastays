@@ -13,6 +13,7 @@ import {
 	serverTimestamp,
 } from "firebase/firestore"
 import { toast } from "react-stacked-toast"
+import { getFirebaseErrorMessage } from "../utils/errorMessages"
 import {
 	FaWallet,
 	FaPlus,
@@ -22,6 +23,8 @@ import {
 	FaArrowDown,
 	FaMoneyBillWave,
 	FaMinus,
+	FaCoins,
+	FaCrown,
 } from "react-icons/fa"
 import "../css/Wallet.css"
 
@@ -179,7 +182,7 @@ export default function Wallet() {
 					}, 2000)
 				} catch (error) {
 					console.error("Withdrawal error:", error)
-					toast.error(error.message || "Failed to process withdrawal")
+					toast.error(getFirebaseErrorMessage(error))
 					setIsProcessing(false)
 				}
 			}
@@ -447,6 +450,10 @@ export default function Wallet() {
 				return <FaArrowUp className="txn-icon orange" />
 			case "refund":
 				return <FaArrowDown className="txn-icon blue" />
+			case "points_exchange":
+				return <FaCoins className="txn-icon green" />
+			case "subscription_payment":
+				return <FaCrown className="txn-icon red" />
 			default:
 				return <FaMoneyBillWave className="txn-icon" />
 		}
@@ -749,6 +756,8 @@ export default function Wallet() {
 														{txn.type === "payment" && "Booking Payment"}
 														{txn.type === "withdrawal" && "Withdrawal"}
 														{txn.type === "refund" && "Refund"}
+														{txn.type === "points_exchange" && (txn.description || "Points Redeemed")}
+														{txn.type === "subscription_payment" && (txn.planName ? `${txn.planName} Subscription` : "Subscription Payment")}
 													</div>
 													<div className="txn-date">
 														{formatDate(txn.createdAt)}
@@ -763,12 +772,12 @@ export default function Wallet() {
 											<div className="txn-right">
 												<div
 													className={`txn-amount ${
-														txn.type === "payment" || txn.type === "withdrawal"
+														txn.type === "payment" || txn.type === "withdrawal" || txn.type === "subscription_payment"
 															? "negative"
 															: "positive"
 													}`}
 												>
-													{txn.type === "payment" || txn.type === "withdrawal"
+													{txn.type === "payment" || txn.type === "withdrawal" || txn.type === "subscription_payment"
 														? "-"
 														: "+"}
 													₱{txn.amount.toLocaleString()}
