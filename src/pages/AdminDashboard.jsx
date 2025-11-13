@@ -1279,10 +1279,47 @@ const AdminDashboard = () => {
 				case "properties": {
 					// Fetch fresh data from Firebase
 					const propertiesSnapshot = await getDocs(collection(db, "properties"))
-					const allPropertiesData = propertiesSnapshot.docs.map((doc) => ({
+					let allPropertiesData = propertiesSnapshot.docs.map((doc) => ({
 						id: doc.id,
 						...doc.data(),
 					}))
+
+					// Dynamically calculate reviews count and rating for each property
+					allPropertiesData = await Promise.all(
+						allPropertiesData.map(async (property) => {
+							try {
+								const reviewsQuery = query(
+									collection(db, "reviews"),
+									where("propertyId", "==", property.id),
+									where("status", "==", "approved")
+								)
+								const reviewsSnapshot = await getDocs(reviewsQuery)
+								const reviews = reviewsSnapshot.docs.map((doc) => doc.data())
+								
+								if (reviews.length > 0) {
+									const totalRating = reviews.reduce(
+										(sum, review) => sum + (review.rating || 0),
+										0
+									)
+									const averageRating = totalRating / reviews.length
+									return {
+										...property,
+										rating: Math.round(averageRating * 10) / 10,
+										reviewsCount: reviews.length,
+									}
+								} else {
+									return {
+										...property,
+										rating: 0,
+										reviewsCount: 0,
+									}
+								}
+							} catch (error) {
+								console.error(`Error fetching reviews for property ${property.id}:`, error)
+								return property
+							}
+						})
+					)
 
 					console.log("All Properties Fresh Data:", allPropertiesData)
 					reportTitle = "Properties_Report"
@@ -1298,6 +1335,11 @@ const AdminDashboard = () => {
 							"N/A",
 					}))
 					console.log("Mapped All Properties:", allPropertiesMapped)
+
+					// Sort by rating for bestReviews and lowestReviews
+					const sortedByRating = [...allPropertiesData].sort((a, b) => (b.rating || 0) - (a.rating || 0))
+					const bestReviews = sortedByRating.filter(p => (p.rating || 0) > 0)
+					const lowestReviews = [...sortedByRating].reverse().filter(p => (p.rating || 0) > 0)
 
 					reportData = {
 						generatedAt: new Date().toISOString(),
@@ -1382,10 +1424,52 @@ const AdminDashboard = () => {
 
 					// Fetch fresh properties data
 					const propertiesSnapshot = await getDocs(collection(db, "properties"))
-					const allPropertiesData = propertiesSnapshot.docs.map((doc) => ({
+					let allPropertiesData = propertiesSnapshot.docs.map((doc) => ({
 						id: doc.id,
 						...doc.data(),
 					}))
+
+					// Dynamically calculate reviews count and rating for each property
+					allPropertiesData = await Promise.all(
+						allPropertiesData.map(async (property) => {
+							try {
+								const reviewsQuery = query(
+									collection(db, "reviews"),
+									where("propertyId", "==", property.id),
+									where("status", "==", "approved")
+								)
+								const reviewsSnapshot = await getDocs(reviewsQuery)
+								const reviews = reviewsSnapshot.docs.map((doc) => doc.data())
+								
+								if (reviews.length > 0) {
+									const totalRating = reviews.reduce(
+										(sum, review) => sum + (review.rating || 0),
+										0
+									)
+									const averageRating = totalRating / reviews.length
+									return {
+										...property,
+										rating: Math.round(averageRating * 10) / 10,
+										reviewsCount: reviews.length,
+									}
+								} else {
+									return {
+										...property,
+										rating: 0,
+										reviewsCount: 0,
+									}
+								}
+							} catch (error) {
+								console.error(`Error fetching reviews for property ${property.id}:`, error)
+								return property
+							}
+						})
+					)
+
+					// Sort by rating for bestReviews and lowestReviews
+					const sortedByRating = [...allPropertiesData].sort((a, b) => (b.rating || 0) - (a.rating || 0))
+					const bestReviews = sortedByRating.filter(p => (p.rating || 0) > 0)
+					const lowestReviews = [...sortedByRating].reverse().filter(p => (p.rating || 0) > 0)
 
 					const hostFees = stats.totalRevenue * (policies.serviceFeeHost / 100)
 					const guestFees =
@@ -1432,13 +1516,13 @@ const AdminDashboard = () => {
 							topRated: bestReviews.slice(0, 10).map((p) => ({
 								title: p.title || p.name || "Untitled",
 								rating: p.rating || 0,
-								reviews: p.reviewsCount || p.reviews || 0,
+								reviews: p.reviewsCount || 0,
 								category: p.category || p.type || "N/A",
 							})),
 							lowRated: lowestReviews.slice(0, 10).map((p) => ({
 								title: p.title || p.name || "Untitled",
 								rating: p.rating || 0,
-								reviews: p.reviewsCount || p.reviews || 0,
+								reviews: p.reviewsCount || 0,
 								category: p.category || p.type || "N/A",
 							})),
 						},

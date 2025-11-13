@@ -15,6 +15,7 @@ import { FaTimes } from "react-icons/fa"
 import housePlaceholder from "../assets/housePlaceholder.png"
 import { createNotification } from "../utils/notifications"
 import { getFirebaseErrorMessage } from "../utils/errorMessages"
+import { formatCurrencyFull } from "../utils/currencyFormatter"
 
 export default function HostDetailsModal({ host, onClose, onRefresh }) {
 	const [isRevoking, setIsRevoking] = useState(false)
@@ -849,7 +850,7 @@ export default function HostDetailsModal({ host, onClose, onRefresh }) {
 											)}
 											{property.pricing?.basePrice && (
 												<span className="property-price">
-													₱{property.pricing.basePrice.toLocaleString()}/night
+													{formatCurrencyFull(property.pricing.basePrice)}/night
 												</span>
 											)}
 											{property.category && (

@@ -23,6 +23,7 @@ import HostSubscription from "./pages/HostSubscription"
 import HostPoints from "./pages/HostPoints"
 import HostAllListings from "./pages/HostAllListings"
 import HostList from "./pages/HostList"
+import Bookings from "./components/Bookings"
 
 function App() {
 	return (
@@ -38,6 +39,7 @@ function App() {
 					<Route path="/dashboardGuest" element={<DashboardGuest />} />
 					<Route path="/admin" element={<AdminDashboard />} />
 					<Route path="/profile" element={<Profile />} />
+					<Route path="/bookings" element={<Bookings />} />
 					<Route path="/search" element={<Search />} />
 					<Route path="/property/:propertyId" element={<PropertyDetails />} />
 					<Route path="/wishlist/new" element={<WishlistCreate />} />

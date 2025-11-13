@@ -23,6 +23,7 @@ Used for sending emails to hosts (booking confirmations, payouts):
 - `VITE_EMAILJS_HOST_PUBLIC_KEY` - Host public key: `a4lWJRKQBrMrfk4Of`
 - `VITE_EMAILJS_HOST_SERVICE_ID` - Host service: `service_6v439zx`
 - `VITE_EMAILJS_HOST_BOOKING_TEMPLATE_ID` - Booking confirmation template (to be created)
+- `VITE_EMAILJS_CANCELLATION_TEMPLATE_ID` - Cancellation notification template: `template_dmnc85e`
 - `VITE_EMAILJS_HOST_PAYOUT_TEMPLATE_ID` - Payout notification template (to be created)
 
 ### Verification Configuration
@@ -141,7 +142,60 @@ AuraStays Team
 
 ---
 
-### 4. Host Payout Notification (To Be Created)
+### 4. Cancellation Notification ✅ IMPLEMENTED
+
+**When**: Host approves/rejects guest cancellation request
+**Template**: `template_dmnc85e`
+**Service**: `service_6v439zx` (Host)
+**File**: `src/pages/PropertyBookings.jsx`
+
+**Template Variables**:
+
+```javascript
+{
+  guestName: "John Doe",
+  propertyName: "Beachfront Villa",
+  hostName: "Jane Host",
+  orderNumber: "ABC12345",
+  date: "Jan 10, 2025 → Jan 15, 2025",
+  price: "25,000",
+  cleaningFee: "2,000",
+  serviceFee: "2,700",
+  guestFee: "400",
+  total: "30,100",
+  email: "guest@example.com"
+}
+```
+
+**EmailJS Template Example**:
+
+```
+Subject: Booking Cancellation - {{propertyName}}
+
+Dear {{guestName}},
+
+Your cancellation request for {{propertyName}} has been processed.
+
+Booking Details:
+- Order Number: {{orderNumber}}
+- Dates: {{date}}
+- Property: {{propertyName}}
+- Host: {{hostName}}
+- Total Amount: ₱{{total}}
+
+{{#if refundAmount}}
+A refund of ₱{{refundAmount}} has been processed and added to your e-wallet.
+{{else}}
+Based on our cancellation policy, no refund is applicable for this booking.
+{{/if}}
+
+Best regards,
+AuraStays Team
+```
+
+---
+
+### 5. Host Payout Notification (To Be Created)
 
 **When**: Admin approves payout
 **Template**: Create `template_host_payout_here`

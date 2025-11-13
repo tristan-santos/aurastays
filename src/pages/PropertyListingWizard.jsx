@@ -38,6 +38,7 @@ import {
 	FaBath,
 	FaUsers,
 	FaPlus,
+	FaMinus,
 	FaSave,
 	FaTicketAlt,
 	FaGift,
@@ -178,19 +179,27 @@ export default function PropertyListingWizard() {
 			maxNights: 30,
 		},
 		// Step 7
-		vouchers: {
-			types: [], // Array of voucher types like ["early_bird", "christmas", "yearly", etc.]
-			details: {}, // Object with voucher details: { early_bird: { discount: "", duration: "" }, ... }
+		coupon: {
+			code: "",
+			description: "",
+			discountType: "percentage", // 'percentage' or 'fixed'
+			discountValue: "",
+			minPurchase: "",
+			maxDiscount: "",
+			usageLimit: "",
+			usagePerUser: 1,
+			validFrom: "",
+			validUntil: "",
+			isActive: true,
 		},
 	})
 
 	const totalSteps = 7
 
-	// Calendar modal state for voucher dates
-	const [showDateModal, setShowDateModal] = useState(false)
-	const [selectingStartDate, setSelectingStartDate] = useState(true)
-	const [currentMonth, setCurrentMonth] = useState(new Date())
-	const [activeVoucherId, setActiveVoucherId] = useState(null)
+	// Calendar states for coupon dates
+	const [showCouponDateModal, setShowCouponDateModal] = useState(false)
+	const [selectingValidFrom, setSelectingValidFrom] = useState(true)
+	const [couponCurrentMonth, setCouponCurrentMonth] = useState(new Date())
 
 	// Fetch platform fees from admin settings
 	useEffect(() => {
@@ -292,9 +301,18 @@ export default function PropertyListingWizard() {
 						// Merge old draft data with new defaults to ensure all fields exist
 						setFormData({
 							...draftData.formData,
-							vouchers: draftData.formData.vouchers || {
-								types: [],
-								details: {},
+							coupon: draftData.formData.coupon || {
+								code: "",
+								description: "",
+								discountType: "percentage",
+								discountValue: "",
+								minPurchase: "",
+								maxDiscount: "",
+								usageLimit: "",
+								usagePerUser: 1,
+								validFrom: "",
+								validUntil: "",
+								isActive: true,
 							},
 						})
 						setCurrentStep(draftData.currentStep || 1)
@@ -353,85 +371,47 @@ export default function PropertyListingWizard() {
 
 			markerRef.current = marker
 
-			// Add geocoder
-			if (window.MapboxGeocoder) {
-				const geocoder = new window.MapboxGeocoder({
-					accessToken: MAPBOX_TOKEN,
-					mapboxgl: window.mapboxgl,
-					marker: false,
-					placeholder: "Search for a location...",
+			// Helper function to extract location data from Mapbox geocoding response
+			const extractLocationData = (context) => {
+				let city = ""
+				let province = ""
+				let zipCode = ""
+
+				// Mapbox context types can vary by region
+				// Check multiple possible context types for province/state
+				context.forEach((item) => {
+					const id = item.id || ""
+					if (id.startsWith("place")) {
+						city = item.text || city
+					}
+					// Check for province/state in different context types
+					if (id.startsWith("region") || id.startsWith("province") || id.startsWith("district")) {
+						// Prefer region, but use others if region not found
+						if (id.startsWith("region") || !province) {
+							province = item.text || province
+						}
+					}
+					if (id.startsWith("postcode")) {
+						zipCode = item.text || zipCode
+					}
 				})
 
-				map.addControl(geocoder)
-
-				geocoder.on("result", async (e) => {
-					const location = e.result.center
-					const address = e.result.place_name
-
-					marker.setLngLat(location)
-					map.flyTo({ center: location, zoom: 17 })
-
-					// Extract city and province from address
-					const context = e.result.context || []
-					let city = ""
-					let province = ""
-					let zipCode = ""
-
-					context.forEach((item) => {
-						if (item.id.startsWith("place")) {
-							city = item.text
-						}
-						if (item.id.startsWith("region")) {
-							province = item.text
-						}
-						if (item.id.startsWith("postcode")) {
-							zipCode = item.text
-						}
-					})
-
-					setFormData((prev) => ({
-						...prev,
-						location: {
-							...prev.location,
-							address,
-							city,
-							province,
-							zipCode,
-							coordinates: { latitude: location[1], longitude: location[0] },
-						},
-					}))
-				})
+				return { city, province, zipCode }
 			}
 
-			// Handle marker drag
-			marker.on("dragend", async () => {
-				const lngLat = marker.getLngLat()
-
-				// Reverse geocode
+			// Helper function to reverse geocode and update form data
+			const reverseGeocodeAndUpdate = async (lngLat) => {
 				try {
 					const response = await fetch(
-						`https://api.mapbox.com/geocoding/v5/mapbox.places/${lngLat.lng},${lngLat.lat}.json?access_token=${MAPBOX_TOKEN}`
+						`https://api.mapbox.com/geocoding/v5/mapbox.places/${lngLat.lng},${lngLat.lat}.json?access_token=${MAPBOX_TOKEN}&country=PH`
 					)
 					const data = await response.json()
 
 					if (data.features && data.features.length > 0) {
-						const address = data.features[0].place_name
-						const context = data.features[0].context || []
-						let city = ""
-						let province = ""
-						let zipCode = ""
-
-						context.forEach((item) => {
-							if (item.id.startsWith("place")) {
-								city = item.text
-							}
-							if (item.id.startsWith("region")) {
-								province = item.text
-							}
-							if (item.id.startsWith("postcode")) {
-								zipCode = item.text
-							}
-						})
+						const feature = data.features[0]
+						const address = feature.place_name
+						const context = feature.context || []
+						const { city, province, zipCode } = extractLocationData(context)
 
 						setFormData((prev) => ({
 							...prev,
@@ -448,6 +428,56 @@ export default function PropertyListingWizard() {
 				} catch (error) {
 					console.error("Geocoding error:", error)
 				}
+			}
+
+			// Add geocoder
+			if (window.MapboxGeocoder) {
+				const geocoder = new window.MapboxGeocoder({
+					accessToken: MAPBOX_TOKEN,
+					mapboxgl: window.mapboxgl,
+					marker: false,
+					placeholder: "Search for a location...",
+					countries: "ph", // Limit to Philippines
+				})
+
+				map.addControl(geocoder)
+
+				geocoder.on("result", async (e) => {
+					const location = e.result.center
+					const address = e.result.place_name
+
+					marker.setLngLat(location)
+					map.flyTo({ center: location, zoom: 17 })
+
+					// Extract city and province from address
+					const context = e.result.context || []
+					const { city, province, zipCode } = extractLocationData(context)
+
+					setFormData((prev) => ({
+						...prev,
+						location: {
+							...prev.location,
+							address,
+							city,
+							province,
+							zipCode,
+							coordinates: { latitude: location[1], longitude: location[0] },
+						},
+					}))
+				})
+			}
+
+			// Handle map click to place marker
+			map.on("click", async (e) => {
+				const lngLat = e.lngLat
+				marker.setLngLat([lngLat.lng, lngLat.lat])
+				await reverseGeocodeAndUpdate(lngLat)
+			})
+
+			// Handle marker drag
+			marker.on("dragend", async () => {
+				const lngLat = marker.getLngLat()
+				await reverseGeocodeAndUpdate(lngLat)
 			})
 
 			// Cleanup
@@ -632,17 +662,25 @@ export default function PropertyListingWizard() {
 			}
 		}
 		if (currentStep === 7) {
-			// Validate long_stay vouchers have minimum days set
-			if (formData.vouchers.types.includes("long_stay")) {
-				const longStayDetails = formData.vouchers.details["long_stay"]
-				if (!longStayDetails?.minDays && !longStayDetails?.minimumDays) {
-					toast.error("Please enter minimum days for Long Stay Discount")
+			// Validate coupon if code is provided
+			if (formData.coupon.code && formData.coupon.code.trim().length > 0) {
+				if (!formData.coupon.description || formData.coupon.description.trim().length < 10) {
+					toast.error("Please enter a description (at least 10 characters)")
 					return
 				}
-				const minDays = parseInt(longStayDetails?.minDays || longStayDetails?.minimumDays || 0)
-				if (minDays < 1) {
-					toast.error("Minimum days must be at least 1")
+				if (!formData.coupon.discountValue || parseFloat(formData.coupon.discountValue) <= 0) {
+					toast.error("Please enter a valid discount value")
 					return
+				}
+				if (formData.coupon.discountType === "percentage" && parseFloat(formData.coupon.discountValue) > 100) {
+					toast.error("Percentage discount cannot exceed 100%")
+					return
+				}
+				if (formData.coupon.validFrom && formData.coupon.validUntil) {
+					if (new Date(formData.coupon.validFrom) >= new Date(formData.coupon.validUntil)) {
+						toast.error("Valid Until date must be after Valid From date")
+						return
+					}
 				}
 			}
 		}
@@ -797,9 +835,6 @@ export default function PropertyListingWizard() {
 				return cleaned
 			}
 
-			// Clean vouchers data to remove undefined values
-			const cleanedVouchers = removeUndefined(formData.vouchers)
-
 			// Prepare property data
 			const propertyDataRaw = {
 				hostId: currentUser.uid, // Add top-level hostId for filtering
@@ -834,7 +869,6 @@ export default function PropertyListingWizard() {
 				houseRules: formData.houseRules,
 				mealIncluded: formData.mealIncluded,
 				availability: formData.availability,
-				vouchers: cleanedVouchers,
 				host: {
 					hostId: currentUser.uid,
 					hostName: userData?.displayName || "Host",
@@ -913,6 +947,39 @@ export default function PropertyListingWizard() {
 			} catch (pointsError) {
 				console.error("Error adding points:", pointsError)
 				// Don't fail the property listing if points update fails
+			}
+
+			// Create coupon if provided
+			if (formData.coupon.code && formData.coupon.code.trim().length > 0) {
+				try {
+					const couponData = {
+						code: formData.coupon.code.toUpperCase().trim(),
+						description: formData.coupon.description.trim() || `Coupon for ${propertyData.title}`,
+						discountType: formData.coupon.discountType || "percentage",
+						discountValue: parseFloat(formData.coupon.discountValue) || 0,
+						minPurchase: parseFloat(formData.coupon.minPurchase) || 0,
+						maxDiscount: parseFloat(formData.coupon.maxDiscount) || 0,
+						usageLimit: parseInt(formData.coupon.usageLimit) || 0,
+						usagePerUser: parseInt(formData.coupon.usagePerUser) || 1,
+						validFrom: formData.coupon.validFrom || "",
+						validUntil: formData.coupon.validUntil || "",
+						isActive: Boolean(formData.coupon.isActive),
+						applicableTo: "properties", // Host coupons are for properties only
+						propertyId: propertyId, // Link coupon to this specific property
+						hostId: currentUser.uid, // Track which host created it
+						usedBy: [],
+						usageCount: 0,
+						createdAt: new Date().toISOString(),
+						createdBy: currentUser.uid,
+					}
+
+					await addDoc(collection(db, "promos"), couponData)
+					console.log("✅ Coupon created successfully for property:", propertyId)
+				} catch (couponError) {
+					console.error("Error creating coupon:", couponError)
+					// Don't fail the property creation if coupon creation fails
+					toast.error("Property created but coupon creation failed")
+				}
 			}
 
 			// Clear all drafts if user is not premium (only for non-premium users)
@@ -994,15 +1061,119 @@ export default function PropertyListingWizard() {
 
 	const progressPercentage = (currentStep / totalSteps) * 100
 
-	// Calendar helper functions for voucher dates
+	// Stepper component helper function
+	const NumberStepper = ({ value, onChange, min = 0, max, step = 1, placeholder, style = {} }) => {
+		const numValue = parseInt(value) || 0
+		
+		const handleDecrease = () => {
+			const newValue = Math.max(min, numValue - step)
+			onChange({ target: { value: newValue.toString() } })
+		}
+		
+		const handleIncrease = () => {
+			const newValue = max !== undefined ? Math.min(max, numValue + step) : numValue + step
+			onChange({ target: { value: newValue.toString() } })
+		}
+		
+		return (
+			<div className="number-stepper" style={{ display: "flex", alignItems: "center", gap: "0.75rem", ...style }}>
+				<button
+					type="button"
+					onClick={handleDecrease}
+					disabled={numValue <= min}
+					style={{
+						width: "44px",
+						height: "44px",
+						border: "1px solid #b0b0b0",
+						borderRadius: "50%",
+						background: numValue <= min ? "#f5f5f5" : "white",
+						cursor: numValue <= min ? "not-allowed" : "pointer",
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						color: numValue <= min ? "#ccc" : "#333",
+						transition: "all 0.2s ease",
+					}}
+					onMouseEnter={(e) => {
+						if (numValue > min) {
+							e.target.style.borderColor = "var(--primary)"
+							e.target.style.background = "rgba(97, 191, 156, 0.1)"
+						}
+					}}
+					onMouseLeave={(e) => {
+						if (numValue > min) {
+							e.target.style.borderColor = "#b0b0b0"
+							e.target.style.background = "white"
+						}
+					}}
+				>
+					<FaMinus style={{ fontSize: "0.85rem" }} />
+				</button>
+				<input
+					type="number"
+					value={value || ""}
+					onChange={onChange}
+					placeholder={placeholder}
+					min={min}
+					max={max}
+					step={step}
+					style={{
+						width: "80px",
+						padding: "0.5rem",
+						border: "1px solid #b0b0b0",
+						borderRadius: "6px",
+						fontSize: "0.9rem",
+						textAlign: "center",
+						MozAppearance: "textfield",
+					}}
+					onWheel={(e) => e.target.blur()}
+					className="number-input-no-spinner"
+				/>
+				<button
+					type="button"
+					onClick={handleIncrease}
+					disabled={max !== undefined && numValue >= max}
+					style={{
+						width: "44px",
+						height: "44px",
+						border: "1px solid #b0b0b0",
+						borderRadius: "50%",
+						background: max !== undefined && numValue >= max ? "#f5f5f5" : "white",
+						cursor: max !== undefined && numValue >= max ? "not-allowed" : "pointer",
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						color: max !== undefined && numValue >= max ? "#ccc" : "#333",
+						transition: "all 0.2s ease",
+					}}
+					onMouseEnter={(e) => {
+						if (max === undefined || numValue < max) {
+							e.target.style.borderColor = "var(--primary)"
+							e.target.style.background = "rgba(97, 191, 156, 0.1)"
+						}
+					}}
+					onMouseLeave={(e) => {
+						if (max === undefined || numValue < max) {
+							e.target.style.borderColor = "#b0b0b0"
+							e.target.style.background = "white"
+						}
+					}}
+				>
+					<FaPlus style={{ fontSize: "0.85rem" }} />
+				</button>
+			</div>
+		)
+	}
+
+	// Calendar helper functions for coupon dates
 	const getTodayDate = () => {
 		const today = new Date()
 		return today.toISOString().split("T")[0]
 	}
 
-	const generateCalendarDays = () => {
-		const year = currentMonth.getFullYear()
-		const month = currentMonth.getMonth()
+	const generateCouponCalendarDays = () => {
+		const year = couponCurrentMonth.getFullYear()
+		const month = couponCurrentMonth.getMonth()
 		const firstDay = new Date(year, month, 1).getDay()
 		const daysInMonth = new Date(year, month + 1, 0).getDate()
 
@@ -1022,67 +1193,54 @@ export default function PropertyListingWizard() {
 		return days
 	}
 
-	const previousMonth = () => {
-		setCurrentMonth(
-			new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1)
+	const previousCouponMonth = () => {
+		setCouponCurrentMonth(
+			new Date(couponCurrentMonth.getFullYear(), couponCurrentMonth.getMonth() - 1)
 		)
 	}
 
-	const nextMonth = () => {
-		setCurrentMonth(
-			new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)
+	const nextCouponMonth = () => {
+		setCouponCurrentMonth(
+			new Date(couponCurrentMonth.getFullYear(), couponCurrentMonth.getMonth() + 1)
 		)
 	}
 
-	const handleCalendarDayClick = (dateString) => {
-		if (!activeVoucherId) return
-
-		if (selectingStartDate) {
-			// Selecting start date
+	const handleCouponCalendarDayClick = (dateString) => {
+		if (selectingValidFrom) {
+			// Selecting Valid From date
 			setFormData((prev) => ({
 				...prev,
-				vouchers: {
-					...prev.vouchers,
-					details: {
-						...prev.vouchers.details,
-						[activeVoucherId]: {
-							...prev.vouchers.details[activeVoucherId],
-							startDate: dateString,
-							endDate: "",
-						},
-					},
+				coupon: {
+					...prev.coupon,
+					validFrom: dateString,
+					validUntil: prev.coupon.validUntil && new Date(prev.coupon.validUntil) <= new Date(dateString) ? "" : prev.coupon.validUntil,
 				},
 			}))
-			setSelectingStartDate(false)
+			setSelectingValidFrom(false)
+			toast.success("Valid From date selected. Now select Valid Until date.")
 		} else {
-			// Selecting end date
-			const startDate = formData.vouchers.details[activeVoucherId]?.startDate
-			if (startDate && new Date(dateString) <= new Date(startDate)) {
-				toast.error("End date must be after start date")
+			// Selecting Valid Until date
+			const validFrom = formData.coupon.validFrom
+			if (validFrom && new Date(dateString) <= new Date(validFrom)) {
+				toast.error("Valid Until date must be after Valid From date")
 				return
 			}
 			setFormData((prev) => ({
 				...prev,
-				vouchers: {
-					...prev.vouchers,
-					details: {
-						...prev.vouchers.details,
-						[activeVoucherId]: {
-							...prev.vouchers.details[activeVoucherId],
-							endDate: dateString,
-						},
-					},
+				coupon: {
+					...prev.coupon,
+					validUntil: dateString,
 				},
 			}))
-			setSelectingStartDate(true)
-			setShowDateModal(false)
+			setSelectingValidFrom(true)
+			setShowCouponDateModal(false)
+			toast.success("Coupon dates selected successfully!")
 		}
 	}
 
-	const openDateModal = (voucherId) => {
-		setActiveVoucherId(voucherId)
-		setSelectingStartDate(true)
-		setShowDateModal(true)
+	const openCouponDatePicker = (isValidFrom) => {
+		setSelectingValidFrom(isValidFrom)
+		setShowCouponDateModal(true)
 	}
 
 	return (
@@ -1518,9 +1676,7 @@ export default function PropertyListingWizard() {
 							<div className="capacity-item">
 								<FaUsers className="capacity-icon" />
 								<label>Maximum Guests *</label>
-								<input
-									type="number"
-									placeholder="4"
+								<NumberStepper
 									value={formData.capacity.guests}
 									onChange={(e) =>
 										setFormData({
@@ -1531,7 +1687,8 @@ export default function PropertyListingWizard() {
 											},
 										})
 									}
-									min="1"
+									min={1}
+									placeholder="4"
 								/>
 							</div>
 
@@ -1540,9 +1697,7 @@ export default function PropertyListingWizard() {
 									<div className="capacity-item">
 										<FaBed className="capacity-icon" />
 										<label>Bedrooms</label>
-										<input
-											type="number"
-											placeholder="2"
+										<NumberStepper
 											value={formData.capacity.bedrooms}
 											onChange={(e) =>
 												setFormData({
@@ -1553,15 +1708,14 @@ export default function PropertyListingWizard() {
 													},
 												})
 											}
-											min="0"
+											min={0}
+											placeholder="2"
 										/>
 									</div>
 									<div className="capacity-item">
 										<FaBed className="capacity-icon" />
 										<label>Beds</label>
-										<input
-											type="number"
-											placeholder="2"
+										<NumberStepper
 											value={formData.capacity.beds}
 											onChange={(e) =>
 												setFormData({
@@ -1572,15 +1726,14 @@ export default function PropertyListingWizard() {
 													},
 												})
 											}
-											min="1"
+											min={1}
+											placeholder="2"
 										/>
 									</div>
 									<div className="capacity-item">
 										<FaBath className="capacity-icon" />
 										<label>Bathrooms</label>
-										<input
-											type="number"
-											placeholder="1"
+										<NumberStepper
 											value={formData.capacity.bathrooms}
 											onChange={(e) =>
 												setFormData({
@@ -1591,7 +1744,8 @@ export default function PropertyListingWizard() {
 													},
 												})
 											}
-											min="1"
+											min={1}
+											placeholder="1"
 										/>
 									</div>
 								</>
@@ -1837,9 +1991,7 @@ export default function PropertyListingWizard() {
 								>
 									<div className="capacity-item">
 										<label>Minimum Nights</label>
-										<input
-											type="number"
-											placeholder="1"
+										<NumberStepper
 											value={formData.availability.minNights}
 											onChange={(e) =>
 												setFormData({
@@ -1850,14 +2002,13 @@ export default function PropertyListingWizard() {
 													},
 												})
 											}
-											min="1"
+											min={1}
+											placeholder="1"
 										/>
 									</div>
 									<div className="capacity-item">
 										<label>Maximum Nights</label>
-										<input
-											type="number"
-											placeholder="30"
+										<NumberStepper
 											value={formData.availability.maxNights}
 											onChange={(e) =>
 												setFormData({
@@ -1868,7 +2019,8 @@ export default function PropertyListingWizard() {
 													},
 												})
 											}
-											min="1"
+											min={1}
+											placeholder="30"
 										/>
 									</div>
 								</div>
@@ -1877,388 +2029,336 @@ export default function PropertyListingWizard() {
 					</div>
 				)}
 
-				{/* Step 7: Voucher System */}
+				{/* Step 7: Create Coupon */}
 				{currentStep === 7 && (
 					<div className="wizard-step">
-						<h2>Configure Voucher System</h2>
+						<h2>Create Coupon (Optional)</h2>
 						<p className="step-description">
-							Select the voucher types that can be used for this property
+							Create a promotional coupon code for this listing. Guests can use this code when booking your property.
 						</p>
 
 						<div className="form-group">
-							<label>Voucher Types</label>
-							<p
-								className="step-description"
-								style={{ marginBottom: "1rem", fontSize: "0.9rem" }}
-							>
-								Choose which types of promotional vouchers guests can use when
-								booking this property
-							</p>
-							<div className="amenities-grid">
-								{[
-									{
-										id: "early_bird",
-										name: "Early Bird Promo",
-										icon: FaCalendarCheck,
-										description: "Discounts for bookings made well in advance",
-									},
-									{
-										id: "christmas",
-										name: "Christmas Special",
-										icon: FaGift,
-										description: "Holiday season promotions",
-									},
-									{
-										id: "new_year",
-										name: "New Year Special",
-										icon: FaGift,
-										description: "Year-end and new year deals",
-									},
-									{
-										id: "valentines",
-										name: "Valentine's Special",
-										icon: FaGift,
-										description: "Romantic getaway discounts",
-									},
-									{
-										id: "summer",
-										name: "Summer Special",
-										icon: FaStar,
-										description: "Summer season promotions",
-									},
-									{
-										id: "anniversary",
-										name: "Anniversary Promo",
-										icon: FaGift,
-										description: "Celebrate 1 year of listing",
-									},
-									{
-										id: "weekend",
-										name: "Weekend Getaway",
-										icon: FaTicketAlt,
-										description: "Weekend booking discounts",
-									},
-									{
-										id: "long_stay",
-										name: "Long Stay Discount",
-										icon: FaTicketAlt,
-										description: "Extended stay promotions",
-									},
-									{
-										id: "flash_sale",
-										name: "Flash Sale",
-										icon: FaTicketAlt,
-										description: "Limited time flash promotions",
-									},
-								].map((voucher) => {
-									const IconComponent = voucher.icon
-									return (
-										<div
-											key={voucher.id}
-											style={{
-												border: "2px solid #e0e0e0",
-												borderRadius: "12px",
-												padding: "1.5rem",
-												cursor: "pointer",
-												transition: "all 0.3s ease",
-												background: formData.vouchers.types.includes(voucher.id)
-													? "rgba(97, 191, 156, 0.05)"
-													: "white",
-											}}
-											onClick={() => {
-												const isAdding = !formData.vouchers.types.includes(
-													voucher.id
-												)
-												const types = isAdding
-													? [...formData.vouchers.types, voucher.id]
-													: formData.vouchers.types.filter(
-															(t) => t !== voucher.id
-													  )
-												
-												// Initialize voucher details based on type
-												const voucherDetails = { ...formData.vouchers.details[voucher.id] }
-												if (isAdding) {
-													voucherDetails.discount = voucherDetails.discount || "20"
-													// For long_stay, initialize with empty minDays (user must fill it)
-													if (voucher.id === "long_stay") {
-														// Don't set minDays here, let user fill it
-														// But ensure dates are removed
-														delete voucherDetails.startDate
-														delete voucherDetails.endDate
-													}
+							<label>
+								Coupon Code <span style={{ color: "#999", fontSize: "0.9rem" }}>(Optional)</span>
+							</label>
+							<input
+								type="text"
+								placeholder="e.g., SUMMER2024"
+								value={formData.coupon.code}
+								onChange={(e) =>
+									setFormData({
+										...formData,
+										coupon: {
+											...formData.coupon,
+											code: e.target.value.toUpperCase(),
+										},
+									})
+								}
+								maxLength={20}
+								style={{ textTransform: "uppercase" }}
+							/>
+							<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
+								Leave empty if you don't want to create a coupon
+							</small>
+						</div>
+
+						{formData.coupon.code && formData.coupon.code.trim().length > 0 && (
+							<>
+								<div className="form-group">
+									<label>Description</label>
+									<textarea
+										placeholder="Describe what this coupon offers..."
+										value={formData.coupon.description}
+										onChange={(e) =>
+											setFormData({
+												...formData,
+												coupon: {
+													...formData.coupon,
+													description: e.target.value,
+												},
+											})
+										}
+										rows={3}
+									/>
+								</div>
+
+								<div className="form-group">
+									<label>Discount Type</label>
+									<div className="radio-group" style={{ display: "flex", gap: "1rem" }}>
+										<label className="radio-label" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+											<input
+												type="radio"
+												name="discountType"
+												value="percentage"
+												checked={formData.coupon.discountType === "percentage"}
+												onChange={(e) =>
+													setFormData({
+														...formData,
+														coupon: {
+															...formData.coupon,
+															discountType: e.target.value,
+														},
+													})
 												}
-												
+											/>
+											Percentage (%)
+										</label>
+										<label className="radio-label" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+											<input
+												type="radio"
+												name="discountType"
+												value="fixed"
+												checked={formData.coupon.discountType === "fixed"}
+												onChange={(e) =>
+													setFormData({
+														...formData,
+														coupon: {
+															...formData.coupon,
+															discountType: e.target.value,
+														},
+													})
+												}
+											/>
+											Fixed Amount (₱)
+										</label>
+									</div>
+								</div>
+
+								<div className="form-group">
+									<label>
+										Discount Value {formData.coupon.discountType === "percentage" ? "(%)" : "(₱)"}
+									</label>
+									<NumberStepper
+										value={formData.coupon.discountValue}
+										onChange={(e) =>
+											setFormData({
+												...formData,
+												coupon: {
+													...formData.coupon,
+													discountValue: e.target.value,
+												},
+											})
+										}
+										min={0}
+										max={formData.coupon.discountType === "percentage" ? 100 : undefined}
+										step={formData.coupon.discountType === "percentage" ? 1 : 10}
+										placeholder={formData.coupon.discountType === "percentage" ? "e.g., 20" : "e.g., 500"}
+									/>
+								</div>
+
+								<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+									<div className="form-group">
+										<label>Minimum Purchase (₱)</label>
+										<NumberStepper
+											value={formData.coupon.minPurchase}
+											onChange={(e) =>
 												setFormData({
 													...formData,
-													vouchers: {
-														...formData.vouchers,
-														types,
-														details: isAdding
-															? {
-																	...formData.vouchers.details,
-																	[voucher.id]: voucherDetails,
-															  }
-															: formData.vouchers.details,
+													coupon: {
+														...formData.coupon,
+														minPurchase: e.target.value,
 													},
 												})
+											}
+											min={0}
+											step={100}
+											placeholder="0"
+										/>
+										<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
+											Minimum booking amount required
+										</small>
+									</div>
+
+									<div className="form-group">
+										<label>Maximum Discount (₱)</label>
+										<NumberStepper
+											value={formData.coupon.maxDiscount}
+											onChange={(e) =>
+												setFormData({
+													...formData,
+													coupon: {
+														...formData.coupon,
+														maxDiscount: e.target.value,
+													},
+												})
+											}
+											min={0}
+											step={100}
+											placeholder="0"
+										/>
+										<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
+											Max discount cap (0 = no limit)
+										</small>
+									</div>
+								</div>
+
+								<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+									<div className="form-group">
+										<label>Usage Limit</label>
+										<NumberStepper
+											value={formData.coupon.usageLimit}
+											onChange={(e) =>
+												setFormData({
+													...formData,
+													coupon: {
+														...formData.coupon,
+														usageLimit: e.target.value,
+													},
+												})
+											}
+											min={0}
+											placeholder="0"
+										/>
+										<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
+											Total times this coupon can be used
+										</small>
+										<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#999", fontStyle: "italic" }}>
+											(0 for unlimited)
+										</small>
+									</div>
+
+									<div className="form-group">
+										<label>Usage Per User</label>
+										<NumberStepper
+											value={formData.coupon.usagePerUser}
+											onChange={(e) =>
+												setFormData({
+													...formData,
+													coupon: {
+														...formData.coupon,
+														usagePerUser: e.target.value || 1,
+													},
+												})
+											}
+											min={1}
+											placeholder="1"
+										/>
+										<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
+											How many times each user can use it
+										</small>
+										<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#999", fontStyle: "italic" }}>
+											(0 for unlimited)
+										</small>
+									</div>
+								</div>
+
+								<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+									<div className="form-group">
+										<label>Valid From</label>
+										<button
+											type="button"
+											onClick={() => openCouponDatePicker(true)}
+											style={{
+												width: "100%",
+												padding: "0.75rem",
+												border: "1px solid #b0b0b0",
+												borderRadius: "6px",
+												fontSize: "0.9rem",
+												background: "white",
+												cursor: "pointer",
+												display: "flex",
+												alignItems: "center",
+												justifyContent: "center",
+												gap: "0.5rem",
+												transition: "all 0.2s ease",
 											}}
 											onMouseEnter={(e) => {
-												if (!formData.vouchers.types.includes(voucher.id)) {
-													e.currentTarget.style.borderColor = "var(--primary)"
-													e.currentTarget.style.transform = "translateY(-2px)"
-												}
+												e.target.style.borderColor = "var(--primary)"
+												e.target.style.background = "rgba(97, 191, 156, 0.05)"
 											}}
 											onMouseLeave={(e) => {
-												if (!formData.vouchers.types.includes(voucher.id)) {
-													e.currentTarget.style.borderColor = "#e0e0e0"
-													e.currentTarget.style.transform = "translateY(0)"
-												}
+												e.target.style.borderColor = "#b0b0b0"
+												e.target.style.background = "white"
 											}}
 										>
-											<div
-												style={{
-													display: "flex",
-													alignItems: "center",
-													gap: "1rem",
-													marginBottom: "0.5rem",
-												}}
-											>
-												<span
-													style={{
-														fontSize: "1.5rem",
-														color: "var(--primary)",
-													}}
-												>
-													<IconComponent />
-												</span>
-												<strong
-													style={{
-														color: formData.vouchers.types.includes(voucher.id)
-															? "var(--primary)"
-															: "#222",
-														fontSize: "1rem",
-													}}
-												>
-													{voucher.name}
-												</strong>
-											</div>
-											<p
-												style={{
-													margin: 0,
-													fontSize: "0.85rem",
-													color: "#717171",
-												}}
-											>
-												{voucher.description}
-											</p>
-											{formData.vouchers.types.includes(voucher.id) && (
-												<div
-													style={{
-														marginTop: "1rem",
-														paddingTop: "1rem",
-														borderTop: "1px solid #e0e0e0",
-														display: "flex",
-														flexDirection: "column",
-														gap: "0.75rem",
-													}}
-													onClick={(e) => e.stopPropagation()}
-												>
-													<div
-														style={{
-															display: "flex",
-															gap: "0.75rem",
-															alignItems: "center",
-														}}
-													>
-														<input
-															type="number"
-															placeholder="Discount"
-															value={
-																formData.vouchers.details[voucher.id]
-																	?.discount || "20"
-															}
-															onChange={(e) =>
-																setFormData({
-																	...formData,
-																	vouchers: {
-																		...formData.vouchers,
-																		details: {
-																			...formData.vouchers.details,
-																			[voucher.id]: {
-																				...formData.vouchers.details[
-																					voucher.id
-																				],
-																				discount: e.target.value,
-																			},
-																		},
-																	},
-																})
-															}
-															style={{
-																flex: 1,
-																padding: "0.5rem",
-																border: "1px solid #b0b0b0",
-																borderRadius: "6px",
-																fontSize: "0.9rem",
-															}}
-															min="0"
-														/>
-														<select
-															value={
-																formData.vouchers.details[voucher.id]
-																	?.discountType || "percent"
-															}
-															onChange={(e) =>
-																setFormData({
-																	...formData,
-																	vouchers: {
-																		...formData.vouchers,
-																		details: {
-																			...formData.vouchers.details,
-																			[voucher.id]: {
-																				...formData.vouchers.details[
-																					voucher.id
-																				],
-																				discountType: e.target.value,
-																			},
-																		},
-																	},
-																})
-															}
-															style={{
-																padding: "0.5rem",
-																border: "1px solid #b0b0b0",
-																borderRadius: "6px",
-																fontSize: "0.9rem",
-																background: "white",
-																width: "80px",
-															}}
-														>
-															<option value="percent">%</option>
-															<option value="price">₱</option>
-														</select>
-													</div>
-													{/* For long_stay, show minimum days field instead of date button */}
-													{voucher.id === "long_stay" ? (
-														<div className="form-group" style={{ marginTop: "0.5rem" }}>
-															<label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.9rem", fontWeight: "500" }}>
-																Minimum Days to Make a Discount *
-															</label>
-															<input
-																type="number"
-																placeholder="e.g., 7"
-																value={
-																	formData.vouchers.details[voucher.id]
-																		?.minDays || formData.vouchers.details[voucher.id]
-																		?.minimumDays || ""
-																}
-																onChange={(e) =>
-																	setFormData({
-																		...formData,
-																		vouchers: {
-																			...formData.vouchers,
-																			details: {
-																				...formData.vouchers.details,
-																				[voucher.id]: {
-																					...formData.vouchers.details[
-																						voucher.id
-																					],
-																					minDays: e.target.value,
-																					minimumDays: e.target.value,
-																					// Remove dates if they exist
-																					startDate: undefined,
-																					endDate: undefined,
-																				},
-																			},
-																		},
-																	})
-																}
-																style={{
-																	width: "100%",
-																	padding: "0.5rem",
-																	border: "1px solid #b0b0b0",
-																	borderRadius: "6px",
-																	fontSize: "0.9rem",
-																}}
-																min="1"
-																required
-															/>
-															<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
-																Minimum number of days required to apply this discount
-															</small>
-														</div>
-													) : ![
-														"christmas",
-														"new_year",
-														"valentines",
-														"summer",
-														"anniversary",
-														"weekend",
-													].includes(voucher.id) && (
-														<button
-															type="button"
-															onClick={() => openDateModal(voucher.id)}
-															style={{
-																width: "100%",
-																padding: "0.75rem",
-																border: "1px solid #b0b0b0",
-																borderRadius: "6px",
-																fontSize: "0.9rem",
-																background: "white",
-																cursor: "pointer",
-																display: "flex",
-																alignItems: "center",
-																justifyContent: "center",
-																gap: "0.5rem",
-																transition: "all 0.2s ease",
-															}}
-															onMouseEnter={(e) => {
-																e.target.style.borderColor = "var(--primary)"
-																e.target.style.background =
-																	"rgba(97, 191, 156, 0.05)"
-															}}
-															onMouseLeave={(e) => {
-																e.target.style.borderColor = "#b0b0b0"
-																e.target.style.background = "white"
-															}}
-														>
-															<FaCalendarAlt />
-															<span>
-																{formData.vouchers.details[voucher.id]
-																	?.startDate &&
-																formData.vouchers.details[voucher.id]?.endDate
-																	? `${new Date(
-																			formData.vouchers.details[
-																				voucher.id
-																			].startDate
-																	  ).toLocaleDateString()} → ${new Date(
-																			formData.vouchers.details[
-																				voucher.id
-																			].endDate
-																	  ).toLocaleDateString()}`
-																	: "Select date range"}
-															</span>
-														</button>
-													)}
-												</div>
-											)}
-										</div>
-									)
-								})}
-							</div>
-							<p
-								className="step-description"
-								style={{
-									marginTop: "1.5rem",
-									fontSize: "0.85rem",
-									fontStyle: "italic",
-									color: "#999",
-								}}
-							>
-								💡 Set the discount percentage and duration for each selected
-								voucher
-							</p>
-						</div>
+											<FaCalendarAlt />
+											<span>
+												{formData.coupon.validFrom
+													? new Date(formData.coupon.validFrom).toLocaleDateString("en-US", {
+															month: "short",
+															day: "numeric",
+															year: "numeric",
+													  })
+													: "Select date"}
+											</span>
+										</button>
+									</div>
+
+									<div className="form-group">
+										<label>Valid Until</label>
+										<button
+											type="button"
+											onClick={() => openCouponDatePicker(false)}
+											style={{
+												width: "100%",
+												padding: "0.75rem",
+												border: "1px solid #b0b0b0",
+												borderRadius: "6px",
+												fontSize: "0.9rem",
+												background: "white",
+												cursor: "pointer",
+												display: "flex",
+												alignItems: "center",
+												justifyContent: "center",
+												gap: "0.5rem",
+												transition: "all 0.2s ease",
+											}}
+											onMouseEnter={(e) => {
+												e.target.style.borderColor = "var(--primary)"
+												e.target.style.background = "rgba(97, 191, 156, 0.05)"
+											}}
+											onMouseLeave={(e) => {
+												e.target.style.borderColor = "#b0b0b0"
+												e.target.style.background = "white"
+											}}
+										>
+											<FaCalendarAlt />
+											<span>
+												{formData.coupon.validUntil
+													? new Date(formData.coupon.validUntil).toLocaleDateString("en-US", {
+															month: "short",
+															day: "numeric",
+															year: "numeric",
+													  })
+													: "Select date"}
+											</span>
+										</button>
+									</div>
+								</div>
+
+								<div className="form-group">
+									<label style={{ 
+										display: "flex", 
+										alignItems: "center", 
+										gap: "0.5rem",
+										cursor: "pointer",
+										userSelect: "none"
+									}}>
+										<input
+											type="checkbox"
+											checked={formData.coupon.isActive}
+											onChange={(e) =>
+												setFormData({
+													...formData,
+													coupon: {
+														...formData.coupon,
+														isActive: e.target.checked,
+													},
+												})
+											}
+											style={{
+												width: "18px",
+												height: "18px",
+												cursor: "pointer",
+												margin: 0,
+												flexShrink: 0,
+											}}
+										/>
+										<span style={{ lineHeight: "1.5" }}>Active (Coupon will be available for use)</span>
+									</label>
+								</div>
+							</>
+						)}
 					</div>
 				)}
 
@@ -2305,11 +2405,11 @@ export default function PropertyListingWizard() {
 				</div>
 			</div>
 
-			{/* Calendar Modal for Voucher Dates */}
-			{showDateModal && (
+			{/* Coupon Date Picker Modal */}
+			{showCouponDateModal && (
 				<div
 					className="date-picker-modal-overlay"
-					onClick={() => setShowDateModal(false)}
+					onClick={() => setShowCouponDateModal(false)}
 				>
 					<div
 						className="date-picker-modal-content"
@@ -2317,59 +2417,64 @@ export default function PropertyListingWizard() {
 					>
 						<button
 							className="close-date-modal"
-							onClick={() => setShowDateModal(false)}
+							onClick={() => setShowCouponDateModal(false)}
 						>
 							<FaTimes />
 						</button>
 						<h2>
-							<FaCalendarAlt /> Select Voucher Date Range
+							<FaCalendarAlt /> Select Coupon Validity Dates
 						</h2>
 						<div className="modal-date-info">
 							<div className="selected-dates-display">
-								{formData.vouchers.details[activeVoucherId]?.startDate && (
+								{formData.coupon.validFrom && (
 									<div className="selected-date-item check-in">
-										<span className="date-type">Start Date:</span>
+										<span className="date-type">Valid From:</span>
 										<span className="date-text">
-											{new Date(
-												formData.vouchers.details[activeVoucherId].startDate
-											).toLocaleDateString()}
+											{new Date(formData.coupon.validFrom).toLocaleDateString("en-US", {
+												weekday: "short",
+												month: "short",
+												day: "numeric",
+												year: "numeric",
+											})}
 										</span>
 									</div>
 								)}
-								{formData.vouchers.details[activeVoucherId]?.endDate && (
+								{formData.coupon.validUntil && (
 									<div className="selected-date-item check-out">
-										<span className="date-type">End Date:</span>
+										<span className="date-type">Valid Until:</span>
 										<span className="date-text">
-											{new Date(
-												formData.vouchers.details[activeVoucherId].endDate
-											).toLocaleDateString()}
+											{new Date(formData.coupon.validUntil).toLocaleDateString("en-US", {
+												weekday: "short",
+												month: "short",
+												day: "numeric",
+												year: "numeric",
+											})}
 										</span>
 									</div>
 								)}
-								{!formData.vouchers.details[activeVoucherId]?.startDate &&
-									!formData.vouchers.details[activeVoucherId]?.endDate && (
-										<p className="instruction-text">
-											{selectingStartDate
-												? "Click on a date to select start date"
-												: "Click on a date to select end date"}
-										</p>
-									)}
+								{!formData.coupon.validFrom && !formData.coupon.validUntil && (
+									<p className="instruction-text">
+										{selectingValidFrom
+											? "Click on a date to select Valid From"
+											: "Click on a date to select Valid Until"}
+									</p>
+								)}
 							</div>
 						</div>
 
 						<div className="modal-calendar">
 							<div className="month-view">
 								<div className="month-header">
-									<button onClick={previousMonth} className="month-nav-btn">
+									<button onClick={previousCouponMonth} className="month-nav-btn">
 										◀
 									</button>
 									<h3>
-										{currentMonth.toLocaleString("default", {
+										{couponCurrentMonth.toLocaleString("default", {
 											month: "long",
 											year: "numeric",
 										})}
 									</h3>
-									<button onClick={nextMonth} className="month-nav-btn">
+									<button onClick={nextCouponMonth} className="month-nav-btn">
 										▶
 									</button>
 								</div>
@@ -2381,26 +2486,26 @@ export default function PropertyListingWizard() {
 											</div>
 										)
 									)}
-									{generateCalendarDays().map((dayData, index) =>
+									{generateCouponCalendarDays().map((dayData, index) =>
 										dayData ? (
 											<div
 												key={index}
 												className={`calendar-day ${
 													dayData.isPast ? "past" : "available"
 												} ${
-													dayData.dateString ===
-													formData.vouchers.details[activeVoucherId]?.startDate
+													dayData.dateString === formData.coupon.validFrom
 														? "selected-check-in"
 														: ""
 												} ${
-													dayData.dateString ===
-													formData.vouchers.details[activeVoucherId]?.endDate
+													dayData.dateString === formData.coupon.validUntil
 														? "selected-check-out"
 														: ""
 												}`}
-												onClick={() =>
-													handleCalendarDayClick(dayData.dateString)
-												}
+												onClick={() => {
+													if (!dayData.isPast) {
+														handleCouponCalendarDayClick(dayData.dateString)
+													}
+												}}
 												title={dayData.isPast ? "Past date" : "Available"}
 											>
 												{dayData.day}

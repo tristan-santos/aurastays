@@ -20,6 +20,7 @@ import housePlaceholder from "../assets/housePlaceholder.png"
 import "../css/HostList.css"
 import "../css/AdminDashboard.css"
 import HostDetailsModal from "../components/HostDetailsModal"
+import { formatCurrencyFull } from "../utils/currencyFormatter"
 
 export default function HostList() {
 	const { currentUser, userData } = useAuth()
@@ -725,9 +726,7 @@ export default function HostList() {
 															)}
 															{property.pricing?.basePrice && (
 																<span className="property-price">
-																	₱
-																	{property.pricing.basePrice.toLocaleString()}
-																	/night
+																	{formatCurrencyFull(property.pricing.basePrice)}/night
 																</span>
 															)}
 															{property.category && (

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { db } from "../components/firebaseConfig"
@@ -47,6 +47,8 @@ export default function Messages() {
 	const [activeTab, setActiveTab] = useState("conversations") // "conversations" or "notifications"
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
 	const [theme, setTheme] = useState(localStorage.getItem("theme") || "light")
+	const messagesEndRef = useRef(null)
+	const messagesContainerRef = useRef(null)
 
 	// Get user's display name
 	const displayName =
@@ -277,6 +279,23 @@ export default function Messages() {
 				}))
 				setConversationMessages(msgs)
 
+				// Mark messages as read when viewed
+				const unreadMessages = msgs.filter(
+					(msg) => !msg.read && msg.recipientId === currentUser.uid
+				)
+				if (unreadMessages.length > 0) {
+					Promise.all(
+						unreadMessages.map((msg) =>
+							updateDoc(doc(db, "messages", msg.id), {
+								read: true,
+								readAt: serverTimestamp(),
+							})
+						)
+					).catch((err) =>
+						console.error("Error marking messages as read:", err)
+					)
+				}
+
 				// Mark conversation as read
 				if (selectedConversation.guestUnreadCount > 0) {
 					updateDoc(doc(db, "conversations", selectedConversation.id), {
@@ -309,6 +328,23 @@ export default function Messages() {
 							return dateA - dateB
 						})
 						setConversationMessages(msgs)
+
+						// Mark messages as read when viewed
+						const unreadMessages = msgs.filter(
+							(msg) => !msg.read && msg.recipientId === currentUser.uid
+						)
+						if (unreadMessages.length > 0) {
+							Promise.all(
+								unreadMessages.map((msg) =>
+									updateDoc(doc(db, "messages", msg.id), {
+										read: true,
+										readAt: serverTimestamp(),
+									})
+								)
+							).catch((err) =>
+								console.error("Error marking messages as read:", err)
+							)
+						}
 					},
 					(err) => {
 						console.error("Error with simple messages query:", err)
@@ -320,6 +356,16 @@ export default function Messages() {
 
 		return () => unsubscribe()
 	}, [selectedConversation])
+
+	// Auto-scroll to bottom when messages change or conversation is selected
+	useEffect(() => {
+		if (messagesContainerRef.current && conversationMessages.length > 0) {
+			// Small delay to ensure DOM is updated
+			setTimeout(() => {
+				messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+			}, 100)
+		}
+	}, [conversationMessages, selectedConversation])
 
 	// Handle reply
 	const handleSendReply = async (e) => {
@@ -354,7 +400,7 @@ export default function Messages() {
 			})
 
 			setReplyMessage("")
-			toast.success("Reply sent successfully!")
+			// No toast notification - use message checkmarks instead
 		} catch (error) {
 			console.error("Error sending reply:", error)
 			toast.error("Failed to send reply")
@@ -752,7 +798,10 @@ export default function Messages() {
 											)}
 										</div>
 									</div>
-									<div className="conversation-messages">
+									<div 
+										className="conversation-messages"
+										ref={messagesContainerRef}
+									>
 										{conversationMessages.length === 0 ? (
 											<div className="empty-messages">No messages yet</div>
 										) : (
@@ -767,9 +816,21 @@ export default function Messages() {
 														<span className="message-sender">
 															{message.senderName}
 														</span>
-														<span className="message-time">
-															{formatTime(message.createdAt)}
-														</span>
+														<div className="message-time-status">
+															<span className="message-time">
+																{formatTime(message.createdAt)}
+															</span>
+															{/* Show checkmarks only for sent messages (guest's own messages) */}
+															{message.senderType === "guest" && (
+																<span className="message-status">
+																	{message.read ? (
+																		<FaCheckDouble className="status-icon read" />
+																	) : (
+																		<FaCheck className="status-icon sent" />
+																	)}
+																</span>
+															)}
+														</div>
 													</div>
 													{message.subject && (
 														<div className="message-subject">
@@ -784,6 +845,7 @@ export default function Messages() {
 												</div>
 											))
 										)}
+										<div ref={messagesEndRef} />
 									</div>
 									<form
 										className="conversation-reply-form"

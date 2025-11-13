@@ -149,8 +149,20 @@ export default function WishlistCreate() {
 			setIsLoading(true)
 			const userRef = doc(db, "users", currentUser.uid)
 			const userSnap = await getDoc(userRef)
+			const userData = userSnap.exists() ? userSnap.data() : {}
+			const guestName = userData?.displayName || currentUser?.displayName || "Guest"
+			
+			// Get property to get hostId
+			const propertyRef = doc(db, "properties", propertyId)
+			const propertySnap = await getDoc(propertyRef)
+			const propertyData = propertySnap.exists() ? propertySnap.data() : {}
+			const hostId = propertyData.hostId || null
+			
 			const entry = {
 				propertyId,
+				guestId: currentUser.uid,
+				guestName: guestName,
+				hostId: hostId,
 				beds: Number(beds) || 0,
 				bathrooms: Number(bathrooms) || 0,
 				bedrooms: Number(bedrooms) || 0,
@@ -203,11 +215,16 @@ export default function WishlistCreate() {
 	return (
 		<div className="wishlist-create-container">
 			<div className="wishlist-create-wrapper">
-				{/* Header */}
-				<div className="wishlist-create-header">
-					<h1>
-						<FaBookmark style={{ color: "var(--primary)" }} /> Create Wishlist
-					</h1>
+				{/* Page Header */}
+				<div className="page-header-section">
+					<div className="page-header-content">
+						<h1 className="page-title">
+							<FaBookmark style={{ color: "var(--primary)" }} /> Create Wishlist
+						</h1>
+						<p className="page-subtitle">
+							Share your preferences and wishes for this property
+						</p>
+					</div>
 				</div>
 
 				{/* Property Info Card */}
@@ -476,7 +493,7 @@ export default function WishlistCreate() {
 									<div className="wishlist-details-grid">
 										{createdWishlist.beds > 0 && (
 											<div className="wishlist-detail-item">
-												<FaBed className="detail-icon" />
+												<FaBed className="wishlist-detail-icon" />
 												<div>
 													<span className="detail-label">Beds</span>
 													<span className="detail-value">{createdWishlist.beds}</span>
@@ -485,7 +502,7 @@ export default function WishlistCreate() {
 										)}
 										{createdWishlist.bathrooms > 0 && (
 											<div className="wishlist-detail-item">
-												<FaBath className="detail-icon" />
+												<FaBath className="wishlist-detail-icon" />
 												<div>
 													<span className="detail-label">Bathrooms</span>
 													<span className="detail-value">{createdWishlist.bathrooms}</span>
@@ -494,7 +511,7 @@ export default function WishlistCreate() {
 										)}
 										{createdWishlist.bedrooms > 0 && (
 											<div className="wishlist-detail-item">
-												<FaHome className="detail-icon" />
+												<FaHome className="wishlist-detail-icon" />
 												<div>
 													<span className="detail-label">Bedrooms</span>
 													<span className="detail-value">{createdWishlist.bedrooms}</span>
@@ -503,7 +520,7 @@ export default function WishlistCreate() {
 										)}
 										{createdWishlist.guests > 0 && (
 											<div className="wishlist-detail-item">
-												<FaUsers className="detail-icon" />
+												<FaUsers className="wishlist-detail-icon" />
 												<div>
 													<span className="detail-label">Guests</span>
 													<span className="detail-value">{createdWishlist.guests}</span>
@@ -512,7 +529,7 @@ export default function WishlistCreate() {
 										)}
 										{createdWishlist.parkingSpaces !== undefined && createdWishlist.parkingSpaces !== null && (
 											<div className="wishlist-detail-item">
-												<FaParking className="detail-icon" />
+												<FaParking className="wishlist-detail-icon" />
 												<div>
 													<span className="detail-label">Parking Spaces</span>
 													<span className="detail-value">{createdWishlist.parkingSpaces}</span>
@@ -521,7 +538,7 @@ export default function WishlistCreate() {
 										)}
 										{createdWishlist.wifiSpeed > 0 && (
 											<div className="wishlist-detail-item">
-												<FaWifi className="detail-icon" />
+												<FaWifi className="wishlist-detail-icon" />
 												<div>
 													<span className="detail-label">Wi-Fi Speed</span>
 													<span className="detail-value">{createdWishlist.wifiSpeed} Mbps</span>

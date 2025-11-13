@@ -6,6 +6,7 @@ import { doc, getDoc, updateDoc, collection, query, where, getDocs } from "fireb
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth"
 import { toast } from "react-stacked-toast"
 import "../css/Profile.css"
+import { formatCurrencyWithDecimals } from "../utils/currencyFormatter"
 import { getFirebaseErrorMessage } from "../utils/errorMessages"
 import {
 	FaArrowLeft,
@@ -234,8 +235,45 @@ export default function Profile() {
 					totalListings = properties.length
 					console.log("[Profile] Host properties found:", totalListings, properties.map(p => ({ id: p.id, title: p.title, hostId: p.hostId, hostHostId: p.host?.hostId })))
 					
+					// Dynamically calculate average rating from all properties' reviews
+					const propertiesWithDynamicRatings = await Promise.all(
+						properties.map(async (property) => {
+							try {
+								const reviewsQuery = query(
+									collection(db, "reviews"),
+									where("propertyId", "==", property.id),
+									where("status", "==", "approved")
+								)
+								const reviewsSnapshot = await getDocs(reviewsQuery)
+								const reviews = reviewsSnapshot.docs.map((doc) => doc.data())
+								
+								if (reviews.length > 0) {
+									const totalRating = reviews.reduce(
+										(sum, review) => sum + (review.rating || 0),
+										0
+									)
+									const averageRating = totalRating / reviews.length
+									return {
+										...property,
+										rating: Math.round(averageRating * 10) / 10,
+										reviewsCount: reviews.length,
+									}
+								} else {
+									return {
+										...property,
+										rating: 0,
+										reviewsCount: 0,
+									}
+								}
+							} catch (error) {
+								console.error(`Error fetching reviews for property ${property.id}:`, error)
+								return property
+							}
+						})
+					)
+					
 					// Calculate average rating from all properties
-					const propertiesWithRatings = properties.filter(p => p.rating && p.rating > 0)
+					const propertiesWithRatings = propertiesWithDynamicRatings.filter(p => p.rating && p.rating > 0)
 					if (propertiesWithRatings.length > 0) {
 						const sumRatings = propertiesWithRatings.reduce((sum, p) => sum + (p.rating || 0), 0)
 						totalRatings = sumRatings / propertiesWithRatings.length
@@ -254,11 +292,18 @@ export default function Profile() {
 					const bookingsSnapshot = await getDocs(bookingsQuery)
 					const bookings = bookingsSnapshot.docs.map((doc) => doc.data())
 					
-					totalBookings = bookings.length
+					// Filter out cancelled bookings
+					const activeBookings = bookings.filter(
+						(b) => b.status !== "cancelled"
+					)
 					
-					// Calculate total earned from all bookings
-					totalEarned = bookings.reduce((sum, booking) => {
-						return sum + (booking.pricing?.total || 0)
+					totalBookings = activeBookings.length
+					
+					// Calculate total earned from all non-cancelled bookings minus refunds
+					totalEarned = activeBookings.reduce((sum, booking) => {
+						const bookingRevenue = booking.pricing?.total || 0
+						const refundAmount = booking.refundAmount || 0
+						return sum + (bookingRevenue - refundAmount)
 					}, 0)
 				} catch (bookingError) {
 					console.log("Bookings collection may not exist yet:", bookingError)
@@ -1537,31 +1582,16 @@ export default function Profile() {
 												<div className="profile-stat-content">
 													<div className="profile-stat-number">
 														{profileData.currency === "PHP (₱)"
-															? `₱${(profileData.totalEarned || 0).toLocaleString(undefined, {
-																	minimumFractionDigits: 2,
-																	maximumFractionDigits: 2,
-															  })}`
+															? formatCurrencyWithDecimals(profileData.totalEarned || 0, "₱")
 															: profileData.currency === "USD ($)"
-															? `$${(profileData.totalEarned || 0).toLocaleString(undefined, {
-																	minimumFractionDigits: 2,
-																	maximumFractionDigits: 2,
-															  })}`
+															? formatCurrencyWithDecimals(profileData.totalEarned || 0, "$")
 															: profileData.currency === "EUR (€)"
-															? `€${(profileData.totalEarned || 0).toLocaleString(undefined, {
-																	minimumFractionDigits: 2,
-																	maximumFractionDigits: 2,
-															  })}`
+															? formatCurrencyWithDecimals(profileData.totalEarned || 0, "€")
 															: profileData.currency === "GBP (£)"
-															? `£${(profileData.totalEarned || 0).toLocaleString(undefined, {
-																	minimumFractionDigits: 2,
-																	maximumFractionDigits: 2,
-															  })}`
+															? formatCurrencyWithDecimals(profileData.totalEarned || 0, "£")
 															: profileData.currency === "JPY (¥)"
-															? `¥${Math.round(profileData.totalEarned || 0).toLocaleString()}`
-															: `₱${(profileData.totalEarned || 0).toLocaleString(undefined, {
-																	minimumFractionDigits: 2,
-																	maximumFractionDigits: 2,
-															  })}`}
+															? formatCurrencyWithDecimals(Math.round(profileData.totalEarned || 0), "¥")
+															: formatCurrencyWithDecimals(profileData.totalEarned || 0, "₱")}
 													</div>
 													<div className="profile-stat-label">Total Earned</div>
 												</div>
@@ -1601,31 +1631,16 @@ export default function Profile() {
 												<div className="profile-stat-content">
 													<div className="profile-stat-number">
 														{profileData.currency === "PHP (₱)"
-															? `₱${(profileData.totalSpent || 0).toLocaleString(undefined, {
-																	minimumFractionDigits: 2,
-																	maximumFractionDigits: 2,
-															  })}`
+															? formatCurrencyWithDecimals(profileData.totalSpent || 0, "₱")
 															: profileData.currency === "USD ($)"
-															? `$${(profileData.totalSpent || 0).toLocaleString(undefined, {
-																	minimumFractionDigits: 2,
-																	maximumFractionDigits: 2,
-															  })}`
+															? formatCurrencyWithDecimals(profileData.totalSpent || 0, "$")
 															: profileData.currency === "EUR (€)"
-															? `€${(profileData.totalSpent || 0).toLocaleString(undefined, {
-																	minimumFractionDigits: 2,
-																	maximumFractionDigits: 2,
-															  })}`
+															? formatCurrencyWithDecimals(profileData.totalSpent || 0, "€")
 															: profileData.currency === "GBP (£)"
-															? `£${(profileData.totalSpent || 0).toLocaleString(undefined, {
-																	minimumFractionDigits: 2,
-																	maximumFractionDigits: 2,
-															  })}`
+															? formatCurrencyWithDecimals(profileData.totalSpent || 0, "£")
 															: profileData.currency === "JPY (¥)"
-															? `¥${Math.round(profileData.totalSpent || 0).toLocaleString()}`
-															: `₱${(profileData.totalSpent || 0).toLocaleString(undefined, {
-																	minimumFractionDigits: 2,
-																	maximumFractionDigits: 2,
-															  })}`}
+															? formatCurrencyWithDecimals(Math.round(profileData.totalSpent || 0), "¥")
+															: formatCurrencyWithDecimals(profileData.totalSpent || 0, "₱")}
 													</div>
 													<div className="profile-stat-label">Total Spent</div>
 												</div>

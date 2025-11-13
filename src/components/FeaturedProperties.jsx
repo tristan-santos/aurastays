@@ -5,6 +5,7 @@ import { motion } from "framer-motion"
 import { FaStar } from "react-icons/fa"
 import "../css/FeaturedProperties.css"
 import PropertyCardSkeleton from "./PropertyCardSkeleton"
+import { formatCurrencyFull } from "../utils/currencyFormatter"
 
 const containerVariants = {
 	hidden: { opacity: 0 },
@@ -128,7 +129,7 @@ export default function FeaturedProperties() {
 										</p>
 										<p className="property-price">
 											{property.pricing?.basePrice
-												? `₱${property.pricing.basePrice.toLocaleString()}/night`
+												? `${formatCurrencyFull(property.pricing.basePrice)}/night`
 												: property.price || "Price"}
 										</p>
 									</div>

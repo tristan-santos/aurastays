@@ -27,6 +27,7 @@ import {
 	FaCrown,
 } from "react-icons/fa"
 import "../css/Wallet.css"
+import { formatCurrency, formatCurrencyFull } from "../utils/currencyFormatter"
 
 export default function Wallet() {
 	const { currentUser } = useAuth()
@@ -450,6 +451,12 @@ export default function Wallet() {
 				return <FaArrowUp className="txn-icon orange" />
 			case "refund":
 				return <FaArrowDown className="txn-icon blue" />
+			case "refund_deduction":
+				return <FaArrowUp className="txn-icon red" />
+			case "booking_earning":
+				return <FaArrowDown className="txn-icon green" />
+			case "booking_received":
+				return <FaArrowDown className="txn-icon green" />
 			case "points_exchange":
 				return <FaCoins className="txn-icon green" />
 			case "subscription_payment":
@@ -466,7 +473,7 @@ export default function Wallet() {
 				<div className="wallet-balance-info">
 					<span className="wallet-label">E-Wallet Balance</span>
 					<span className="wallet-balance">
-						₱{walletBalance.toLocaleString()}
+						{formatCurrencyFull(walletBalance)}
 					</span>
 				</div>
 			</div>
@@ -605,7 +612,7 @@ export default function Wallet() {
 							<div className="current-balance-display">
 								<span className="balance-label">Available Balance:</span>
 								<span className="balance-value">
-									₱{walletBalance.toLocaleString()}
+									{formatCurrencyFull(walletBalance)}
 								</span>
 							</div>
 
@@ -643,7 +650,7 @@ export default function Wallet() {
 									<div className="summary-row">
 										<span>Withdrawal Amount:</span>
 										<strong>
-											₱{parseFloat(withdrawAmount).toLocaleString()}
+											{formatCurrency(parseFloat(withdrawAmount) || 0)}
 										</strong>
 									</div>
 									<div className="summary-row fee-row">
@@ -756,8 +763,12 @@ export default function Wallet() {
 														{txn.type === "payment" && "Booking Payment"}
 														{txn.type === "withdrawal" && "Withdrawal"}
 														{txn.type === "refund" && "Refund"}
+														{txn.type === "refund_deduction" && "Refund Deduction"}
+														{txn.type === "booking_earning" && "Booking Earning"}
+														{txn.type === "booking_received" && "Booking Received"}
 														{txn.type === "points_exchange" && (txn.description || "Points Redeemed")}
 														{txn.type === "subscription_payment" && (txn.planName ? `${txn.planName} Subscription` : "Subscription Payment")}
+														{!txn.type && (txn.description || "Transaction")}
 													</div>
 													<div className="txn-date">
 														{formatDate(txn.createdAt)}
@@ -772,23 +783,23 @@ export default function Wallet() {
 											<div className="txn-right">
 												<div
 													className={`txn-amount ${
-														txn.type === "payment" || txn.type === "withdrawal" || txn.type === "subscription_payment"
+														txn.type === "payment" || txn.type === "withdrawal" || txn.type === "subscription_payment" || txn.type === "refund_deduction" || (txn.amount < 0)
 															? "negative"
 															: "positive"
 													}`}
 												>
-													{txn.type === "payment" || txn.type === "withdrawal" || txn.type === "subscription_payment"
+													{txn.type === "payment" || txn.type === "withdrawal" || txn.type === "subscription_payment" || txn.type === "refund_deduction" || (txn.amount < 0)
 														? "-"
 														: "+"}
-													₱{txn.amount.toLocaleString()}
+													{formatCurrency(Math.abs(txn.amount || 0))}
 												</div>
 												{txn.type === "withdrawal" && txn.fee && (
 													<div className="txn-fee">
-														Fee: ₱{txn.fee.toFixed(2)}
+														Fee: {formatCurrency(txn.fee || 0)}
 													</div>
 												)}
 												<div className="txn-balance">
-													Balance: ₱{txn.balanceAfter.toLocaleString()}
+													Balance: {formatCurrencyFull(txn.balanceAfter || 0)}
 												</div>
 											</div>
 										</div>

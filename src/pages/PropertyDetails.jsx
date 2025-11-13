@@ -21,6 +21,7 @@ import { toast } from "react-stacked-toast"
 import emailjs from "@emailjs/browser"
 import { sendHostBookingConfirmation } from "../utils/hostEmailService"
 import { getFirebaseErrorMessage } from "../utils/errorMessages"
+import { formatCurrencyFull } from "../utils/currencyFormatter"
 import {
 	FaArrowLeft,
 	FaHeart,
@@ -48,6 +49,7 @@ import {
 	FaHistory,
 	FaUsers,
 	FaFlag,
+	FaTrash,
 	FaBars,
 	FaSignOutAlt,
 	FaEnvelope,
@@ -55,6 +57,15 @@ import {
 	FaChevronLeft,
 	FaChevronRight,
 	FaHome,
+	FaPlus,
+	FaMinus,
+	FaBed,
+	FaBath,
+	FaParking,
+	FaWifi,
+	FaUtensils,
+	FaStickyNote,
+	FaEye,
 } from "react-icons/fa"
 import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
@@ -93,6 +104,7 @@ export default function PropertyDetails() {
 	const [propertyBlockedDates, setPropertyBlockedDates] = useState([])
 	const [bookingDates, setBookingDates] = useState([])
 	const [currentMonth, setCurrentMonth] = useState(new Date())
+	const [isDeletingProperty, setIsDeletingProperty] = useState(false)
 	const [showDatePickerModal, setShowDatePickerModal] = useState(false)
 	const [selectingCheckIn, setSelectingCheckIn] = useState(true)
 
@@ -123,10 +135,17 @@ export default function PropertyDetails() {
 	const [userCompletedBookings, setUserCompletedBookings] = useState([])
 	const [showReviewModal, setShowReviewModal] = useState(false)
 
+	// Wishlists state
+	const [propertyWishlists, setPropertyWishlists] = useState([])
+	const [selectedWishlist, setSelectedWishlist] = useState(null)
+	const [showWishlistModal, setShowWishlistModal] = useState(false)
+
 	// Host-specific states
 	const [propertyPromos, setPropertyPromos] = useState([])
 	const [propertyBookings, setPropertyBookings] = useState([])
 	const [isHost, setIsHost] = useState(false)
+	// Guest view - property coupons
+	const [propertyCoupons, setPropertyCoupons] = useState([])
 	const [showManagePromosModal, setShowManagePromosModal] = useState(false)
 	const [showAllBookingsModal, setShowAllBookingsModal] = useState(false)
 	const [editingPromo, setEditingPromo] = useState(null)
@@ -138,6 +157,26 @@ export default function PropertyDetails() {
 	const [editPromoMinDays, setEditPromoMinDays] = useState("")
 	const [editPromoIsActive, setEditPromoIsActive] = useState(true)
 	const [isUpdatingPromo, setIsUpdatingPromo] = useState(false)
+	
+	// Create new promo states
+	const [showCreatePromoForm, setShowCreatePromoForm] = useState(false)
+	const [newCoupon, setNewCoupon] = useState({
+		code: "",
+		description: "",
+		discountType: "percentage",
+		discountValue: 0,
+		minPurchase: 0,
+		maxDiscount: 0,
+		usageLimit: 0,
+		usagePerUser: 1,
+		validFrom: "",
+		validUntil: "",
+		isActive: true,
+	})
+	const [showCouponDateModal, setShowCouponDateModal] = useState(false)
+	const [selectingValidFrom, setSelectingValidFrom] = useState(true)
+	const [couponCurrentMonth, setCouponCurrentMonth] = useState(new Date())
+	const [isCreatingPromo, setIsCreatingPromo] = useState(false)
 	const [reviewFormData, setReviewFormData] = useState({
 		rating: 5,
 		comment: "",
@@ -240,6 +279,36 @@ export default function PropertyDetails() {
 	// Get the full shareable URL
 	const shareableUrl = `${window.location.origin}/property/${propertyId}`
 
+	// Fetch property coupons for guest view
+	const fetchPropertyCoupons = async (propId) => {
+		if (!propId) return
+		try {
+			const couponsQuery = query(
+				collection(db, "promos"),
+				where("propertyId", "==", propId),
+				where("isActive", "==", true)
+			)
+			const couponsSnapshot = await getDocs(couponsQuery)
+			const coupons = couponsSnapshot.docs.map((doc) => ({
+				id: doc.id,
+				...doc.data(),
+			}))
+			
+			// Filter out expired coupons
+			const now = new Date()
+			const activeCoupons = coupons.filter((coupon) => {
+				if (coupon.validUntil) {
+					return new Date(coupon.validUntil) >= now
+				}
+				return true
+			})
+			
+			setPropertyCoupons(activeCoupons)
+		} catch (error) {
+			console.error("Error fetching property coupons:", error)
+		}
+	}
+
 	useEffect(() => {
 		fetchPropertyDetails()
 		fetchBookedDates()
@@ -253,6 +322,13 @@ export default function PropertyDetails() {
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [propertyId, currentUser])
+
+	useEffect(() => {
+		if (property && currentUser) {
+			fetchPropertyWishlists()
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [property, currentUser])
 
 	// Merge booking dates and blocked dates
 	useEffect(() => {
@@ -277,6 +353,14 @@ export default function PropertyDetails() {
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [property, currentUser])
+
+	// Fetch coupons for guest view when property loads
+	useEffect(() => {
+		if (property?.id) {
+			fetchPropertyCoupons(property.id)
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [property?.id])
 
 	// Auto-apply vouchers when dates change
 	useEffect(() => {
@@ -553,10 +637,31 @@ export default function PropertyDetails() {
 			const dates = []
 			querySnapshot.forEach((doc) => {
 				const booking = doc.data()
-				if (booking.status !== "cancelled") {
-					dates.push(...(booking.bookedDates || []))
+				// Only include confirmed, pending, or other active statuses (not cancelled)
+				if (booking.status !== "cancelled" && booking.status !== "cancellation_requested") {
+					// If bookedDates array exists, use it
+					if (booking.bookedDates && Array.isArray(booking.bookedDates)) {
+						dates.push(...booking.bookedDates)
+					} 
+					// Otherwise, generate dates from checkInDate and checkOutDate
+					else if (booking.checkInDate && booking.checkOutDate) {
+						const checkIn = booking.checkInDate.toDate 
+							? booking.checkInDate.toDate() 
+							: new Date(booking.checkInDate)
+						const checkOut = booking.checkOutDate.toDate 
+							? booking.checkOutDate.toDate() 
+							: new Date(booking.checkOutDate)
+						
+						// Generate all dates between check-in and check-out
+						const bookingDates = getDatesBetween(
+							checkIn.toISOString().split("T")[0],
+							checkOut.toISOString().split("T")[0]
+						)
+						dates.push(...bookingDates)
+					}
 				}
 			})
+			
 			// Merge with blocked dates from property
 			try {
 				const propRef = docFirestore(db, "properties", propertyId)
@@ -568,9 +673,11 @@ export default function PropertyDetails() {
 				setPropertyBlockedDates(blocked)
 				const merged = Array.from(new Set([...(dates || []), ...blocked]))
 				setBookedDates(merged)
+				setBookingDates(dates) // Store booking dates separately
 			} catch (e) {
 				// If property fetch fails, still set booked dates
 				setBookedDates(dates)
+				setBookingDates(dates)
 			}
 		} catch (error) {
 			console.error("Error fetching booked dates:", error)
@@ -690,7 +797,8 @@ export default function PropertyDetails() {
 		try {
 			const reviewsQuery = query(
 				collection(db, "reviews"),
-				where("propertyId", "==", propertyId)
+				where("propertyId", "==", propertyId),
+				where("status", "==", "approved")
 			)
 			const reviewsSnapshot = await getDocs(reviewsQuery)
 			const reviewsData = reviewsSnapshot.docs.map((doc) => ({
@@ -704,8 +812,87 @@ export default function PropertyDetails() {
 				return dateB - dateA
 			})
 			setReviews(reviewsData)
+			
+			// Update property rating and reviews count dynamically
+			if (reviewsData.length > 0) {
+				const totalRating = reviewsData.reduce(
+					(sum, review) => sum + (review.rating || 0),
+					0
+				)
+				const averageRating = totalRating / reviewsData.length
+				
+				// Update property document
+				const propertyRef = doc(db, "properties", propertyId)
+				await updateDoc(propertyRef, {
+					rating: Math.round(averageRating * 10) / 10, // Round to 1 decimal
+					reviewsCount: reviewsData.length,
+				})
+				
+				// Update local property state
+				if (property) {
+					setProperty({
+						...property,
+						rating: Math.round(averageRating * 10) / 10,
+						reviewsCount: reviewsData.length,
+					})
+				}
+			} else {
+				// No reviews, reset to 0
+				const propertyRef = doc(db, "properties", propertyId)
+				await updateDoc(propertyRef, {
+					rating: 0,
+					reviewsCount: 0,
+				})
+				
+				// Update local property state
+				if (property) {
+					setProperty({
+						...property,
+						rating: 0,
+						reviewsCount: 0,
+					})
+				}
+			}
 		} catch (error) {
 			console.error("Error fetching reviews:", error)
+		}
+	}
+
+	// Fetch wishlists for this property (only visible to host and the guest who created them)
+	const fetchPropertyWishlists = async () => {
+		if (!property || !currentUser) return
+		
+		try {
+			// Get all users and check their wishes array
+			const usersRef = collection(db, "users")
+			const usersSnapshot = await getDocs(usersRef)
+			const wishlists = []
+			
+			usersSnapshot.forEach((userDoc) => {
+				const userData = userDoc.data()
+				const wishes = Array.isArray(userData.wishes) ? userData.wishes : []
+				
+				wishes.forEach((wish) => {
+					// Only include wishlists for this property
+					if (wish.propertyId === propertyId && wish.isCreated) {
+						// Only show to host or the guest who created it
+						const isHost = property.hostId === currentUser.uid
+						const isGuest = wish.guestId === currentUser.uid
+						
+						if (isHost || isGuest) {
+							wishlists.push({
+								...wish,
+								guestId: wish.guestId || userDoc.id,
+								guestName: wish.guestName || userData.displayName || "Guest",
+							})
+						}
+					}
+				})
+			})
+			
+			setPropertyWishlists(wishlists)
+		} catch (error) {
+			console.error("Error fetching property wishlists:", error)
 		}
 	}
 
@@ -1159,6 +1346,270 @@ export default function PropertyDetails() {
 			console.error("Error updating promo:", error)
 			toast.error(getFirebaseErrorMessage(error))
 		}
+	}
+
+	// Create new promo
+	const handleCreatePromo = async () => {
+		if (!property || !currentUser) {
+			toast.error("Property or user not found")
+			return
+		}
+
+		// Validation
+		if (!newCoupon.code.trim()) {
+			toast.error("Promo code is required")
+			return
+		}
+
+		if (newCoupon.code.trim().length < 3) {
+			toast.error("Promo code must be at least 3 characters")
+			return
+		}
+
+		if (!newCoupon.description.trim()) {
+			toast.error("Description is required")
+			return
+		}
+
+		if (!newCoupon.discountValue || parseFloat(newCoupon.discountValue) <= 0) {
+			toast.error("Discount value must be greater than 0")
+			return
+		}
+
+		if (newCoupon.discountType === "percentage" && parseFloat(newCoupon.discountValue) > 100) {
+			toast.error("Percentage discount cannot exceed 100%")
+			return
+		}
+
+		if (newCoupon.validFrom && newCoupon.validUntil) {
+			if (new Date(newCoupon.validFrom) >= new Date(newCoupon.validUntil)) {
+				toast.error("Valid From date must be before Valid Until date")
+				return
+			}
+		}
+
+		setIsCreatingPromo(true)
+		try {
+			const promoData = {
+				code: newCoupon.code.toUpperCase().trim(),
+				description: newCoupon.description.trim(),
+				discountType: newCoupon.discountType || "percentage",
+				discountValue: parseFloat(newCoupon.discountValue) || 0,
+				minPurchase: parseFloat(newCoupon.minPurchase) || 0,
+				maxDiscount: parseFloat(newCoupon.maxDiscount) || 0,
+				usageLimit: parseInt(newCoupon.usageLimit) || 0,
+				usagePerUser: parseInt(newCoupon.usagePerUser) || 1,
+				validFrom: newCoupon.validFrom || "",
+				validUntil: newCoupon.validUntil || "",
+				isActive: Boolean(newCoupon.isActive),
+				propertyId: property.id,
+				hostId: property.hostId || currentUser.uid,
+				usedBy: [],
+				usageCount: 0,
+				createdAt: serverTimestamp(),
+				createdBy: currentUser.uid,
+			}
+
+			await addDoc(collection(db, "promos"), promoData)
+			toast.success("✅ Promo created successfully!")
+
+			// Reset form
+			setNewCoupon({
+				code: "",
+				description: "",
+				discountType: "percentage",
+				discountValue: 0,
+				minPurchase: 0,
+				maxDiscount: 0,
+				usageLimit: 0,
+				usagePerUser: 1,
+				validFrom: "",
+				validUntil: "",
+				isActive: true,
+			})
+			setShowCreatePromoForm(false)
+
+			// Refresh promos
+			fetchPropertyPromos(property.id)
+		} catch (error) {
+			console.error("Error creating promo:", error)
+			toast.error("❌ Failed to create promo: " + getFirebaseErrorMessage(error))
+		} finally {
+			setIsCreatingPromo(false)
+		}
+	}
+
+	// NumberStepper component for numeric inputs
+	const NumberStepper = ({ value, onChange, min = 0, max, step = 1, placeholder, style = {} }) => {
+		const numValue = parseInt(value) || 0
+		
+		const handleDecrease = () => {
+			const newValue = Math.max(min, numValue - step)
+			onChange({ target: { value: newValue.toString() } })
+		}
+		
+		const handleIncrease = () => {
+			const newValue = max !== undefined ? Math.min(max, numValue + step) : numValue + step
+			onChange({ target: { value: newValue.toString() } })
+		}
+		
+		return (
+			<div className="number-stepper" style={{ display: "flex", alignItems: "center", gap: "0.75rem", ...style }}>
+				<button
+					type="button"
+					onClick={handleDecrease}
+					disabled={numValue <= min}
+					style={{
+						width: "44px",
+						height: "44px",
+						border: "1px solid #b0b0b0",
+						borderRadius: "50%",
+						background: numValue <= min ? "#f5f5f5" : "white",
+						cursor: numValue <= min ? "not-allowed" : "pointer",
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						color: numValue <= min ? "#ccc" : "#333",
+						transition: "all 0.2s ease",
+					}}
+					onMouseEnter={(e) => {
+						if (numValue > min) {
+							e.target.style.borderColor = "var(--primary)"
+							e.target.style.background = "rgba(97, 191, 156, 0.1)"
+						}
+					}}
+					onMouseLeave={(e) => {
+						if (numValue > min) {
+							e.target.style.borderColor = "#b0b0b0"
+							e.target.style.background = "white"
+						}
+					}}
+				>
+					<FaMinus style={{ fontSize: "0.85rem" }} />
+				</button>
+				<input
+					type="number"
+					value={value || ""}
+					onChange={onChange}
+					placeholder={placeholder}
+					min={min}
+					max={max}
+					step={step}
+					style={{
+						width: "80px",
+						padding: "0.5rem",
+						border: "1px solid #b0b0b0",
+						borderRadius: "6px",
+						fontSize: "0.9rem",
+						textAlign: "center",
+						MozAppearance: "textfield",
+					}}
+					onWheel={(e) => e.target.blur()}
+					className="number-input-no-spinner"
+				/>
+				<button
+					type="button"
+					onClick={handleIncrease}
+					disabled={max !== undefined && numValue >= max}
+					style={{
+						width: "44px",
+						height: "44px",
+						border: "1px solid #b0b0b0",
+						borderRadius: "50%",
+						background: max !== undefined && numValue >= max ? "#f5f5f5" : "white",
+						cursor: max !== undefined && numValue >= max ? "not-allowed" : "pointer",
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						color: max !== undefined && numValue >= max ? "#ccc" : "#333",
+						transition: "all 0.2s ease",
+					}}
+					onMouseEnter={(e) => {
+						if (max === undefined || numValue < max) {
+							e.target.style.borderColor = "var(--primary)"
+							e.target.style.background = "rgba(97, 191, 156, 0.1)"
+						}
+					}}
+					onMouseLeave={(e) => {
+						if (max === undefined || numValue < max) {
+							e.target.style.borderColor = "#b0b0b0"
+							e.target.style.background = "white"
+						}
+					}}
+				>
+					<FaPlus style={{ fontSize: "0.85rem" }} />
+				</button>
+			</div>
+		)
+	}
+
+	// Calendar helper functions for coupon dates
+	const getCouponTodayDate = () => {
+		const today = new Date()
+		return today.toISOString().split("T")[0]
+	}
+
+	const generateCouponCalendarDays = () => {
+		const year = couponCurrentMonth.getFullYear()
+		const month = couponCurrentMonth.getMonth()
+		const firstDay = new Date(year, month, 1).getDay()
+		const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+		const days = []
+		for (let i = 0; i < firstDay; i++) days.push(null)
+		for (let day = 1; day <= daysInMonth; day++) {
+			const dateString = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+			days.push({
+				day,
+				dateString,
+				isPast: new Date(dateString) < new Date(getCouponTodayDate()),
+			})
+		}
+		return days
+	}
+
+	const previousCouponMonth = () => {
+		setCouponCurrentMonth(
+			new Date(couponCurrentMonth.getFullYear(), couponCurrentMonth.getMonth() - 1)
+		)
+	}
+
+	const nextCouponMonth = () => {
+		setCouponCurrentMonth(
+			new Date(couponCurrentMonth.getFullYear(), couponCurrentMonth.getMonth() + 1)
+		)
+	}
+
+	const handleCouponCalendarDayClick = (dateString) => {
+		if (selectingValidFrom) {
+			// Selecting Valid From date
+			setNewCoupon({
+				...newCoupon,
+				validFrom: dateString,
+				validUntil: newCoupon.validUntil && new Date(newCoupon.validUntil) <= new Date(dateString) ? "" : newCoupon.validUntil,
+			})
+			setSelectingValidFrom(false)
+			toast.success("Valid From date selected. Now select Valid Until date.")
+		} else {
+			// Selecting Valid Until date
+			const validFrom = newCoupon.validFrom
+			if (validFrom && new Date(dateString) <= new Date(validFrom)) {
+				toast.error("Valid Until date must be after Valid From date")
+				return
+			}
+			setNewCoupon({
+				...newCoupon,
+				validUntil: dateString,
+			})
+			setSelectingValidFrom(true)
+			setShowCouponDateModal(false)
+			toast.success("Coupon dates selected successfully!")
+		}
+	}
+
+	const openCouponDatePicker = (isValidFrom) => {
+		setSelectingValidFrom(isValidFrom)
+		setShowCouponDateModal(true)
 	}
 
 	// Fetch property booking history (for host view)
@@ -2729,6 +3180,260 @@ export default function PropertyDetails() {
 		)
 	}
 
+	// Helper function to format dates
+	const formatDate = (dateInput) => {
+		if (!dateInput) return "N/A"
+		const date = dateInput.toDate ? dateInput.toDate() : new Date(dateInput)
+		return date.toLocaleDateString("en-US", {
+			year: "numeric",
+			month: "long",
+			day: "numeric",
+		})
+	}
+
+	// Send message to guest about property deletion
+	const sendBookingMessageForDeletion = async (booking, refundAmount) => {
+		try {
+			if (!booking.guestId) {
+				console.warn("[DeleteProperty] No guestId found for booking", booking.id)
+				return
+			}
+
+			const displayName = userData?.displayName || currentUser?.displayName || "Host"
+			const userEmail = userData?.email || currentUser?.email || ""
+
+			// Find or create conversation between host and guest
+			const conversationsQuery = query(
+				collection(db, "conversations"),
+				where("guestId", "==", booking.guestId),
+				where("hostId", "==", currentUser.uid),
+				where("propertyId", "==", propertyId)
+			)
+			const conversationsSnapshot = await getDocs(conversationsQuery)
+
+			let conversationId
+			const messageBody = `We regret to inform you that the property "${property.title}" has been removed from our platform by the host. Your booking from ${formatDate(booking.checkInDate)} to ${formatDate(booking.checkOutDate)} has been cancelled.${refundAmount > 0 ? ` A full refund of ₱${refundAmount.toLocaleString()} has been processed and added to your e-wallet.` : ""} We apologize for any inconvenience. Please contact support if you need assistance finding alternative accommodations.`
+			const messageSubject = `Property Deleted: ${property.title}`
+			const lastMessage = "Property has been deleted and your booking has been cancelled."
+
+			if (!conversationsSnapshot.empty) {
+				// Use existing conversation
+				conversationId = conversationsSnapshot.docs[0].id
+				const conversationDoc = conversationsSnapshot.docs[0]
+				const conversationData = conversationDoc.data()
+
+				// Update conversation
+				await updateDoc(doc(db, "conversations", conversationId), {
+					lastMessage: lastMessage,
+					lastMessageAt: serverTimestamp(),
+					guestUnreadCount: (conversationData.guestUnreadCount || 0) + 1,
+				})
+			} else {
+				// Create new conversation
+				const guestDoc = await getDoc(doc(db, "users", booking.guestId))
+				const guestData = guestDoc.exists() ? guestDoc.data() : {}
+
+				const conversationData = {
+					guestId: booking.guestId,
+					guestName: booking.guestName || guestData.displayName || "Guest",
+					guestEmail: booking.guestEmail || guestData.email || "",
+					hostId: currentUser.uid,
+					hostName: displayName,
+					hostEmail: userEmail,
+					propertyId: propertyId,
+					propertyTitle: property.title,
+					lastMessage: lastMessage,
+					lastMessageAt: serverTimestamp(),
+					createdAt: serverTimestamp(),
+					guestUnreadCount: 1,
+					hostUnreadCount: 0,
+				}
+				const conversationRef = await addDoc(
+					collection(db, "conversations"),
+					conversationData
+				)
+				conversationId = conversationRef.id
+			}
+
+			// Add message to messages collection
+			const messageData = {
+				conversationId,
+				senderId: currentUser.uid,
+				senderName: displayName,
+				senderType: "host",
+				recipientId: booking.guestId,
+				recipientName: booking.guestName || "Guest",
+				recipientType: "guest",
+				subject: messageSubject,
+				body: messageBody,
+				propertyId: propertyId,
+				propertyTitle: property.title,
+				read: false,
+				createdAt: serverTimestamp(),
+			}
+
+			await addDoc(collection(db, "messages"), messageData)
+			console.log(`[DeleteProperty] Message sent to guest ${booking.guestId}`)
+		} catch (e) {
+			console.error(`[DeleteProperty] Failed to send message:`, e)
+		}
+	}
+
+	// Delete property and refund all upcoming bookings
+	const handleDeleteProperty = async () => {
+		const confirmed = window.confirm(
+			`Are you sure you want to delete "${property.title}"? This action cannot be undone. All upcoming bookings will be cancelled and fully refunded to guests.`
+		)
+
+		if (!confirmed) return
+
+		setIsDeletingProperty(true)
+		try {
+			// Find all active bookings for this property (pending, confirmed, cancellation_requested)
+			// Exclude cancelled and completed bookings
+			const bookingsRef = collection(db, "bookings")
+			const bookingsQuery = query(
+				bookingsRef,
+				where("propertyId", "==", propertyId)
+			)
+			const bookingsSnapshot = await getDocs(bookingsQuery)
+
+			const activeBookings = []
+			bookingsSnapshot.forEach((doc) => {
+				const booking = { id: doc.id, ...doc.data() }
+				const status = booking.status || "pending"
+				// Include pending, confirmed, and cancellation_requested bookings
+				if (
+					status === "pending" ||
+					status === "confirmed" ||
+					status === "cancellation_requested"
+				) {
+					activeBookings.push(booking)
+				}
+			})
+
+			console.log(`[DeleteProperty] Found ${activeBookings.length} active bookings to refund`)
+
+			// Process refunds for each active booking
+			for (const booking of activeBookings) {
+				try {
+					const totalAmount = booking.pricing?.total || 0
+					const refundAmount = totalAmount // Full refund for property deletion
+
+					if (refundAmount > 0 && booking.guestId) {
+						// Get guest's current wallet balance
+						const guestRef = doc(db, "users", booking.guestId)
+						const guestDoc = await getDoc(guestRef)
+
+						if (guestDoc.exists()) {
+							const guestData = guestDoc.data()
+							const guestCurrentBalance = guestData?.walletBalance || 0
+							const guestNewBalance = guestCurrentBalance + refundAmount
+
+							// Update guest wallet
+							await updateDoc(guestRef, {
+								walletBalance: guestNewBalance,
+							})
+
+							// Add transaction to guest's transaction history
+							await addDoc(collection(db, "walletTransactions"), {
+								userId: booking.guestId,
+								type: "refund",
+								amount: refundAmount,
+								propertyTitle: property.title,
+								propertyId: propertyId,
+								bookingId: booking.id,
+								balanceBefore: guestCurrentBalance,
+								balanceAfter: guestNewBalance,
+								status: "completed",
+								description: `Full refund for property deletion: ${property.title}`,
+								createdAt: serverTimestamp(),
+							})
+
+							console.log(
+								`[DeleteProperty] Refunded ₱${refundAmount.toLocaleString()} to guest ${booking.guestId}`
+							)
+						}
+
+						// Decrease host's wallet balance
+						const hostId = property.hostId || currentUser.uid
+						const hostRef = doc(db, "users", hostId)
+						const hostDoc = await getDoc(hostRef)
+
+						if (hostDoc.exists()) {
+							const hostData = hostDoc.data()
+							const hostCurrentBalance = hostData?.walletBalance || 0
+							const hostNewBalance = Math.max(0, hostCurrentBalance - refundAmount)
+
+							// Update host wallet
+							await updateDoc(hostRef, {
+								walletBalance: hostNewBalance,
+							})
+
+							// Add transaction to host's transaction history
+							await addDoc(collection(db, "walletTransactions"), {
+								userId: hostId,
+								type: "refund_deduction",
+								amount: -refundAmount,
+								propertyTitle: property.title,
+								propertyId: propertyId,
+								bookingId: booking.id,
+								guestId: booking.guestId,
+								balanceBefore: hostCurrentBalance,
+								balanceAfter: hostNewBalance,
+								status: "completed",
+								description: `Refund deduction for property deletion: ${property.title}`,
+								createdAt: serverTimestamp(),
+							})
+
+							console.log(
+								`[DeleteProperty] Deducted ₱${refundAmount.toLocaleString()} from host wallet`
+							)
+						}
+					}
+
+					// Update booking status to cancelled
+					await updateDoc(doc(db, "bookings", booking.id), {
+						status: "cancelled",
+						cancelledBy: currentUser.uid,
+						cancelledAt: serverTimestamp(),
+						cancellationReason: "Property deleted by host",
+						refundAmount: refundAmount,
+						refundProcessedAt: refundAmount > 0 ? serverTimestamp() : null,
+					})
+
+					// Send message to guest about property deletion
+					await sendBookingMessageForDeletion(booking, refundAmount)
+
+					console.log(`[DeleteProperty] Cancelled booking ${booking.id}`)
+				} catch (bookingError) {
+					console.error(
+						`[DeleteProperty] Error processing booking ${booking.id}:`,
+						bookingError
+					)
+					// Continue with other bookings even if one fails
+				}
+			}
+
+			// Delete the property document
+			const propertyRef = doc(db, "properties", propertyId)
+			await deleteDoc(propertyRef)
+
+			console.log(`[DeleteProperty] Property ${propertyId} deleted successfully`)
+			toast.success(
+				`Property deleted successfully. ${activeBookings.length > 0 ? `${activeBookings.length} booking(s) cancelled and refunded.` : ""}`
+			)
+
+			// Navigate to host dashboard
+			navigate("/dashboardHost")
+		} catch (error) {
+			console.error("[DeleteProperty] Error deleting property:", error)
+			toast.error("Failed to delete property. Please try again.")
+		} finally {
+			setIsDeletingProperty(false)
+		}
+	}
+
 	if (loading) {
 		return (
 			<div className="property-details-loading">
@@ -2781,20 +3486,24 @@ export default function PropertyDetails() {
 							<FaFlag />
 						</button>
 					)}
-					<button
-						onClick={toggleFavorite}
-						className={`icon-button ${isFavorite ? "active" : ""}`}
-						title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
-					>
-						<FaHeart />
-					</button>
-					<button
-						onClick={toggleWishlist}
-						className={`icon-button ${isInWishlist ? "active" : ""}`}
-						title={isInWishlist ? "Remove from Wishlist" : "Add to Wishlist"}
-					>
-						<FaBookmark />
-					</button>
+					{!isHost && (
+						<>
+							<button
+								onClick={toggleFavorite}
+								className={`icon-button ${isFavorite ? "active" : ""}`}
+								title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+							>
+								<FaHeart />
+							</button>
+							<button
+								onClick={toggleWishlist}
+								className={`icon-button ${isInWishlist ? "active" : ""}`}
+								title={isInWishlist ? "Remove from Wishlist" : "Add to Wishlist"}
+							>
+								<FaBookmark />
+							</button>
+						</>
+					)}
 
 					{/* Messages */}
 					{currentUser && (
@@ -2804,6 +3513,22 @@ export default function PropertyDetails() {
 							onClick={() => navigate("/messages")}
 						>
 							<FaEnvelope />
+						</button>
+					)}
+
+					{/* Delete Property Button - Only visible to host */}
+					{isHost && currentUser && (
+						<button
+							className="icon-button delete-property-btn"
+							title="Delete Property"
+							onClick={handleDeleteProperty}
+							disabled={isDeletingProperty}
+							style={{
+								color: isDeletingProperty ? "#999" : "#dc3545",
+								cursor: isDeletingProperty ? "not-allowed" : "pointer",
+							}}
+						>
+							<FaTrash />
 						</button>
 					)}
 
@@ -3066,6 +3791,124 @@ export default function PropertyDetails() {
 						</section>
 					)}
 
+					{/* Property Coupons */}
+					{propertyCoupons.length > 0 && (
+						<section className="coupons-section" style={{ marginTop: "3rem", marginBottom: "3rem" }}>
+							<h2>Special Offers</h2>
+							<div className="coupons-grid" style={{ 
+								display: "grid", 
+								gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", 
+								gap: "1rem",
+								marginTop: "1rem"
+							}}>
+								{propertyCoupons.map((coupon) => {
+									const discountDisplay = coupon.discountType === "percentage" || coupon.discountType === "percent"
+										? `${coupon.discountValue || coupon.discount || 0}%`
+										: `₱${(coupon.discountValue || coupon.discount || 0).toLocaleString()}`
+									
+									const validFrom = coupon.validFrom ? new Date(coupon.validFrom).toLocaleDateString("en-US", {
+										month: "short",
+										day: "numeric",
+										year: "numeric"
+									}) : null
+									
+									const validUntil = coupon.validUntil ? new Date(coupon.validUntil).toLocaleDateString("en-US", {
+										month: "short",
+										day: "numeric",
+										year: "numeric"
+									}) : null
+
+									return (
+										<div 
+											key={coupon.id} 
+											className="coupon-card"
+											style={{
+												border: "2px solid var(--primary)",
+												borderRadius: "12px",
+												padding: "1.5rem",
+												background: "linear-gradient(135deg, rgba(97, 191, 156, 0.05) 0%, rgba(97, 191, 156, 0.02) 100%)",
+												position: "relative",
+												overflow: "hidden"
+											}}
+										>
+											<div style={{
+												position: "absolute",
+												top: "0.5rem",
+												right: "0.5rem",
+												background: "var(--primary)",
+												color: "white",
+												padding: "0.5rem 1rem",
+												borderRadius: "20px",
+												fontSize: "1rem",
+												fontWeight: "700",
+												display: "flex",
+												alignItems: "center",
+												gap: "0.5rem"
+											}}>
+												<FaGift style={{ fontSize: "1rem", flexShrink: 0 }} />
+												<span>{coupon.code}</span>
+											</div>
+											
+											<div style={{ marginTop: "1.5rem" }}>
+												<div style={{
+													fontSize: "2rem",
+													fontWeight: "700",
+													color: "var(--primary)",
+													marginBottom: "0.5rem"
+												}}>
+													{discountDisplay} OFF
+												</div>
+												
+												{coupon.description && (
+													<p style={{
+														fontSize: "0.9rem",
+														color: "#666",
+														marginBottom: "1rem",
+														lineHeight: "1.5"
+													}}>
+														{coupon.description}
+													</p>
+												)}
+												
+												{(validFrom || validUntil) && (
+													<div style={{
+														fontSize: "0.85rem",
+														color: "#999",
+														marginTop: "1rem",
+														paddingTop: "1rem",
+														borderTop: "1px solid #e0e0e0"
+													}}>
+														{validFrom && validUntil ? (
+															<>
+																<FaCalendarAlt style={{ marginRight: "0.5rem" }} />
+																Valid: {validFrom} - {validUntil}
+															</>
+														) : validUntil ? (
+															<>
+																<FaCalendarAlt style={{ marginRight: "0.5rem" }} />
+																Valid until: {validUntil}
+															</>
+														) : null}
+													</div>
+												)}
+												
+												{coupon.minPurchase > 0 && (
+													<div style={{
+														fontSize: "0.85rem",
+														color: "#999",
+														marginTop: "0.5rem"
+													}}>
+														Minimum purchase: ₱{coupon.minPurchase.toLocaleString()}
+													</div>
+												)}
+											</div>
+										</div>
+									)
+								})}
+							</div>
+						</section>
+					)}
+
 					{/* Booking Availability Info */}
 					{property.availability && (
 						<section className="booking-info-section">
@@ -3312,6 +4155,36 @@ export default function PropertyDetails() {
 						</div>
 					</section>
 
+					{/* Wishlists Section - Only visible to host and guests who created them */}
+					{propertyWishlists.length > 0 && (
+						<section className="wishlists-section">
+							<h2>
+								<FaBookmark /> Guest Wishlists
+							</h2>
+							<div className="wishlists-list">
+								{propertyWishlists.map((wishlist, index) => (
+									<div key={index} className="wishlist-item-card">
+										<div className="wishlist-item-header">
+											<div className="wishlist-guest-info">
+												<FaUser className="guest-icon" />
+												<span className="wishlist-guest-name">{wishlist.guestName}</span>
+											</div>
+											<button
+												className="view-wishlist-btn"
+												onClick={() => {
+													setSelectedWishlist(wishlist)
+													setShowWishlistModal(true)
+												}}
+											>
+												<FaEye /> View Wishlist
+											</button>
+										</div>
+									</div>
+								))}
+							</div>
+						</section>
+					)}
+
 					{/* Location */}
 					<section className="location-section">
 						<h2>
@@ -3335,14 +4208,16 @@ export default function PropertyDetails() {
 						<div className="host-management-card">
 							<div className="price-section">
 								<div className="price">
-									₱{property.pricing?.basePrice?.toLocaleString() || "N/A"}
+									{property.pricing?.basePrice ? formatCurrencyFull(property.pricing.basePrice) : "N/A"}
 									<span className="per-night">/ night</span>
 								</div>
-								<div className="rating-small">
-									<FaStar /> {property.rating?.toFixed(1) || "0.0"} (
-									{property.reviewsCount || 0}{" "}
-									{property.reviewsCount === 1 ? "review" : "reviews"})
-								</div>
+								{property.rating && property.reviewsCount > 0 && (
+									<div className="rating-small">
+										<FaStar style={{ color: "#FFD700", marginRight: "0.25rem" }} /> 
+										{property.rating.toFixed(1)} ({property.reviewsCount}{" "}
+										{property.reviewsCount === 1 ? "review" : "reviews"})
+									</div>
+								)}
 							</div>
 
 							{/* Property Promos Section */}
@@ -3459,16 +4334,24 @@ export default function PropertyDetails() {
 										} else {
 											return (
 												<>
-													₱{property.pricing?.basePrice?.toLocaleString() || "N/A"}
+													{property.pricing?.basePrice ? formatCurrencyFull(property.pricing.basePrice) : "N/A"}
 													<span className="per-night">/ night</span>
 												</>
 											)
 										}
 									})()}
 								</div>
-								{property.rating && (
-									<div className="rating-small">
-										<FaStar /> {property.rating} ({property.reviewsCount || 0})
+								{property.rating && property.reviewsCount > 0 && (
+									<div className="rating-small" style={{
+										display: "flex",
+										alignItems: "center",
+										gap: "0.25rem",
+										fontSize: "0.9rem",
+										color: "#333"
+									}}>
+										<FaStar style={{ color: "#FFD700", fontSize: "0.9rem" }} /> 
+										<span>{property.rating.toFixed(1)}</span>
+										<span style={{ color: "#666" }}>({property.reviewsCount})</span>
 									</div>
 								)}
 							</div>
@@ -3744,11 +4627,11 @@ export default function PropertyDetails() {
 											{prices.nights > 0 && (
 												<div className="breakdown-item">
 													<span>
-														₱{prices.basePrice.toLocaleString()} x{" "}
+														{formatCurrencyFull(prices.basePrice)} x{" "}
 														{prices.nights}{" "}
 														{prices.nights === 1 ? "night" : "nights"}
 													</span>
-													<span>₱{prices.subtotal.toLocaleString()}</span>
+													<span>{formatCurrencyFull(prices.subtotal)}</span>
 												</div>
 											)}
 											<div className="breakdown-item">
@@ -4001,6 +4884,410 @@ export default function PropertyDetails() {
 						</div>
 
 						<div className="manage-promos-body">
+							{/* Create New Promo Section */}
+							<div className="create-promo-section" style={{ marginBottom: "2rem" }}>
+								{!showCreatePromoForm ? (
+									<button
+										className="create-promo-btn"
+										onClick={() => setShowCreatePromoForm(true)}
+										style={{
+											display: "flex",
+											alignItems: "center",
+											gap: "0.5rem",
+											padding: "0.75rem 1.5rem",
+											background: "var(--primary)",
+											color: "white",
+											border: "none",
+											borderRadius: "8px",
+											fontSize: "1rem",
+											fontWeight: 600,
+											cursor: "pointer",
+											transition: "all 0.2s ease",
+										}}
+										onMouseEnter={(e) => {
+											e.target.style.background = "#5fa887"
+											e.target.style.transform = "translateY(-2px)"
+										}}
+										onMouseLeave={(e) => {
+											e.target.style.background = "var(--primary)"
+											e.target.style.transform = "translateY(0)"
+										}}
+									>
+										<FaPlus /> Create New Promo
+									</button>
+								) : (
+									<div className="create-promo-form" style={{
+										padding: "1.5rem",
+										background: "#f9f9f9",
+										borderRadius: "12px",
+										border: "2px solid var(--primary)",
+									}}>
+										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+											<h3 style={{ margin: 0 }}>Create New Promo</h3>
+											<button
+												type="button"
+												onClick={() => {
+													setShowCreatePromoForm(false)
+													setNewCoupon({
+														code: "",
+														description: "",
+														discountType: "percentage",
+														discountValue: 0,
+														minPurchase: 0,
+														maxDiscount: 0,
+														usageLimit: 0,
+														usagePerUser: 1,
+														validFrom: "",
+														validUntil: "",
+														isActive: true,
+													})
+												}}
+												style={{
+													background: "transparent",
+													border: "none",
+													cursor: "pointer",
+													fontSize: "1.25rem",
+													color: "#666",
+												}}
+											>
+												<FaTimes />
+											</button>
+										</div>
+										
+										<div className="form-group" style={{ marginBottom: "1rem" }}>
+											<label>Coupon Code *</label>
+											<input
+												type="text"
+												placeholder="e.g., SUMMER2024"
+												value={newCoupon.code}
+												onChange={(e) =>
+													setNewCoupon({
+														...newCoupon,
+														code: e.target.value.toUpperCase(),
+													})
+												}
+												maxLength={20}
+												style={{ textTransform: "uppercase" }}
+											/>
+										</div>
+										
+										<div className="form-group" style={{ marginBottom: "1rem" }}>
+											<label>Description *</label>
+											<textarea
+												placeholder="Describe what this coupon offers..."
+												value={newCoupon.description}
+												onChange={(e) =>
+													setNewCoupon({
+														...newCoupon,
+														description: e.target.value,
+													})
+												}
+												rows={3}
+											/>
+										</div>
+										
+										<div className="form-group" style={{ marginBottom: "1rem" }}>
+											<label>Discount Type</label>
+											<div className="radio-group" style={{ display: "flex", gap: "1rem" }}>
+												<label className="radio-label" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+													<input
+														type="radio"
+														name="newDiscountType"
+														value="percentage"
+														checked={newCoupon.discountType === "percentage"}
+														onChange={(e) =>
+															setNewCoupon({
+																...newCoupon,
+																discountType: e.target.value,
+															})
+														}
+													/>
+													Percentage (%)
+												</label>
+												<label className="radio-label" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+													<input
+														type="radio"
+														name="newDiscountType"
+														value="fixed"
+														checked={newCoupon.discountType === "fixed"}
+														onChange={(e) =>
+															setNewCoupon({
+																...newCoupon,
+																discountType: e.target.value,
+															})
+														}
+													/>
+													Fixed Amount (₱)
+												</label>
+											</div>
+										</div>
+										
+										<div className="form-group" style={{ marginBottom: "1rem" }}>
+											<label>
+												Discount Value {newCoupon.discountType === "percentage" ? "(%)" : "(₱)"} *
+											</label>
+											<NumberStepper
+												value={newCoupon.discountValue}
+												onChange={(e) =>
+													setNewCoupon({
+														...newCoupon,
+														discountValue: e.target.value,
+													})
+												}
+												min={0}
+												max={newCoupon.discountType === "percentage" ? 100 : undefined}
+												step={newCoupon.discountType === "percentage" ? 1 : 10}
+												placeholder={newCoupon.discountType === "percentage" ? "e.g., 20" : "e.g., 500"}
+											/>
+										</div>
+										
+										<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+											<div className="form-group">
+												<label>Minimum Purchase (₱)</label>
+												<NumberStepper
+													value={newCoupon.minPurchase}
+													onChange={(e) =>
+														setNewCoupon({
+															...newCoupon,
+															minPurchase: e.target.value,
+														})
+													}
+													min={0}
+													step={100}
+													placeholder="0"
+												/>
+												<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
+													Minimum booking amount required
+												</small>
+											</div>
+											<div className="form-group">
+												<label>Maximum Discount (₱)</label>
+												<NumberStepper
+													value={newCoupon.maxDiscount}
+													onChange={(e) =>
+														setNewCoupon({
+															...newCoupon,
+															maxDiscount: e.target.value,
+														})
+													}
+													min={0}
+													step={100}
+													placeholder="0"
+												/>
+												<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
+													Max discount cap (0 = no limit)
+												</small>
+											</div>
+										</div>
+										
+										<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+											<div className="form-group">
+												<label>Usage Limit</label>
+												<NumberStepper
+													value={newCoupon.usageLimit}
+													onChange={(e) =>
+														setNewCoupon({
+															...newCoupon,
+															usageLimit: e.target.value,
+														})
+													}
+													min={0}
+													placeholder="0"
+												/>
+												<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
+													Total times this coupon can be used
+												</small>
+												<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#999", fontStyle: "italic" }}>
+													(0 for unlimited)
+												</small>
+											</div>
+											<div className="form-group">
+												<label>Usage Per User</label>
+												<NumberStepper
+													value={newCoupon.usagePerUser}
+													onChange={(e) =>
+														setNewCoupon({
+															...newCoupon,
+															usagePerUser: e.target.value || 1,
+														})
+													}
+													min={1}
+													placeholder="1"
+												/>
+												<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
+													How many times each user can use it
+												</small>
+												<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#999", fontStyle: "italic" }}>
+													(0 for unlimited)
+												</small>
+											</div>
+										</div>
+										
+										<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+											<div className="form-group">
+												<label>Valid From</label>
+												<button
+													type="button"
+													onClick={() => openCouponDatePicker(true)}
+													style={{
+														width: "100%",
+														padding: "0.75rem",
+														border: "1px solid #b0b0b0",
+														borderRadius: "6px",
+														fontSize: "0.9rem",
+														background: "white",
+														cursor: "pointer",
+														display: "flex",
+														alignItems: "center",
+														justifyContent: "center",
+														gap: "0.5rem",
+														transition: "all 0.2s ease",
+													}}
+													onMouseEnter={(e) => {
+														e.target.style.borderColor = "var(--primary)"
+														e.target.style.background = "rgba(97, 191, 156, 0.05)"
+													}}
+													onMouseLeave={(e) => {
+														e.target.style.borderColor = "#b0b0b0"
+														e.target.style.background = "white"
+													}}
+												>
+													<FaCalendarAlt />
+													<span>
+														{newCoupon.validFrom
+															? new Date(newCoupon.validFrom).toLocaleDateString("en-US", {
+																	month: "short",
+																	day: "numeric",
+																	year: "numeric",
+															  })
+															: "Select date"}
+													</span>
+												</button>
+											</div>
+											<div className="form-group">
+												<label>Valid Until</label>
+												<button
+													type="button"
+													onClick={() => openCouponDatePicker(false)}
+													style={{
+														width: "100%",
+														padding: "0.75rem",
+														border: "1px solid #b0b0b0",
+														borderRadius: "6px",
+														fontSize: "0.9rem",
+														background: "white",
+														cursor: "pointer",
+														display: "flex",
+														alignItems: "center",
+														justifyContent: "center",
+														gap: "0.5rem",
+														transition: "all 0.2s ease",
+													}}
+													onMouseEnter={(e) => {
+														e.target.style.borderColor = "var(--primary)"
+														e.target.style.background = "rgba(97, 191, 156, 0.05)"
+													}}
+													onMouseLeave={(e) => {
+														e.target.style.borderColor = "#b0b0b0"
+														e.target.style.background = "white"
+													}}
+												>
+													<FaCalendarAlt />
+													<span>
+														{newCoupon.validUntil
+															? new Date(newCoupon.validUntil).toLocaleDateString("en-US", {
+																	month: "short",
+																	day: "numeric",
+																	year: "numeric",
+															  })
+															: "Select date"}
+													</span>
+												</button>
+											</div>
+										</div>
+										
+										<div className="form-group" style={{ marginBottom: "1rem" }}>
+											<label style={{ 
+												display: "flex", 
+												alignItems: "center", 
+												gap: "0.5rem",
+												cursor: "pointer",
+												userSelect: "none"
+											}}>
+												<input
+													type="checkbox"
+													checked={newCoupon.isActive}
+													onChange={(e) =>
+														setNewCoupon({
+															...newCoupon,
+															isActive: e.target.checked,
+														})
+													}
+													style={{
+														width: "18px",
+														height: "18px",
+														cursor: "pointer",
+														margin: 0,
+														flexShrink: 0,
+													}}
+												/>
+												<span style={{ lineHeight: "1.5" }}>Active (Coupon will be available for use)</span>
+											</label>
+										</div>
+										
+										<div style={{ display: "flex", gap: "1rem" }}>
+											<button
+												type="button"
+												onClick={handleCreatePromo}
+												disabled={isCreatingPromo || !newCoupon.code.trim() || !newCoupon.description.trim() || !newCoupon.discountValue}
+												style={{
+													padding: "0.75rem 2rem",
+													background: isCreatingPromo || !newCoupon.code.trim() || !newCoupon.description.trim() || !newCoupon.discountValue ? "#ccc" : "var(--primary)",
+													color: "white",
+													border: "none",
+													borderRadius: "8px",
+													fontSize: "1rem",
+													fontWeight: 600,
+													cursor: isCreatingPromo || !newCoupon.code.trim() || !newCoupon.description.trim() || !newCoupon.discountValue ? "not-allowed" : "pointer",
+												}}
+											>
+												{isCreatingPromo ? "Creating..." : "Create Promo"}
+											</button>
+											<button
+												type="button"
+												onClick={() => {
+													setShowCreatePromoForm(false)
+													setNewCoupon({
+														code: "",
+														description: "",
+														discountType: "percentage",
+														discountValue: 0,
+														minPurchase: 0,
+														maxDiscount: 0,
+														usageLimit: 0,
+														usagePerUser: 1,
+														validFrom: "",
+														validUntil: "",
+														isActive: true,
+													})
+												}}
+												style={{
+													padding: "0.75rem 2rem",
+													background: "transparent",
+													color: "#666",
+													border: "1px solid #ccc",
+													borderRadius: "8px",
+													fontSize: "1rem",
+													cursor: "pointer",
+												}}
+											>
+												Cancel
+											</button>
+										</div>
+									</div>
+								)}
+							</div>
+							
 							{/* Existing Promos List */}
 							<div className="existing-promos-section">
 								<h3>Existing Promos ({propertyPromos.length})</h3>
@@ -4312,6 +5599,140 @@ export default function PropertyDetails() {
 										No promos created yet. Create one above!
 									</p>
 								)}
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Coupon Date Picker Modal */}
+			{showCouponDateModal && (
+				<div
+					className="date-picker-modal-overlay"
+					onClick={() => setShowCouponDateModal(false)}
+				>
+					<div
+						className="date-picker-modal-content"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<button
+							className="close-date-modal"
+							onClick={() => setShowCouponDateModal(false)}
+						>
+							<FaTimes />
+						</button>
+						<h2>
+							<FaCalendarAlt /> Select Coupon Validity Dates
+						</h2>
+						<div className="modal-date-info">
+							<div className="selected-dates-display">
+								{newCoupon.validFrom && (
+									<div className="selected-date-item check-in">
+										<span className="date-type">Valid From:</span>
+										<span className="date-text">
+											{new Date(newCoupon.validFrom).toLocaleDateString("en-US", {
+												weekday: "short",
+												month: "short",
+												day: "numeric",
+												year: "numeric",
+											})}
+										</span>
+									</div>
+								)}
+								{newCoupon.validUntil && (
+									<div className="selected-date-item check-out">
+										<span className="date-type">Valid Until:</span>
+										<span className="date-text">
+											{new Date(newCoupon.validUntil).toLocaleDateString("en-US", {
+												weekday: "short",
+												month: "short",
+												day: "numeric",
+												year: "numeric",
+											})}
+										</span>
+									</div>
+								)}
+								{!newCoupon.validFrom && !newCoupon.validUntil && (
+									<p className="instruction-text">
+										{selectingValidFrom
+											? "Click on a date to select Valid From"
+											: "Click on a date to select Valid Until"}
+									</p>
+								)}
+							</div>
+						</div>
+
+						<div className="modal-calendar">
+							<div className="month-view">
+								<div className="month-header">
+									<button onClick={previousCouponMonth} className="month-nav-btn">
+										◀
+									</button>
+									<h3>
+										{couponCurrentMonth.toLocaleString("default", {
+											month: "long",
+											year: "numeric",
+										})}
+									</h3>
+									<button onClick={nextCouponMonth} className="month-nav-btn">
+										▶
+									</button>
+								</div>
+								<div className="calendar-days">
+									{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+										(day) => (
+											<div key={day} className="day-label">
+												{day}
+											</div>
+										)
+									)}
+									{generateCouponCalendarDays().map((dayData, index) =>
+										dayData ? (
+											<div
+												key={index}
+												className={`calendar-day ${
+													dayData.isPast ? "past" : "available"
+												} ${
+													dayData.dateString === newCoupon.validFrom
+														? "selected-check-in"
+														: ""
+												} ${
+													dayData.dateString === newCoupon.validUntil
+														? "selected-check-out"
+														: ""
+												}`}
+												onClick={() => {
+													if (!dayData.isPast) {
+														handleCouponCalendarDayClick(dayData.dateString)
+													}
+												}}
+												title={dayData.isPast ? "Past date" : "Available"}
+											>
+												{dayData.day}
+											</div>
+										) : (
+											<div key={index} className="calendar-day empty"></div>
+										)
+									)}
+								</div>
+							</div>
+							<div className="calendar-legend">
+								<div className="legend-item">
+									<span className="legend-color available"></span>
+									Available
+								</div>
+								<div className="legend-item">
+									<span className="legend-color past"></span>
+									Past Date
+								</div>
+								<div className="legend-item">
+									<span className="legend-color selected-check-in"></span>
+									Valid From
+								</div>
+								<div className="legend-item">
+									<span className="legend-color selected-check-out"></span>
+									Valid Until
+								</div>
 							</div>
 						</div>
 					</div>
@@ -5014,6 +6435,138 @@ export default function PropertyDetails() {
 				property={property}
 				hostId={property?.hostId || property?.host?.hostId}
 			/>
+
+			{/* Wishlist View Modal */}
+			{showWishlistModal && selectedWishlist && (
+				<div
+					className="wishlist-view-modal-overlay"
+					onClick={() => setShowWishlistModal(false)}
+				>
+					<div
+						className="wishlist-view-modal-content"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="wishlist-modal-header">
+							<h2>
+								<FaBookmark style={{ color: "var(--primary)" }} /> Wishlist by {selectedWishlist.guestName}
+							</h2>
+							<button
+								className="close-modal-btn"
+								onClick={() => setShowWishlistModal(false)}
+							>
+								×
+							</button>
+						</div>
+
+						<div className="wishlist-view-body">
+							{/* Property Info */}
+							<div className="wishlist-property-header">
+								<img
+									src={property?.images?.[0] || housePlaceholder}
+									alt={property?.title}
+									className="wishlist-property-image"
+								/>
+								<div className="wishlist-property-info">
+									<h3>{property?.title}</h3>
+									{property?.location && (
+										<div className="wishlist-location">
+											<FaMapMarkerAlt />
+											<span>
+												{property.location.city}, {property.location.province}
+											</span>
+										</div>
+									)}
+								</div>
+							</div>
+
+							{/* Wishlist Details */}
+							<div className="wishlist-details-section">
+								<h4>Wishes</h4>
+								<div className="wishlist-details-grid">
+									{selectedWishlist.beds !== undefined && selectedWishlist.beds !== null && selectedWishlist.beds > 0 && (
+										<div className="wishlist-detail-item">
+											<FaBed className="wishlist-detail-icon" />
+											<div>
+												<span className="detail-label">Beds</span>
+												<span className="detail-value">{selectedWishlist.beds}</span>
+											</div>
+										</div>
+									)}
+									{selectedWishlist.bathrooms !== undefined && selectedWishlist.bathrooms !== null && selectedWishlist.bathrooms > 0 && (
+										<div className="wishlist-detail-item">
+											<FaBath className="wishlist-detail-icon" />
+											<div>
+												<span className="detail-label">Bathrooms</span>
+												<span className="detail-value">{selectedWishlist.bathrooms}</span>
+											</div>
+										</div>
+									)}
+									{selectedWishlist.bedrooms !== undefined && selectedWishlist.bedrooms !== null && selectedWishlist.bedrooms > 0 && (
+										<div className="wishlist-detail-item">
+											<FaHome className="wishlist-detail-icon" />
+											<div>
+												<span className="detail-label">Bedrooms</span>
+												<span className="detail-value">{selectedWishlist.bedrooms}</span>
+											</div>
+										</div>
+									)}
+									{selectedWishlist.guests !== undefined && selectedWishlist.guests !== null && selectedWishlist.guests > 0 && (
+										<div className="wishlist-detail-item">
+											<FaUsers className="wishlist-detail-icon" />
+											<div>
+												<span className="detail-label">Guests</span>
+												<span className="detail-value">{selectedWishlist.guests}</span>
+											</div>
+										</div>
+									)}
+									{selectedWishlist.parkingSpaces !== undefined && selectedWishlist.parkingSpaces !== null && selectedWishlist.parkingSpaces > 0 && (
+										<div className="wishlist-detail-item">
+											<FaParking className="wishlist-detail-icon" />
+											<div>
+												<span className="detail-label">Parking Spaces</span>
+												<span className="detail-value">{selectedWishlist.parkingSpaces}</span>
+											</div>
+										</div>
+									)}
+									{selectedWishlist.wifiSpeed !== undefined && selectedWishlist.wifiSpeed !== null && selectedWishlist.wifiSpeed > 0 && (
+										<div className="wishlist-detail-item">
+											<FaWifi className="wishlist-detail-icon" />
+											<div>
+												<span className="detail-label">Wi-Fi Speed</span>
+												<span className="detail-value">{selectedWishlist.wifiSpeed} Mbps</span>
+											</div>
+										</div>
+									)}
+								</div>
+
+								{selectedWishlist.breakfastIncluded && (
+									<div className="wishlist-offer-item">
+										<FaUtensils className="offer-icon" />
+										<span>Breakfast Included</span>
+									</div>
+								)}
+
+								{selectedWishlist.notes && (
+									<div className="wishlist-notes">
+										<h5>
+											<FaStickyNote /> Additional Notes
+										</h5>
+										<p>{selectedWishlist.notes}</p>
+									</div>
+								)}
+
+								{selectedWishlist.createdAt && (
+									<div className="wishlist-date">
+										<span>
+											Created: {new Date(selectedWishlist.createdAt).toLocaleDateString()}
+										</span>
+									</div>
+								)}
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
 
 			{/* Full Size Image Modal */}
 			{showFullSizeImage && (

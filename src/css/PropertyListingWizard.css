@@ -1,4 +1,16 @@
 /* Property Listing Wizard - Airbnb-like Design */
+
+/* Hide number input spinners */
+.number-input-no-spinner::-webkit-outer-spin-button,
+.number-input-no-spinner::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+.number-input-no-spinner {
+	-moz-appearance: textfield;
+}
+
 .listing-wizard-container {
 	min-height: 100vh;
 	background: #f7f7f7;

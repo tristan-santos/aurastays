@@ -20,6 +20,7 @@ import housePlaceholder from "../assets/housePlaceholder.png"
 import logoPlain from "../assets/logoPlain.png"
 import "../css/DashboardHost.css"
 import "../css/DashboardGuest.css"
+import { formatCurrencyFull } from "../utils/currencyFormatter"
 
 export default function HostAllListings() {
 	const navigate = useNavigate()
@@ -244,9 +245,9 @@ export default function HostAllListings() {
 
 	const formatPrice = (price, currency = "PHP") => {
 		if (currency === "PHP") {
-			return `₱${price.toLocaleString()}`
+			return formatCurrencyFull(price, "₱")
 		}
-		return `$${price.toLocaleString()}`
+		return formatCurrencyFull(price, "$")
 	}
 
 	// Calculate best voucher discount for a property (for listing cards)

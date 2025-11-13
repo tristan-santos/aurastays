@@ -21,6 +21,7 @@ import { toast } from "react-stacked-toast"
 import Wallet from "../components/Wallet"
 import Promos from "../components/Promos"
 import "../css/DashboardGuest.css"
+import { formatCurrency, formatCurrencyFull } from "../utils/currencyFormatter"
 import logoPlain from "../assets/logoPlain.png"
 import housePlaceholder from "../assets/housePlaceholder.png"
 import {
@@ -189,7 +190,7 @@ export default function DashboardGuest() {
 			const propertiesRef = collection(db, "properties")
 			const snapshot = await getDocs(propertiesRef)
 
-			const propertiesList = snapshot.docs
+			let propertiesList = snapshot.docs
 				.map((doc) => ({
 					id: doc.id,
 					...doc.data(),
@@ -213,8 +214,46 @@ export default function DashboardGuest() {
 					return true
 				})
 
+			// Dynamically calculate reviews count and rating for each property
+			const propertiesWithReviews = await Promise.all(
+				propertiesList.map(async (property) => {
+					try {
+						const reviewsQuery = query(
+							collection(db, "reviews"),
+							where("propertyId", "==", property.id),
+							where("status", "==", "approved")
+						)
+						const reviewsSnapshot = await getDocs(reviewsQuery)
+						const reviews = reviewsSnapshot.docs.map((doc) => doc.data())
+						
+						if (reviews.length > 0) {
+							const totalRating = reviews.reduce(
+								(sum, review) => sum + (review.rating || 0),
+								0
+							)
+							const averageRating = totalRating / reviews.length
+							
+							return {
+								...property,
+								rating: Math.round(averageRating * 10) / 10,
+								reviewsCount: reviews.length,
+							}
+						} else {
+							return {
+								...property,
+								rating: 0,
+								reviewsCount: 0,
+							}
+						}
+					} catch (error) {
+						console.error(`Error fetching reviews for property ${property.id}:`, error)
+						return property
+					}
+				})
+			)
+
 			// Sort properties: boosted first, then featured, then by rating
-			propertiesList.sort((a, b) => {
+			propertiesWithReviews.sort((a, b) => {
 				// Boosted properties first
 				if (a.boosted && !b.boosted) return -1
 				if (!a.boosted && b.boosted) return 1
@@ -229,10 +268,10 @@ export default function DashboardGuest() {
 				return ratingB - ratingA
 			})
 
-			setProperties(propertiesList)
+			setProperties(propertiesWithReviews)
 
 			// Get popular properties (high ratings and reviews)
-			const popular = propertiesList
+			const popular = propertiesWithReviews
 				.filter((p) => p.rating >= 4.8)
 				.sort((a, b) => {
 					// Boosted first in popular too
@@ -244,10 +283,10 @@ export default function DashboardGuest() {
 			setPopularProperties(popular)
 
 			// Set initial filtered properties (homes) - already sorted by boost/featured/rating
-			const homes = propertiesList.filter((p) => p.category === "home")
+			const homes = propertiesWithReviews.filter((p) => p.category === "home")
 			setFilteredProperties(homes)
 
-			console.log("✅ Fetched properties:", propertiesList.length)
+			console.log("✅ Fetched properties:", propertiesWithReviews.length)
 		} catch (error) {
 			console.error("Error fetching properties:", error)
 			toast.error("Failed to load properties")
@@ -290,10 +329,13 @@ export default function DashboardGuest() {
 					return checkOutDate < today
 				}).length
 
-				// Count upcoming trips
+				// Count upcoming trips (exclude cancelled bookings)
 				upcomingTrips = bookings.filter((booking) => {
 					const checkInDate = new Date(booking.checkInDate)
-					return checkInDate >= today
+					checkInDate.setHours(0, 0, 0, 0)
+					const status = booking.status || "pending"
+					// Exclude cancelled bookings from upcoming trips count
+					return checkInDate >= today && status !== "cancelled"
 				}).length
 			} catch (bookingError) {
 				console.log("Bookings collection may not exist yet:", bookingError)
@@ -545,9 +587,9 @@ const fetchUserWishes = async () => {
 
 	const formatPrice = (price, currency = "PHP") => {
 		if (currency === "PHP") {
-			return `₱${price.toLocaleString()}`
+			return formatCurrencyFull(price, "₱")
 		}
-		return `$${price.toLocaleString()}`
+		return formatCurrencyFull(price, "$")
 	}
 
 	// Calculate best voucher discount for a property (for listing cards)
@@ -680,12 +722,18 @@ const fetchUserWishes = async () => {
 
 			const upcoming = bookingsWithImages.filter((booking) => {
 				const checkInDate = new Date(booking.checkInDate)
-				return checkInDate >= today
+				checkInDate.setHours(0, 0, 0, 0)
+				const status = booking.status || "pending"
+				// Exclude cancelled bookings from upcoming trips
+				return checkInDate >= today && status !== "cancelled"
 			})
 
 			const previous = bookingsWithImages.filter((booking) => {
 				const checkOutDate = new Date(booking.checkOutDate)
-				return checkOutDate < today
+				checkOutDate.setHours(0, 0, 0, 0)
+				const status = booking.status || "pending"
+				// Only include completed bookings (not cancelled) in previous
+				return checkOutDate < today && status !== "cancelled" && status !== "cancellation_requested"
 			})
 
 			// Deduplicate previous bookings by propertyId - keep only one booking per property
@@ -1071,15 +1119,29 @@ const fetchUserWishes = async () => {
 
 								<button
 									className="dropdown-item"
-									onClick={() => navigate("/profile")}
+									onClick={() => {
+										navigate("/profile")
+										setIsMenuOpen(false)
+									}}
 								>
 									<FaUser />
 									<span>My Profile</span>
+								</button>
+								<button
+									className="dropdown-item"
+									onClick={() => {
+										navigate("/bookings")
+										setIsMenuOpen(false)
+									}}
+								>
+									<FaCalendarAlt />
+									<span>Bookings</span>
 								</button>
 					<button
 						className="dropdown-item"
 						onClick={() => {
 							handleShowWishlist()
+							setIsMenuOpen(false)
 						}}
 					>
 						<FaBookmark />
@@ -1177,7 +1239,7 @@ const fetchUserWishes = async () => {
 						<div className="stat-icon">💳</div>
 						<div className="stat-info">
 							<div className="stat-number">
-								₱{userStats.eWallet.toLocaleString()}
+								{formatCurrency(userStats.eWallet)}
 							</div>
 							<div className="quick-stat-label">E-Wallet</div>
 						</div>
@@ -1940,15 +2002,25 @@ const fetchUserWishes = async () => {
 													backgroundImage: `url(${
 														booking.propertyImage || housePlaceholder
 													})`,
+													cursor: booking.status === "cancelled" || booking.status === "cancellation_requested" ? "default" : "pointer",
 												}}
-												onClick={() =>
-													navigate(`/property/${booking.propertyId}`)
-												}
+												onClick={() => {
+													// Don't navigate if booking is cancelled
+													if (booking.status !== "cancelled" && booking.status !== "cancellation_requested") {
+														navigate(`/property/${booking.propertyId}`)
+													}
+												}}
 											>
 												<span
-													className={`booking-status-badge ${booking.status}`}
+													className={`booking-status-badge ${
+														bookingsModalType === "previous" && booking.status === "confirmed"
+															? "completed"
+															: booking.status
+													}`}
 												>
-													{booking.status}
+													{bookingsModalType === "previous" && booking.status === "confirmed"
+														? "Completed"
+														: booking.status}
 												</span>
 											</div>
 											<div className="booking-info">
@@ -1981,54 +2053,45 @@ const fetchUserWishes = async () => {
 														₱{booking.pricing?.total?.toLocaleString()}
 													</strong>
 												</div>
+											</div>
 
-												{/* Review Section for Previous Bookings */}
-												{bookingsModalType === "previous" && (
-													<>
-														{booking.hasReview && booking.review ? (
-															<div className="booking-review-display">
-																<div className="review-header">
-																	<span className="review-rating">
-																		⭐ {booking.review.rating.toFixed(1)}
-																	</span>
-																	<span className="review-date">
-																		{new Date(
-																			booking.review.createdAt
-																		).toLocaleDateString()}
-																	</span>
-																</div>
-																{booking.review.comment && (
-																	<p className="review-comment">
-																		"{booking.review.comment}"
-																	</p>
-																)}
-																<button
-																	className="view-review-btn"
-																	onClick={() => handleOpenReviewModal(booking)}
-																>
-																	View Full Review
-																</button>
+											{/* Review Section for Previous Bookings - Outside booking-info */}
+											{bookingsModalType === "previous" && (
+												<>
+													{booking.hasReview && booking.review ? (
+														<div className="booking-review-display">
+															<div className="review-header">
+																<span className="review-rating">
+																	⭐ {booking.review.rating.toFixed(1)}
+																</span>
+																<span className="review-date">
+																	{new Date(
+																		booking.review.createdAt
+																	).toLocaleDateString()}
+																</span>
 															</div>
-														) : (
+															{booking.review.comment && (
+																<p className="review-comment">
+																	"{booking.review.comment}"
+																</p>
+															)}
 															<button
-																className="write-review-btn"
+																className="view-review-btn"
 																onClick={() => handleOpenReviewModal(booking)}
 															>
-																✍️ Write Review
+																View Full Review
 															</button>
-														)}
-													</>
-												)}
-
-												<button
-													className="view-property-btn"
-													onClick={() =>
-														navigate(`/property/${booking.propertyId}`)
-													}
-												>
-													View Property
-												</button>
-											</div>
+														</div>
+													) : (
+														<button
+															className="write-review-btn"
+															onClick={() => handleOpenReviewModal(booking)}
+														>
+															✍️ Write Review
+														</button>
+													)}
+												</>
+											)}
 										</div>
 									))}
 								</div>
@@ -2145,14 +2208,14 @@ const fetchUserWishes = async () => {
 						className="modal-content review-modal-content"
 						onClick={(e) => e.stopPropagation()}
 					>
-						<div className="modal-header">
-							<h2>
+						<div className="review-modal-header">
+							<h2 className="review-modal-title">
 								{selectedBookingForReview.hasReview
 									? "📝 Your Review"
 									: "✍️ Write a Review"}
 							</h2>
 							<button
-								className="close-modal-btn"
+								className="close-review-modal-btn"
 								onClick={() => setShowReviewModal(false)}
 							>
 								×
@@ -2428,7 +2491,7 @@ const fetchUserWishes = async () => {
 								<div className="wishlist-details-grid">
 									{selectedWishlistToView.beds !== undefined && selectedWishlistToView.beds !== null && (
 										<div className="wishlist-detail-item">
-											<FaBed className="detail-icon" />
+											<FaBed className="wishlist-detail-icon" />
 											<div>
 												<span className="detail-label">Beds</span>
 												<span className="detail-value">{selectedWishlistToView.beds}</span>
@@ -2437,7 +2500,7 @@ const fetchUserWishes = async () => {
 									)}
 									{selectedWishlistToView.bathrooms !== undefined && selectedWishlistToView.bathrooms !== null && (
 										<div className="wishlist-detail-item">
-											<FaBath className="detail-icon" />
+											<FaBath className="wishlist-detail-icon" />
 											<div>
 												<span className="detail-label">Bathrooms</span>
 												<span className="detail-value">{selectedWishlistToView.bathrooms}</span>
@@ -2446,7 +2509,7 @@ const fetchUserWishes = async () => {
 									)}
 									{selectedWishlistToView.bedrooms !== undefined && selectedWishlistToView.bedrooms !== null && (
 										<div className="wishlist-detail-item">
-											<FaHome className="detail-icon" />
+											<FaHome className="wishlist-detail-icon" />
 											<div>
 												<span className="detail-label">Bedrooms</span>
 												<span className="detail-value">{selectedWishlistToView.bedrooms}</span>
@@ -2455,7 +2518,7 @@ const fetchUserWishes = async () => {
 									)}
 									{selectedWishlistToView.guests !== undefined && selectedWishlistToView.guests !== null && (
 										<div className="wishlist-detail-item">
-											<FaUsers className="detail-icon" />
+											<FaUsers className="wishlist-detail-icon" />
 											<div>
 												<span className="detail-label">Guests</span>
 												<span className="detail-value">{selectedWishlistToView.guests}</span>
@@ -2464,7 +2527,7 @@ const fetchUserWishes = async () => {
 									)}
 									{selectedWishlistToView.parkingSpaces !== undefined && selectedWishlistToView.parkingSpaces !== null && (
 										<div className="wishlist-detail-item">
-											<FaParking className="detail-icon" />
+											<FaParking className="wishlist-detail-icon" />
 											<div>
 												<span className="detail-label">Parking Spaces</span>
 												<span className="detail-value">{selectedWishlistToView.parkingSpaces}</span>
@@ -2473,7 +2536,7 @@ const fetchUserWishes = async () => {
 									)}
 									{selectedWishlistToView.wifiSpeed !== undefined && selectedWishlistToView.wifiSpeed !== null && selectedWishlistToView.wifiSpeed > 0 && (
 										<div className="wishlist-detail-item">
-											<FaWifi className="detail-icon" />
+											<FaWifi className="wishlist-detail-icon" />
 											<div>
 												<span className="detail-label">Wi-Fi Speed</span>
 												<span className="detail-value">{selectedWishlistToView.wifiSpeed} Mbps</span>

@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore"
 import { toast } from "react-stacked-toast"
 import "../css/Search.css"
+import { formatCurrencyFull } from "../utils/currencyFormatter"
 import logoPlain from "../assets/logoPlain.png"
 import housePlaceholder from "../assets/housePlaceholder.png"
 import {
@@ -535,9 +536,9 @@ export default function Search() {
 
 	const formatPrice = (price, currency = "PHP") => {
 		if (currency === "PHP") {
-			return `₱${price.toLocaleString()}`
+			return formatCurrencyFull(price, "₱")
 		}
-		return `$${price.toLocaleString()}`
+		return formatCurrencyFull(price, "$")
 	}
 
 	// Calculate best voucher discount for a property (for listing cards)

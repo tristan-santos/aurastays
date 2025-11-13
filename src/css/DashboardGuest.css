@@ -3135,6 +3135,45 @@
 	animation: modalSlideIn 0.3s ease-out;
 }
 
+.review-modal-header {
+	padding: 24px;
+	border-bottom: 1px solid #e0e0e0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	background: linear-gradient(135deg, var(--primary), var(--secondary));
+	color: white;
+	border-radius: 20px 20px 0 0;
+}
+
+.review-modal-title {
+	margin: 0;
+	font-size: 24px;
+	font-weight: 600;
+	color: white;
+}
+
+.close-review-modal-btn {
+	background: rgba(255, 255, 255, 0.2);
+	border: 1px solid rgba(255, 255, 255, 0.3);
+	border-radius: 50%;
+	width: 40px;
+	height: 40px;
+	color: white;
+	font-size: 24px;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: all 0.3s ease;
+}
+
+.close-review-modal-btn:hover {
+	background: rgba(255, 255, 255, 0.3);
+	transform: rotate(90deg);
+	border-color: rgba(255, 255, 255, 0.5);
+}
+
 .review-modal-body {
 	padding: 24px;
 	max-height: 70vh;
@@ -3441,6 +3480,8 @@
 	cursor: pointer;
 	transition: all 0.3s ease;
 	margin-bottom: 8px;
+	display: block;
+	box-sizing: border-box;
 }
 
 .view-review-btn:hover,
@@ -3603,7 +3644,7 @@
 	border: 1px solid #e9ecef;
 }
 
-.detail-icon {
+.wishlist-detail-icon {
 	font-size: 1.5rem;
 	color: var(--primary);
 	flex-shrink: 0;

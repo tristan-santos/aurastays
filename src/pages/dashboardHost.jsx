@@ -69,6 +69,7 @@ import logoPlain from "../assets/logoPlain.png"
 import housePlaceholder from "../assets/housePlaceholder.png"
 import "../css/DashboardHost.css"
 import "../css/DashboardGuest.css"
+import { formatCurrency, formatCurrencyFull } from "../utils/currencyFormatter"
 
 export default function DashboardHost() {
 	const { currentUser, userData, logout } = useAuth()
@@ -89,6 +90,7 @@ export default function DashboardHost() {
 	const [theme, setTheme] = useState(localStorage.getItem("theme") || "light")
 	const [todayBookings, setTodayBookings] = useState([])
 	const [upcomingBookings, setUpcomingBookings] = useState([])
+	const [allUpcomingBookings, setAllUpcomingBookings] = useState([]) // Store all upcoming for modal
 	const [walletBalance, setWalletBalance] = useState(0)
 	const [activePromos, setActivePromos] = useState([])
 	const [adminVouchers, setAdminVouchers] = useState([])
@@ -484,32 +486,52 @@ export default function DashboardHost() {
 			}
 
 			// Calculate stats with safe defaults
-			const totalRevenue = bookingsList.reduce(
-				(sum, booking) => sum + (booking.pricing?.total || 0),
-				0
+			// Filter out cancelled bookings for revenue calculation
+			const activeBookingsList = bookingsList.filter(
+				(b) => b.status !== "cancelled"
 			)
+			
+			// Calculate total revenue: sum of all non-cancelled bookings minus refunds
+			const totalRevenue = activeBookingsList.reduce((sum, booking) => {
+				const bookingRevenue = booking.pricing?.total || 0
+				const refundAmount = booking.refundAmount || 0
+				return sum + (bookingRevenue - refundAmount)
+			}, 0)
+			
 			const activeBookings = bookingsList.filter(
 				(b) => b.status === "confirmed"
 			).length
+			
+			// Total bookings count (excluding cancelled)
+			const totalBookingsCount = activeBookingsList.length
+			
 			const avgRating =
 				propertiesList.length > 0
 					? propertiesList.reduce((sum, p) => sum + (p.rating || 0), 0) /
 					  propertiesList.length
 					: 0
 
-			// Monthly revenue
+			// Monthly revenue (excluding cancelled and accounting for refunds)
 			const currentMonth = new Date().getMonth()
-			const monthlyRevenue = bookingsList
+			const currentYear = new Date().getFullYear()
+			const monthlyRevenue = activeBookingsList
 				.filter((b) => {
 					const bookingDate =
 						b.createdAt?.toDate?.() || new Date(b.createdAt || 0)
-					return bookingDate.getMonth() === currentMonth
+					return (
+						bookingDate.getMonth() === currentMonth &&
+						bookingDate.getFullYear() === currentYear
+					)
 				})
-				.reduce((sum, b) => sum + (b.pricing?.total || 0), 0)
+				.reduce((sum, b) => {
+					const bookingRevenue = b.pricing?.total || 0
+					const refundAmount = b.refundAmount || 0
+					return sum + (bookingRevenue - refundAmount)
+				}, 0)
 
 			setStats({
 				totalProperties: propertiesList.length,
-				totalBookings: bookingsList.length,
+				totalBookings: totalBookingsCount,
 				totalRevenue,
 				avgRating: avgRating.toFixed(1),
 				activeBookings,
@@ -528,14 +550,25 @@ export default function DashboardHost() {
 				const checkOut = new Date(booking.checkOutDate)
 				const checkInStr = checkIn.toISOString().split("T")[0]
 				const checkOutStr = checkOut.toISOString().split("T")[0]
-				return checkInStr === todayStr || checkOutStr === todayStr
+				const status = booking.status || "pending"
+				// Exclude cancelled bookings from today's bookings
+				return (checkInStr === todayStr || checkOutStr === todayStr) && status !== "cancelled" && status !== "cancellation_requested"
 			})
 
 			const upcomingList = bookingsList
 				.filter((booking) => {
 					const checkIn = new Date(booking.checkInDate)
-					// Count any future booking that is not cancelled
-					return checkIn > today && booking.status !== "cancelled"
+					checkIn.setHours(0, 0, 0, 0)
+					const status = booking.status || "pending"
+					// Count any future booking (check-in date is strictly after today) that is not cancelled
+					// Exclude bookings that are in today's list (check-in or check-out is today)
+					const checkInStr = checkIn.toISOString().split("T")[0]
+					const checkOut = new Date(booking.checkOutDate)
+					checkOut.setHours(0, 0, 0, 0)
+					const checkOutStr = checkOut.toISOString().split("T")[0]
+					const isTodayBooking = checkInStr === todayStr || checkOutStr === todayStr
+					// Only include bookings that start after today and are not cancelled
+					return !isTodayBooking && checkIn > today && status !== "cancelled" && status !== "cancellation_requested"
 				})
 				.sort((a, b) => {
 					const dateA = new Date(a.checkInDate)
@@ -543,14 +576,14 @@ export default function DashboardHost() {
 					return dateA - dateB
 				})
 
-			setTodayBookings(todayList)
-			setUpcomingBookings(upcomingList.slice(0, 5))
-
-			// Calculate previous bookings (checkout date < today)
+			// Calculate previous bookings (checkout date < today, exclude cancelled)
 			const previousList = bookingsList
 				.filter((booking) => {
 					const checkOut = new Date(booking.checkOutDate)
-					return checkOut < today
+					checkOut.setHours(0, 0, 0, 0)
+					const status = booking.status || "pending"
+					// Only include completed bookings (not cancelled)
+					return checkOut < today && status !== "cancelled" && status !== "cancellation_requested"
 				})
 				.sort((a, b) => {
 					const dateA = new Date(a.checkOutDate)
@@ -558,7 +591,44 @@ export default function DashboardHost() {
 					return dateB - dateA // Most recent first
 				})
 
-			setPreviousBookings(previousList)
+			// Fetch property images for all bookings
+			const fetchPropertyImages = async (bookings) => {
+				return await Promise.all(
+					bookings.map(async (booking) => {
+						try {
+							const propertyDoc = await getDoc(
+								doc(db, "properties", booking.propertyId)
+							)
+							if (propertyDoc.exists()) {
+								const propertyData = propertyDoc.data()
+								return {
+									...booking,
+									propertyImage: propertyData.images?.[0] || null,
+									propertyTitle: booking.propertyTitle || propertyData.title || "Property",
+								}
+							}
+							return booking
+						} catch (error) {
+							console.error(
+								"Error fetching property image for booking:",
+								booking.id,
+								error
+							)
+							return booking
+						}
+					})
+				)
+			}
+
+			// Fetch images for all booking lists
+			const todayListWithImages = await fetchPropertyImages(todayList)
+			const upcomingListWithImages = await fetchPropertyImages(upcomingList)
+			const previousListWithImages = await fetchPropertyImages(previousList)
+
+			setTodayBookings(todayListWithImages)
+			setUpcomingBookings(upcomingListWithImages.slice(0, 5)) // First 5 for dashboard display
+			setAllUpcomingBookings(upcomingListWithImages) // All upcoming for modal
+			setPreviousBookings(previousListWithImages)
 
 			// Set initial filtered properties (homes)
 			const homes = propertiesList.filter((p) => p.category === "home")
@@ -863,9 +933,9 @@ export default function DashboardHost() {
 
 	const formatPrice = (price, currency = "PHP") => {
 		if (currency === "PHP") {
-			return `₱${price.toLocaleString()}`
+			return formatCurrencyFull(price, "₱")
 		}
-		return `$${price.toLocaleString()}`
+		return formatCurrencyFull(price, "$")
 	}
 
 	// Calculate best voucher discount for a property (for listing cards)
@@ -947,7 +1017,8 @@ export default function DashboardHost() {
 		} else if (type === "today") {
 			setBookingsList({ previous: [], today: todayBookings, upcoming: [] })
 		} else if (type === "upcoming") {
-			setBookingsList({ previous: [], today: [], upcoming: upcomingBookings })
+			// Use all upcoming bookings for the modal, not just the first 5
+			setBookingsList({ previous: [], today: [], upcoming: allUpcomingBookings })
 		}
 		setShowBookingsModal(true)
 	}
@@ -1023,6 +1094,11 @@ export default function DashboardHost() {
 
 	const prepareChartData = (propertiesList, bookingsList, reviewsList) => {
 		// Monthly Revenue Chart (last 6 months)
+		// Filter out cancelled bookings for chart data
+		const activeBookingsForCharts = bookingsList.filter(
+			(b) => b.status !== "cancelled"
+		)
+		
 		const months = []
 		const revenueData = []
 		const currentDate = new Date()
@@ -1036,7 +1112,7 @@ export default function DashboardHost() {
 			const monthName = date.toLocaleDateString("en-US", { month: "short" })
 			months.push(monthName)
 
-			const monthRevenue = bookingsList
+			const monthRevenue = activeBookingsForCharts
 				.filter((booking) => {
 					const bookingDate =
 						booking.createdAt?.toDate?.() || new Date(booking.createdAt || 0)
@@ -1045,37 +1121,49 @@ export default function DashboardHost() {
 						bookingDate.getFullYear() === date.getFullYear()
 					)
 				})
-				.reduce((sum, booking) => sum + (booking.pricing?.total || 0), 0)
+				.reduce((sum, booking) => {
+					const bookingRevenue = booking.pricing?.total || 0
+					const refundAmount = booking.refundAmount || 0
+					return sum + (bookingRevenue - refundAmount)
+				}, 0)
 
 			revenueData.push(monthRevenue)
 		}
 
 		// Total Revenue Doughnut Chart (This Year vs Last Year)
 		const currentYear = new Date().getFullYear()
-		const thisYearRevenue = bookingsList
+		const thisYearRevenue = activeBookingsForCharts
 			.filter((booking) => {
 				const bookingDate =
 					booking.createdAt?.toDate?.() || new Date(booking.createdAt || 0)
 				return bookingDate.getFullYear() === currentYear
 			})
-			.reduce((sum, booking) => sum + (booking.pricing?.total || 0), 0)
+			.reduce((sum, booking) => {
+				const bookingRevenue = booking.pricing?.total || 0
+				const refundAmount = booking.refundAmount || 0
+				return sum + (bookingRevenue - refundAmount)
+			}, 0)
 
-		const lastYearRevenue = bookingsList
+		const lastYearRevenue = activeBookingsForCharts
 			.filter((booking) => {
 				const bookingDate =
 					booking.createdAt?.toDate?.() || new Date(booking.createdAt || 0)
 				return bookingDate.getFullYear() === currentYear - 1
 			})
-			.reduce((sum, booking) => sum + (booking.pricing?.total || 0), 0)
+			.reduce((sum, booking) => {
+				const bookingRevenue = booking.pricing?.total || 0
+				const refundAmount = booking.refundAmount || 0
+				return sum + (bookingRevenue - refundAmount)
+			}, 0)
 
-		// Bookings Trend (last 6 months)
+		// Bookings Trend (last 6 months) - excluding cancelled bookings
 		const bookingsData = months.map((monthName, index) => {
 			const date = new Date(
 				currentDate.getFullYear(),
 				currentDate.getMonth() - (5 - index),
 				1
 			)
-			return bookingsList.filter((booking) => {
+			return activeBookingsForCharts.filter((booking) => {
 				const bookingDate =
 					booking.createdAt?.toDate?.() || new Date(booking.createdAt || 0)
 				return (
@@ -1220,7 +1308,7 @@ export default function DashboardHost() {
 								checkIn: formatDate(b.checkInDate),
 								checkOut: formatDate(b.checkOutDate),
 								status: b.status || "pending",
-								total: `₱${(b.pricing?.total || 0).toLocaleString()}`,
+								total: formatCurrency(b.pricing?.total || 0),
 								guests: b.numberOfGuests || b.guests || 1,
 							})),
 					}
@@ -1255,18 +1343,18 @@ export default function DashboardHost() {
 					reportData = {
 						generatedAt: new Date().toISOString(),
 						summary: {
-							totalRevenue: `₱${stats.totalRevenue.toLocaleString()}`,
-							monthlyRevenue: `₱${stats.monthlyRevenue.toLocaleString()}`,
+							totalRevenue: formatCurrency(stats.totalRevenue),
+							monthlyRevenue: formatCurrency(stats.monthlyRevenue),
 							averageBookingValue:
 								stats.totalBookings > 0
-									? `₱${Math.round(
+									? formatCurrency(Math.round(
 											stats.totalRevenue / stats.totalBookings
-									  ).toLocaleString()}`
-									: "₱0",
+									  ))
+									: formatCurrency(0),
 						},
 						monthlyBreakdown: months.map((month, idx) => ({
 							month,
-							revenue: `₱${revenueByMonth[idx].toLocaleString()}`,
+							revenue: formatCurrency(revenueByMonth[idx]),
 						})),
 					}
 					break
@@ -1282,10 +1370,10 @@ export default function DashboardHost() {
 						overview: {
 							totalProperties: stats.totalProperties,
 							totalBookings: stats.totalBookings,
-							totalRevenue: `₱${stats.totalRevenue.toLocaleString()}`,
+							totalRevenue: formatCurrency(stats.totalRevenue),
 							averageRating: stats.avgRating,
 							totalReviews: totalReviews,
-							walletBalance: `₱${walletBalance.toLocaleString()}`,
+							walletBalance: formatCurrency(walletBalance),
 						},
 						properties: {
 							summary: {
@@ -1326,7 +1414,7 @@ export default function DashboardHost() {
 									guest: b.guestName || "N/A",
 									checkIn: formatDate(b.checkInDate),
 									status: b.status || "pending",
-									total: `₱${(b.pricing?.total || 0).toLocaleString()}`,
+									total: formatCurrency(b.pricing?.total || 0),
 								})),
 						},
 					}
@@ -1927,7 +2015,7 @@ export default function DashboardHost() {
 						<div className="stat-icon">💳</div>
 						<div className="stat-info">
 							<div className="stat-number">
-								₱{walletBalance.toLocaleString()}
+								{formatCurrency(walletBalance)}
 							</div>
 							<div className="quick-stat-label">E-Wallet</div>
 						</div>
@@ -2430,7 +2518,7 @@ export default function DashboardHost() {
 												tooltip: {
 													callbacks: {
 														label: function (context) {
-															return `₱${context.parsed.y.toLocaleString()}`
+															return formatCurrency(context.parsed.y)
 														},
 													},
 												},
@@ -2440,7 +2528,7 @@ export default function DashboardHost() {
 													beginAtZero: true,
 													ticks: {
 														callback: function (value) {
-															return "₱" + value.toLocaleString()
+															return formatCurrency(value)
 														},
 													},
 												},
@@ -2459,7 +2547,7 @@ export default function DashboardHost() {
 									<div className="host-revenue-total">
 										<span className="revenue-label">This Year</span>
 										<span className="revenue-amount">
-											₱{stats.totalRevenue.toLocaleString()}
+											{formatCurrency(stats.totalRevenue)}
 										</span>
 									</div>
 								</div>
@@ -2479,7 +2567,7 @@ export default function DashboardHost() {
 														label: function (context) {
 															return `${
 																context.label
-															}: ₱${context.parsed.toLocaleString()}`
+															}: ${formatCurrency(context.parsed)}`
 														},
 													},
 												},
@@ -2653,13 +2741,13 @@ export default function DashboardHost() {
 								<div className="report-stats">
 									<div className="stat">
 										<span className="stat-value">
-											₱{stats.totalRevenue.toLocaleString()}
+											{formatCurrency(stats.totalRevenue)}
 										</span>
 										<span className="stat-label">Total Revenue</span>
 									</div>
 									<div className="stat">
 										<span className="stat-value">
-											₱{stats.monthlyRevenue.toLocaleString()}
+											{formatCurrency(stats.monthlyRevenue)}
 										</span>
 										<span className="stat-label">This Month</span>
 									</div>
@@ -2945,7 +3033,7 @@ export default function DashboardHost() {
 												<div className="booking-price">
 													<span>Total:</span>
 													<strong>
-														₱{booking.pricing?.total?.toLocaleString() || 0}
+														{formatCurrency(booking.pricing?.total || 0)}
 													</strong>
 												</div>
 												{booking.guestName && (

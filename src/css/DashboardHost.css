@@ -70,13 +70,17 @@
 .page-header-content {
 	flex: 1;
 	min-width: 250px;
+	display: flex;
+	align-items: center;
+	gap: 2rem;
+	flex-wrap: wrap;
 }
 
 .page-title {
 	font-size: 2.5rem;
 	font-weight: 700;
 	color: #2c3e50;
-	margin: 0 0 0.5rem 0;
+	margin: 0;
 	background: linear-gradient(135deg, var(--primary), var(--secondary));
 	background-clip: text;
 	-webkit-background-clip: text;
