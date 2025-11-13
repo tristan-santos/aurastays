@@ -57,9 +57,9 @@ export default function YouTubeBackground({
 					top: "50%",
 					left: "50%",
 					// Scale to cover container or viewport
-					width: "100vw",
+					width: "100%",
 					height: "56.25vw", // 16:9
-					minHeight: "100vh",
+					minHeight: "100%",
 					minWidth: "177.78vh", // 16/9
 					transform: "translate(-50%, -50%)",
 				}}
