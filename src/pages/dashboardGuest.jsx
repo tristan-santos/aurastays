@@ -62,6 +62,10 @@ export default function DashboardGuest() {
 	const [properties, setProperties] = useState([])
 	const [filteredProperties, setFilteredProperties] = useState([])
 	const [recommendedProperties, setRecommendedProperties] = useState([])
+	const [bookingProperties, setBookingProperties] = useState({
+		upcoming: [],
+		previous: [],
+	})
 	const [isLoading, setIsLoading] = useState(true)
 	const [userStats, setUserStats] = useState({
 		totalBookings: 0,
@@ -149,6 +153,7 @@ export default function DashboardGuest() {
 	useEffect(() => {
 		if (properties.length > 0 && currentUser?.uid) {
 			fetchRecommendedProperties()
+			fetchBookingProperties()
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [properties, currentUser])
@@ -372,6 +377,193 @@ export default function DashboardGuest() {
 			// Fallback: show random properties if there's an error
 			const shuffled = [...properties].sort(() => Math.random() - 0.5)
 			setRecommendedProperties(shuffled.slice(0, 8))
+		}
+	}
+
+	const fetchBookingProperties = async () => {
+		if (!currentUser?.uid || properties.length === 0) return
+
+		try {
+			// Fetch bookings for the guest
+			const bookingsQuery = query(
+				collection(db, "bookings"),
+				where("guestId", "==", currentUser.uid)
+			)
+
+			const bookingsSnapshot = await getDocs(bookingsQuery)
+			const today = new Date()
+			today.setHours(0, 0, 0, 0)
+
+			// Filter upcoming trips (checkInDate >= today, not cancelled)
+			const upcomingBookings = bookingsSnapshot.docs
+				.map((doc) => ({
+					id: doc.id,
+					...doc.data(),
+				}))
+				.filter((booking) => {
+					const checkInDate = new Date(booking.checkInDate)
+					checkInDate.setHours(0, 0, 0, 0)
+					const status = booking.status || "pending"
+					return checkInDate >= today && status !== "cancelled" && status !== "cancellation_requested"
+				})
+				.sort((a, b) => {
+					// Sort by checkInDate, earliest first
+					const dateA = new Date(a.checkInDate)
+					const dateB = new Date(b.checkInDate)
+					return dateA - dateB
+				})
+
+			// Filter previous bookings (checkOutDate < today, not cancelled)
+			const previousBookings = bookingsSnapshot.docs
+				.map((doc) => ({
+					id: doc.id,
+					...doc.data(),
+				}))
+				.filter((booking) => {
+					const checkOutDate = new Date(booking.checkOutDate)
+					checkOutDate.setHours(0, 0, 0, 0)
+					const status = booking.status || "pending"
+					return (
+						checkOutDate < today &&
+						status !== "cancelled" &&
+						status !== "cancellation_requested"
+					)
+				})
+				.sort((a, b) => {
+					// Sort by checkOutDate, most recent first
+					const dateA = new Date(a.checkOutDate)
+					const dateB = new Date(b.checkOutDate)
+					return dateB - dateA
+				})
+
+			// Get unique property IDs from upcoming bookings
+			const upcomingPropertyIds = []
+			const seenUpcomingIds = new Set()
+			for (const booking of upcomingBookings) {
+				if (booking.propertyId && !seenUpcomingIds.has(booking.propertyId)) {
+					upcomingPropertyIds.push(booking.propertyId)
+					seenUpcomingIds.add(booking.propertyId)
+				}
+			}
+
+			// Get unique property IDs from previous bookings
+			const previousPropertyIds = []
+			const seenPreviousIds = new Set()
+			for (const booking of previousBookings) {
+				if (booking.propertyId && !seenPreviousIds.has(booking.propertyId)) {
+					previousPropertyIds.push(booking.propertyId)
+					seenPreviousIds.add(booking.propertyId)
+				}
+			}
+
+			// Fetch full property details for upcoming trips
+			const upcomingProperties = await Promise.all(
+				upcomingPropertyIds.map(async (propertyId) => {
+					const property = properties.find((p) => p.id === propertyId)
+					if (property) {
+						// Fetch reviews to get rating
+						try {
+							const reviewsQuery = query(
+								collection(db, "reviews"),
+								where("propertyId", "==", propertyId),
+								where("status", "==", "approved")
+							)
+							const reviewsSnapshot = await getDocs(reviewsQuery)
+							const reviews = reviewsSnapshot.docs.map((doc) => doc.data())
+
+							if (reviews.length > 0) {
+								const totalRating = reviews.reduce(
+									(sum, review) => sum + (review.rating || 0),
+									0
+								)
+								const averageRating = totalRating / reviews.length
+
+								return {
+									...property,
+									rating: Math.round(averageRating * 10) / 10,
+									reviewsCount: reviews.length,
+								}
+							} else {
+								return {
+									...property,
+									rating: 0,
+									reviewsCount: 0,
+								}
+							}
+						} catch (error) {
+							console.error(`Error fetching reviews for property ${propertyId}:`, error)
+							return {
+								...property,
+								rating: 0,
+								reviewsCount: 0,
+							}
+						}
+					}
+					return null
+				})
+			)
+
+			// Fetch full property details for previous bookings
+			const previousProperties = await Promise.all(
+				previousPropertyIds.map(async (propertyId) => {
+					const property = properties.find((p) => p.id === propertyId)
+					if (property) {
+						// Fetch reviews to get rating
+						try {
+							const reviewsQuery = query(
+								collection(db, "reviews"),
+								where("propertyId", "==", propertyId),
+								where("status", "==", "approved")
+							)
+							const reviewsSnapshot = await getDocs(reviewsQuery)
+							const reviews = reviewsSnapshot.docs.map((doc) => doc.data())
+
+							if (reviews.length > 0) {
+								const totalRating = reviews.reduce(
+									(sum, review) => sum + (review.rating || 0),
+									0
+								)
+								const averageRating = totalRating / reviews.length
+
+								return {
+									...property,
+									rating: Math.round(averageRating * 10) / 10,
+									reviewsCount: reviews.length,
+								}
+							} else {
+								return {
+									...property,
+									rating: 0,
+									reviewsCount: 0,
+								}
+							}
+						} catch (error) {
+							console.error(`Error fetching reviews for property ${propertyId}:`, error)
+							return {
+								...property,
+								rating: 0,
+								reviewsCount: 0,
+							}
+						}
+					}
+					return null
+				})
+			)
+
+			// Filter out null values
+			const validUpcoming = upcomingProperties.filter((p) => p !== null)
+			const validPrevious = previousProperties.filter((p) => p !== null)
+
+			setBookingProperties({
+				upcoming: validUpcoming,
+				previous: validPrevious,
+			})
+		} catch (error) {
+			console.error("Error fetching booking properties:", error)
+			setBookingProperties({
+				upcoming: [],
+				previous: [],
+			})
 		}
 	}
 
@@ -1599,12 +1791,45 @@ const fetchUserWishes = async () => {
 					<div className="popular-scroll">
 						{isLoading ? (
 							<p>Loading...</p>
-						) : recommendedProperties.length === 0 ? (
-							<div className="no-results" style={{ padding: "2rem", textAlign: "center", width: "100%" }}>
-								<p>No recommendations available at the moment</p>
-							</div>
-						) : (
-							recommendedProperties.map((property) => (
+						) : (() => {
+							// Combine all properties: upcoming trips first, then previous bookings, then recommendations
+							// Avoid duplicates by using a Set to track property IDs
+							const allProperties = []
+							const seenIds = new Set()
+
+							// Add upcoming trip properties first
+							bookingProperties.upcoming.forEach((property) => {
+								if (!seenIds.has(property.id)) {
+									allProperties.push({ ...property, source: "upcoming" })
+									seenIds.add(property.id)
+								}
+							})
+
+							// Add previous booking properties
+							bookingProperties.previous.forEach((property) => {
+								if (!seenIds.has(property.id)) {
+									allProperties.push({ ...property, source: "previous" })
+									seenIds.add(property.id)
+								}
+							})
+
+							// Add recommended properties
+							recommendedProperties.forEach((property) => {
+								if (!seenIds.has(property.id)) {
+									allProperties.push({ ...property, source: "recommended" })
+									seenIds.add(property.id)
+								}
+							})
+
+							if (allProperties.length === 0) {
+								return (
+									<div className="no-results" style={{ padding: "2rem", textAlign: "center", width: "100%" }}>
+										<p>No recommendations available at the moment</p>
+									</div>
+								)
+							}
+
+							return allProperties.map((property) => (
 								<div key={property.id} className="popular-card">
 									<div
 										className="popular-image"
@@ -1616,9 +1841,9 @@ const fetchUserWishes = async () => {
 											backgroundPosition: "center",
 										}}
 									>
-										{property.rating >= 4.8 && (
-											<span className="trending-badge">Trending</span>
-										)}
+									{property.source === "recommended" && property.rating >= 4.8 && (
+										<span className="trending-badge">Trending</span>
+									)}
 									</div>
 									<div className="popular-info">
 										<h4 className="popular-title">{property.title}</h4>
@@ -1651,7 +1876,7 @@ const fetchUserWishes = async () => {
 									</div>
 								</div>
 							))
-						)}
+						})()}
 					</div>
 				</section>
 

@@ -2242,88 +2242,65 @@ export default function PropertyListingWizard() {
 									</div>
 								</div>
 
-								<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-									<div className="form-group">
-										<label>Valid From</label>
-										<button
-											type="button"
-											onClick={() => openCouponDatePicker(true)}
-											style={{
-												width: "100%",
-												padding: "0.75rem",
-												border: "1px solid #b0b0b0",
-												borderRadius: "6px",
-												fontSize: "0.9rem",
-												background: "white",
-												cursor: "pointer",
-												display: "flex",
-												alignItems: "center",
-												justifyContent: "center",
-												gap: "0.5rem",
-												transition: "all 0.2s ease",
-											}}
-											onMouseEnter={(e) => {
-												e.target.style.borderColor = "var(--primary)"
-												e.target.style.background = "rgba(97, 191, 156, 0.05)"
-											}}
-											onMouseLeave={(e) => {
-												e.target.style.borderColor = "#b0b0b0"
-												e.target.style.background = "white"
-											}}
-										>
-											<FaCalendarAlt />
-											<span>
-												{formData.coupon.validFrom
-													? new Date(formData.coupon.validFrom).toLocaleDateString("en-US", {
-															month: "short",
-															day: "numeric",
-															year: "numeric",
-													  })
-													: "Select date"}
-											</span>
-										</button>
-									</div>
-
-									<div className="form-group">
-										<label>Valid Until</label>
-										<button
-											type="button"
-											onClick={() => openCouponDatePicker(false)}
-											style={{
-												width: "100%",
-												padding: "0.75rem",
-												border: "1px solid #b0b0b0",
-												borderRadius: "6px",
-												fontSize: "0.9rem",
-												background: "white",
-												cursor: "pointer",
-												display: "flex",
-												alignItems: "center",
-												justifyContent: "center",
-												gap: "0.5rem",
-												transition: "all 0.2s ease",
-											}}
-											onMouseEnter={(e) => {
-												e.target.style.borderColor = "var(--primary)"
-												e.target.style.background = "rgba(97, 191, 156, 0.05)"
-											}}
-											onMouseLeave={(e) => {
-												e.target.style.borderColor = "#b0b0b0"
-												e.target.style.background = "white"
-											}}
-										>
-											<FaCalendarAlt />
-											<span>
-												{formData.coupon.validUntil
-													? new Date(formData.coupon.validUntil).toLocaleDateString("en-US", {
-															month: "short",
-															day: "numeric",
-															year: "numeric",
-													  })
-													: "Select date"}
-											</span>
-										</button>
-									</div>
+								<div className="form-group">
+									<label>Validity Period</label>
+									<button
+										type="button"
+										onClick={() => {
+											// If validFrom is not selected, start with selecting validFrom
+											// Otherwise, start with selecting validUntil
+											const isValidFrom = !formData.coupon.validFrom
+											openCouponDatePicker(isValidFrom)
+										}}
+										style={{
+											width: "100%",
+											padding: "0.75rem",
+											border: "1px solid var(--primary)",
+											borderRadius: "6px",
+											fontSize: "0.9rem",
+											background: "rgba(97, 191, 156, 0.05)",
+											cursor: "pointer",
+											display: "flex",
+											alignItems: "center",
+											justifyContent: "center",
+											gap: "0.5rem",
+											transition: "all 0.2s ease",
+											color: "var(--text)",
+										}}
+										onMouseEnter={(e) => {
+											e.target.style.borderColor = "var(--primary)"
+											e.target.style.background = "rgba(97, 191, 156, 0.1)"
+										}}
+										onMouseLeave={(e) => {
+											e.target.style.borderColor = "var(--primary)"
+											e.target.style.background = "rgba(97, 191, 156, 0.05)"
+										}}
+									>
+										<FaCalendarAlt />
+										<span>
+											{formData.coupon.validFrom && formData.coupon.validUntil ? (
+												<>
+													{new Date(formData.coupon.validFrom).toLocaleDateString("en-US", {
+														month: "short",
+														day: "numeric",
+														year: "numeric",
+													})} - {new Date(formData.coupon.validUntil).toLocaleDateString("en-US", {
+														month: "short",
+														day: "numeric",
+														year: "numeric",
+													})}
+												</>
+											) : formData.coupon.validFrom ? (
+												<>Valid From: {new Date(formData.coupon.validFrom).toLocaleDateString("en-US", {
+													month: "short",
+													day: "numeric",
+													year: "numeric",
+												})} - Select Valid Until</>
+											) : (
+												"Select validity dates"
+											)}
+										</span>
+									</button>
 								</div>
 
 								<div className="form-group">
@@ -2405,7 +2382,7 @@ export default function PropertyListingWizard() {
 				</div>
 			</div>
 
-			{/* Coupon Date Picker Modal */}
+			{/* Coupon Date Picker Modal - Same as Booking Calendar */}
 			{showCouponDateModal && (
 				<div
 					className="date-picker-modal-overlay"
