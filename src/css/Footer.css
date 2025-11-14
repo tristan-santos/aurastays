@@ -77,3 +77,35 @@
 	font-size: 0.85rem;
 	color: #cbd5e0;
 }
+
+@media (max-width: 768px) {
+	.footer {
+		padding: 2.5rem 1rem 1rem;
+	}
+
+	.footer-container {
+		grid-template-columns: 1fr;
+		gap: 2rem;
+		padding-bottom: 2rem;
+	}
+
+	.footer-brand p {
+		max-width: 100%;
+	}
+
+	.footer-links h4,
+	.footer-social h4 {
+		font-size: 1rem;
+		margin-bottom: 1rem;
+	}
+
+	.social-icons {
+		justify-content: center;
+		gap: 1.5rem;
+	}
+
+	.footer-bottom {
+		font-size: 0.8rem;
+		padding-top: 1rem;
+	}
+}

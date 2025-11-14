@@ -3120,51 +3120,327 @@
 
 @media (max-width: 768px) {
 	.property-details-container {
+		padding: 0;
+	}
+
+	.property-details-content {
 		padding: 1rem;
+	}
+
+	.property-details-container .top-navbar {
+		padding: 0.75rem 1rem;
+	}
+
+	.property-details-container .top-navbar .icon-button {
+		padding: 0.5rem;
+		font-size: 1.1rem;
+		width: 40px;
+		height: 40px;
+	}
+
+	.property-details-container .top-navbar .login-btn {
+		padding: 0.5rem 1rem;
+		font-size: 0.9rem;
 	}
 
 	.property-details-header {
 		flex-direction: column;
 		gap: 1rem;
 		align-items: flex-start;
+		margin-bottom: 1.5rem;
+		padding-bottom: 1rem;
+	}
+
+	.back-btn {
+		padding: 0.625rem 1rem;
+		font-size: 0.9rem;
 	}
 
 	.header-actions {
 		width: 100%;
 		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 0.5rem;
 	}
 
 	.action-btn {
-		padding: 0.5rem 1rem;
-		font-size: 0.9rem;
+		padding: 0.5rem 0.875rem;
+		font-size: 0.85rem;
+		flex: 1;
+		min-width: calc(50% - 0.25rem);
+		justify-content: center;
+	}
+
+	.property-title-section {
+		margin-bottom: 1.5rem;
 	}
 
 	.property-title-section h1 {
 		font-size: 1.5rem;
+		line-height: 1.3;
+	}
+
+	.property-meta {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.75rem;
+	}
+
+	.rating-location {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.5rem;
+	}
+
+	/* Photo Gallery */
+	.photo-gallery {
+		margin-bottom: 1.5rem;
+	}
+
+	.main-photo {
+		height: 250px;
+		margin-bottom: 0.75rem;
+	}
+
+	.view-all-photos-btn {
+		bottom: 0.75rem;
+		right: 0.75rem;
+		padding: 0.625rem 1rem;
+		font-size: 0.85rem;
 	}
 
 	.photo-thumbnails {
 		grid-template-columns: repeat(4, 1fr);
+		gap: 0.5rem;
+	}
+
+	.thumbnail {
+		height: 70px;
+	}
+
+	/* Main Content Layout */
+	.property-main-content {
+		grid-template-columns: 1fr;
+		gap: 2rem;
+		margin-top: 2rem;
+	}
+
+	.content-right {
+		position: static;
+		order: -1;
+	}
+
+	.booking-card {
+		padding: 1.5rem;
+		margin-bottom: 2rem;
+	}
+
+	.price-section {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.75rem;
+	}
+
+	.price {
+		font-size: 1.75rem;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.25rem;
+	}
+
+	.price .original-price {
+		font-size: 1.25rem;
+	}
+
+	/* Sections */
+	.info-section,
+	.amenities-section,
+	.availability-section,
+	.reviews-section,
+	.location-section,
+	.booking-history-section,
+	.wishlists-section {
+		padding: 1.5rem;
+		margin-bottom: 1.5rem;
+		border-radius: 10px;
+	}
+
+	.info-section h2,
+	.amenities-section h2,
+	.availability-section h2,
+	.reviews-section h2,
+	.location-section h2,
+	.booking-history-section h2,
+	.wishlists-section h2 {
+		font-size: 1.25rem;
+		margin-bottom: 1.25rem;
 	}
 
 	.amenities-grid {
 		grid-template-columns: 1fr;
+		gap: 0.75rem;
 	}
 
 	.house-rules-grid {
 		grid-template-columns: 1fr;
+		gap: 0.75rem;
 	}
 
 	.date-inputs {
 		grid-template-columns: 1fr;
+		gap: 1rem;
 	}
 
 	.share-options {
 		grid-template-columns: 1fr;
+		gap: 0.75rem;
 	}
 
 	.all-photos-grid {
 		grid-template-columns: 1fr;
+		gap: 0.75rem;
+	}
+
+	/* Booking Form */
+	.booking-form {
+		margin-top: 1.5rem;
+	}
+
+	.guests-input {
+		margin: 1rem 0;
+	}
+
+	.price-breakdown {
+		margin: 1.5rem 0;
+		padding: 1.25rem;
+	}
+
+	.price-breakdown-item {
+		padding: 0.625rem 0;
+		font-size: 0.9rem;
+	}
+
+	.total-price {
+		font-size: 1.5rem;
+		padding-top: 1rem;
+	}
+
+	.book-btn {
+		width: 100%;
+		padding: 1rem;
+		font-size: 1rem;
+		margin-top: 1.5rem;
+	}
+
+	/* Reviews */
+	.review-item {
+		padding: 1.25rem;
+		margin-bottom: 1rem;
+	}
+
+	.review-header {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.75rem;
+		margin-bottom: 1rem;
+	}
+
+	.review-rating {
+		flex-direction: row;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	/* Location Map */
+	.map-container {
+		height: 300px;
+		margin-top: 1rem;
+	}
+
+	/* Host Info */
+	.host-info {
+		flex-direction: column;
+		gap: 1rem;
+		padding: 1.25rem;
+	}
+
+	.host-avatar {
+		width: 80px;
+		height: 80px;
+	}
+
+	.host-details h3 {
+		font-size: 1.1rem;
+	}
+
+	/* Date Selector */
+	.date-selector-btn {
+		padding: 0.875rem;
+		font-size: 0.9rem;
+	}
+
+	.date-display {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.5rem;
+	}
+
+	.date-display .date-separator {
+		display: none;
+	}
+
+	/* Modals */
+	.date-picker-modal-overlay {
+		padding: 0.5rem;
+		align-items: flex-end;
+	}
+
+	.date-picker-modal-content {
+		border-radius: 16px 16px 0 0;
+		max-height: 95vh;
+		padding: 1.5rem;
+	}
+
+	.date-picker-modal-content h2 {
+		font-size: 1.4rem;
+		margin-bottom: 1.25rem;
+	}
+
+	.modal-date-info {
+		padding: 1.25rem;
+		margin-bottom: 1.5rem;
+	}
+
+	/* Tables */
+	.booking-history-table-wrapper {
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.booking-history-table {
+		min-width: 600px;
+		font-size: 0.85rem;
+	}
+
+	.booking-history-table th,
+	.booking-history-table td {
+		padding: 0.75rem 0.5rem;
+	}
+
+	/* Wishlists */
+	.wishlist-item-card {
+		padding: 1rem;
+	}
+
+	.wishlist-item-header {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.75rem;
+	}
+
+	.view-wishlist-btn {
+		width: 100%;
+		justify-content: center;
 	}
 }
 

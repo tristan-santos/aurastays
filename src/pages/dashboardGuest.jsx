@@ -1595,7 +1595,6 @@ const fetchUserWishes = async () => {
 				<section className="popular-section">
 					<div className="section-header">
 						<h3>✨ Recommendation</h3>
-						<button className="view-all-btn">View All</button>
 					</div>
 					<div className="popular-scroll">
 						{isLoading ? (

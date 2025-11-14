@@ -42,3 +42,37 @@
 	color: #2c3e50;
 	font-weight: 600;
 }
+
+.nav-links {
+	display: flex;
+	gap: 1rem;
+	align-items: center;
+}
+
+@media (max-width: 768px) {
+	.navbar-landing {
+		padding: 0.5rem 1rem;
+	}
+
+	.navbar-brand {
+		justify-content: flex-start;
+		width: auto;
+	}
+
+	.navbar-brand img {
+		width: 40px;
+	}
+
+	.navbar-brand h1 {
+		font-size: 1.25rem;
+	}
+
+	.nav-links {
+		gap: 0.5rem;
+	}
+
+	.nav-links button {
+		font-size: 0.85rem;
+		padding: 0.5rem 0.75rem;
+	}
+}

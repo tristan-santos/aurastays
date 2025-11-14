@@ -32,3 +32,41 @@
 	font-size: 1.25rem;
 	font-weight: bold;
 }
+
+@media (max-width: 768px) {
+	.center-box404 {
+		padding: 1rem;
+		gap: 1rem;
+	}
+
+	.error404 {
+		text-align: center;
+		width: 100%;
+		max-width: 90%;
+	}
+
+	.error404 img {
+		width: 100%;
+		max-width: 300px;
+		height: auto;
+	}
+
+	.error404 h1 {
+		font-size: 2rem;
+	}
+
+	.error404 h2 {
+		font-size: 1.5rem;
+	}
+
+	.error404 p {
+		font-size: 0.95rem;
+	}
+
+	.error404 button {
+		width: 100%;
+		max-width: 300px;
+		padding: 0.875rem;
+		font-size: 1rem;
+	}
+}

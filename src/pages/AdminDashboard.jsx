@@ -142,10 +142,15 @@ const AdminDashboard = () => {
 	})
 	const [isCreatingPromo, setIsCreatingPromo] = useState(false)
 	const [promos, setPromos] = useState([])
-	const [promoFilter, setPromoFilter] = useState("all") // 'all', 'active', 'inactive', 'expired', 'scheduled'
+	const [promoFilter, setPromoFilter] = useState("all") // 'all', 'active', 'inactive', 'expired', 'scheduled', 'host'
+	const [adminUserId, setAdminUserId] = useState(null)
 	const [walletBalance, setWalletBalance] = useState(0)
 	const [walletTransactions, setWalletTransactions] = useState([])
 	const [loadingWallet, setLoadingWallet] = useState(false)
+	const [bookingEarnings, setBookingEarnings] = useState({ serviceFee: 0, guestFee: 0, total: 0 })
+	const [completedBookings, setCompletedBookings] = useState([])
+	const [subscriptions, setSubscriptions] = useState([])
+	const [subscriptionRevenue, setSubscriptionRevenue] = useState(0)
 	const [sidebarOpen, setSidebarOpen] = useState(true)
 	const [adminPaypalEmail, setAdminPaypalEmail] = useState("")
 	const [showPaypalModal, setShowPaypalModal] = useState(false)
@@ -175,6 +180,15 @@ const AdminDashboard = () => {
 			fetchFlaggedProperties()
 		}
 	}, [activeTab])
+
+	// Helper function to handle tab change and close sidebar on mobile
+	const handleTabChange = (tab) => {
+		setActiveTab(tab)
+		// Close sidebar on mobile devices (screen width <= 768px)
+		if (window.innerWidth <= 768) {
+			setSidebarOpen(false)
+		}
+	}
 
 	const fetchAdminData = async () => {
 		try {
@@ -221,6 +235,14 @@ const AdminDashboard = () => {
 				allUsers.filter((user) => user.userType === "host").length || 0
 			const totalGuests =
 				allUsers.filter((user) => user.userType === "guest").length || 0
+			
+			// Get admin user ID for filtering host-created promos
+			const adminUser = allUsers.find(
+				(user) => user.email === "adminAurastays@aurastays.com" || user.userType === "admin"
+			)
+			if (adminUser) {
+				setAdminUserId(adminUser.id)
+			}
 
 			// Get recent users (last 10)
 			const sortedUsers = [...allUsers].sort((a, b) => {
@@ -255,15 +277,69 @@ const AdminDashboard = () => {
 				...doc.data(),
 			}))
 			const totalBookings = allBookings.length || 0
-			// Calculate revenue only from completed bookings
-			const completedBookings = allBookings.filter(
-				(booking) => booking.status === "completed"
-			)
+			
+			// Debug: Log all bookings
+			console.log("📊 All bookings:", allBookings.length)
+			console.log("📊 Sample booking:", allBookings[0])
+			
+			// Get today's date for comparison
+			const today = new Date()
+			today.setHours(0, 0, 0, 0)
+			
+			// Calculate revenue from:
+			// 1. Bookings with status "completed"
+			// 2. Bookings with status "confirmed" (these are paid and should count as revenue)
+			// Exclude cancelled and pending bookings
+			const completedBookings = allBookings.filter((booking) => {
+				// Exclude cancelled bookings
+				if (booking.status === "cancelled") {
+					return false
+				}
+				
+				// Exclude pending bookings (not paid yet)
+				if (booking.status === "pending") {
+					return false
+				}
+				
+				// Include explicitly completed bookings
+				if (booking.status === "completed") {
+					return true
+				}
+				
+				// Include confirmed bookings (these are paid)
+				if (booking.status === "confirmed") {
+					return true
+				}
+				
+				return false
+			})
+			
+			console.log("✅ Completed bookings (status=completed or confirmed):", completedBookings.length)
+			console.log("✅ Completed bookings data:", completedBookings)
+			
+			// Debug: Check pricing structure and status
+			allBookings.forEach((booking, index) => {
+				console.log(`Booking ${index + 1}:`, {
+					id: booking.id,
+					status: booking.status,
+					checkOutDate: booking.checkOutDate,
+					pricing: booking.pricing,
+					pricingTotal: booking.pricing?.total,
+					isCompleted: completedBookings.some(b => b.id === booking.id)
+				})
+			})
+			
 			const totalRevenue =
 				completedBookings.reduce(
-					(sum, booking) => sum + (booking.totalPrice || 0),
+					(sum, booking) => {
+						const revenue = booking.pricing?.total || 0
+						console.log(`Adding revenue: ${revenue} from booking ${booking.id} (status: ${booking.status})`)
+						return sum + revenue
+					},
 					0
 				) || 0
+			
+			console.log("💰 Total Revenue Calculated:", totalRevenue)
 			setRecentBookings(allBookings.slice(0, 10))
 
 			// Process promos
@@ -334,21 +410,29 @@ const AdminDashboard = () => {
 			)
 		})
 
-		// Revenue trend (last 7 days)
+		// Revenue trend (last 7 days) - from completed and confirmed bookings (exclude cancelled/pending)
 		const revenuePerDay = last7Days.map((day) => {
 			return (
 				bookings
 					.filter((booking) => {
+						// Exclude cancelled and pending
+						if (booking.status === "cancelled" || booking.status === "pending") {
+							return false
+						}
+						
 						const bookingDate = booking.createdAt?.toDate?.()
 						if (!bookingDate) return false
+						
+						// Include completed or confirmed bookings
 						return (
+							(booking.status === "completed" || booking.status === "confirmed") &&
 							bookingDate?.toLocaleDateString("en-US", {
 								month: "short",
 								day: "numeric",
 							}) === day
 						)
 					})
-					.reduce((sum, booking) => sum + (booking.totalPrice || 0), 0) || 0
+					.reduce((sum, booking) => sum + (booking.pricing?.total || 0), 0) || 0
 			)
 		})
 
@@ -696,6 +780,76 @@ const AdminDashboard = () => {
 					count: transactions.length,
 				})
 				setWalletTransactions(transactions)
+
+				// Calculate earnings from completed/confirmed bookings
+				try {
+					const bookingsSnapshot = await getDocs(collection(db, "bookings"))
+					const allBookings = bookingsSnapshot.docs.map((doc) => ({
+						id: doc.id,
+						...doc.data(),
+					}))
+
+					// Filter completed and confirmed bookings
+					const completedBookingsList = allBookings.filter((booking) => {
+						if (booking.status === "cancelled") return false
+						if (booking.status === "pending") return false
+						return booking.status === "completed" || booking.status === "confirmed"
+					})
+
+					// Store completed bookings for transaction history
+					setCompletedBookings(completedBookingsList)
+
+					// Calculate total service fee and guest fee earnings
+					let totalServiceFee = 0
+					let totalGuestFee = 0
+
+					completedBookingsList.forEach((booking) => {
+						const serviceFee = booking.pricing?.serviceFee || 0
+						const guestFee = booking.pricing?.guestFee || 0
+						totalServiceFee += serviceFee
+						totalGuestFee += guestFee
+					})
+
+					setBookingEarnings({
+						serviceFee: totalServiceFee,
+						guestFee: totalGuestFee,
+						total: totalServiceFee + totalGuestFee,
+					})
+				} catch (error) {
+					console.error("[AdminDashboard][Wallet] Error calculating booking earnings:", error)
+					setBookingEarnings({ serviceFee: 0, guestFee: 0, total: 0 })
+					setCompletedBookings([])
+				}
+
+				// Fetch subscriptions and calculate subscription revenue
+				try {
+					const subscriptionsSnapshot = await getDocs(collection(db, "subscriptions"))
+					const allSubscriptions = subscriptionsSnapshot.docs.map((doc) => ({
+						id: doc.id,
+						...doc.data(),
+					}))
+
+					// Filter active subscriptions
+					const activeSubscriptions = allSubscriptions.filter(
+						(sub) => sub.status === "active"
+					)
+
+					// Store subscriptions for transaction history
+					setSubscriptions(activeSubscriptions)
+
+					// Calculate total subscription revenue
+					let totalSubscriptionRevenue = 0
+					activeSubscriptions.forEach((subscription) => {
+						const price = subscription.price || 0
+						totalSubscriptionRevenue += price
+					})
+
+					setSubscriptionRevenue(totalSubscriptionRevenue)
+				} catch (error) {
+					console.error("[AdminDashboard][Wallet] Error fetching subscriptions:", error)
+					setSubscriptions([])
+					setSubscriptionRevenue(0)
+				}
 			} else {
 				console.warn(
 					"[AdminDashboard][Wallet] Admin account not found for email",
@@ -1394,7 +1548,7 @@ const AdminDashboard = () => {
 							property: b.propertyTitle || "N/A",
 							checkIn: b.checkIn || "N/A",
 							status: b.status || "pending",
-							amount: b.totalPrice || 0,
+							amount: b.pricing?.total || 0,
 						})),
 					}
 					break
@@ -1545,7 +1699,7 @@ const AdminDashboard = () => {
 								checkIn: b.checkIn || "N/A",
 								checkOut: b.checkOut || "N/A",
 								status: b.status || "pending",
-								amount: b.totalPrice || 0,
+								amount: b.pricing?.total || 0,
 							})),
 						},
 						revenue: {
@@ -1980,7 +2134,7 @@ const AdminDashboard = () => {
 						className={`sidebar-item ${
 							activeTab === "dashboard" ? "active" : ""
 						}`}
-						onClick={() => setActiveTab("dashboard")}
+						onClick={() => handleTabChange("dashboard")}
 					>
 						<span className="sidebar-icon">📊</span>
 						<span className="sidebar-text">Dashboard</span>
@@ -1989,7 +2143,7 @@ const AdminDashboard = () => {
 						className={`sidebar-item ${
 							activeTab === "manageHost" ? "active" : ""
 						}`}
-						onClick={() => setActiveTab("manageHost")}
+						onClick={() => handleTabChange("manageHost")}
 					>
 						<span className="sidebar-icon">👥</span>
 						<span className="sidebar-text">Manage Host</span>
@@ -1998,7 +2152,7 @@ const AdminDashboard = () => {
 						className={`sidebar-item ${
 							activeTab === "flagging" ? "active" : ""
 						}`}
-						onClick={() => setActiveTab("flagging")}
+						onClick={() => handleTabChange("flagging")}
 					>
 						<span className="sidebar-icon">🚩</span>
 						<span className="sidebar-text">Flagging</span>
@@ -2007,14 +2161,14 @@ const AdminDashboard = () => {
 						className={`sidebar-item ${
 							activeTab === "policies" ? "active" : ""
 						}`}
-						onClick={() => setActiveTab("policies")}
+						onClick={() => handleTabChange("policies")}
 					>
 						<span className="sidebar-icon">📋</span>
 						<span className="sidebar-text">Policies & Compliance</span>
 					</button>
 					<button
 						className={`sidebar-item ${activeTab === "terms" ? "active" : ""}`}
-						onClick={() => setActiveTab("terms")}
+						onClick={() => handleTabChange("terms")}
 					>
 						<span className="sidebar-icon">📜</span>
 						<span className="sidebar-text">Terms & Conditions</span>
@@ -2023,7 +2177,7 @@ const AdminDashboard = () => {
 						className={`sidebar-item ${
 							activeTab === "privacy" ? "active" : ""
 						}`}
-						onClick={() => setActiveTab("privacy")}
+						onClick={() => handleTabChange("privacy")}
 					>
 						<span className="sidebar-icon">🔒</span>
 						<span className="sidebar-text">Privacy Policy</span>
@@ -2032,27 +2186,33 @@ const AdminDashboard = () => {
 						className={`sidebar-item ${
 							activeTab === "reports" ? "active" : ""
 						}`}
-						onClick={() => setActiveTab("reports")}
+						onClick={() => handleTabChange("reports")}
 					>
 						<span className="sidebar-icon">📄</span>
 						<span className="sidebar-text">Generate Reports</span>
 					</button>
 					<button
 						className={`sidebar-item ${activeTab === "promos" ? "active" : ""}`}
-						onClick={() => setActiveTab("promos")}
+						onClick={() => handleTabChange("promos")}
 					>
 						<span className="sidebar-icon">🎁</span>
 						<span className="sidebar-text">Promos</span>
 					</button>
 					<button
 						className={`sidebar-item ${activeTab === "wallet" ? "active" : ""}`}
-						onClick={() => setActiveTab("wallet")}
+						onClick={() => handleTabChange("wallet")}
 					>
 						<span className="sidebar-icon">💰</span>
 						<span className="sidebar-text">E-Wallet</span>
 					</button>
 				</nav>
 			</aside>
+
+			{/* Sidebar Overlay for Mobile */}
+			<div
+				className={`sidebar-overlay ${sidebarOpen ? "active" : ""}`}
+				onClick={() => setSidebarOpen(false)}
+			/>
 
 			<main
 				className={`admin-main ${
@@ -2268,7 +2428,7 @@ const AdminDashboard = () => {
 															</span>
 														</td>
 														<td>
-															₱{(booking.totalPrice || 0).toLocaleString()}
+															₱{(booking.pricing?.total || 0).toLocaleString()}
 														</td>
 													</tr>
 												))}
@@ -3488,6 +3648,21 @@ const AdminDashboard = () => {
 									}
 									)
 								</button>
+								<button
+									className={`filter-tab ${
+										promoFilter === "host" ? "active" : ""
+									}`}
+									onClick={() => setPromoFilter("host")}
+								>
+									Host (
+									{
+										promos.filter((p) => {
+											// Filter promos created by hosts (not admin)
+											return p.createdBy && p.createdBy !== adminUserId
+										}).length
+									}
+									)
+								</button>
 							</div>
 						</div>
 
@@ -3543,6 +3718,8 @@ const AdminDashboard = () => {
 														return promo.isActive === false && !isScheduled
 													if (promoFilter === "expired") return isExpired
 													if (promoFilter === "scheduled") return isScheduled
+													if (promoFilter === "host")
+														return promo.createdBy && promo.createdBy !== adminUserId
 													return true
 												})
 												.map((promo) => {
@@ -3724,6 +3901,8 @@ const AdminDashboard = () => {
 											return promo.isActive === false && !isScheduled
 										if (promoFilter === "expired") return isExpired
 										if (promoFilter === "scheduled") return isScheduled
+										if (promoFilter === "host")
+											return promo.createdBy && promo.createdBy !== adminUserId
 										return true
 									}).length === 0 && (
 										<div className="empty-state">
@@ -5004,24 +5183,101 @@ const AdminDashboard = () => {
 										<div className="stat-item">
 											<span className="stat-label">Total Transactions</span>
 											<span className="stat-value">
-												{walletTransactions.length}
+												{walletTransactions.length + 
+													subscriptions.filter(sub => (sub.price || 0) > 0).length + 
+													completedBookings.filter(booking => {
+														const serviceFee = booking.pricing?.serviceFee || 0
+														const guestFee = booking.pricing?.guestFee || 0
+														return (serviceFee + guestFee) > 0
+													}).length}
 											</span>
 										</div>
 										<div className="stat-item">
 											<span className="stat-label">This Month</span>
 											<span className="stat-value">
-												{
-													walletTransactions.filter((tx) => {
-														const txDate =
-															tx.createdAt?.toDate?.() || new Date()
-														const thisMonth = new Date()
+												{(() => {
+													const thisMonth = new Date()
+													const currentMonth = thisMonth.getMonth()
+													const currentYear = thisMonth.getFullYear()
+													
+													// Count wallet transactions this month
+													const walletTxThisMonth = walletTransactions.filter((tx) => {
+														const txDate = tx.createdAt?.toDate?.() || new Date()
 														return (
-															txDate.getMonth() === thisMonth.getMonth() &&
-															txDate.getFullYear() === thisMonth.getFullYear()
+															txDate.getMonth() === currentMonth &&
+															txDate.getFullYear() === currentYear
 														)
 													}).length
-												}
+													
+													// Count subscriptions this month
+													const subscriptionsThisMonth = subscriptions.filter((sub) => {
+														const subDate = sub.createdAt?.toDate?.() || sub.createdAt || sub.startDate?.toDate?.() || sub.startDate || new Date(0)
+														const price = sub.price || 0
+														return (
+															price > 0 &&
+															subDate.getMonth() === currentMonth &&
+															subDate.getFullYear() === currentYear
+														)
+													}).length
+													
+													// Count bookings this month
+													const bookingsThisMonth = completedBookings.filter((booking) => {
+														const bookingDate = booking.createdAt?.toDate?.() || booking.createdAt || new Date(0)
+														const serviceFee = booking.pricing?.serviceFee || 0
+														const guestFee = booking.pricing?.guestFee || 0
+														return (
+															(serviceFee + guestFee) > 0 &&
+															bookingDate.getMonth() === currentMonth &&
+															bookingDate.getFullYear() === currentYear
+														)
+													}).length
+													
+													return walletTxThisMonth + subscriptionsThisMonth + bookingsThisMonth
+												})()}
 											</span>
+										</div>
+									</div>
+									<div className="balance-earnings">
+										<div className="earnings-header">
+											<span className="earnings-label">💰 Earnings from Bookings</span>
+										</div>
+										<div className="earnings-breakdown">
+											<div className="earnings-item">
+												<span className="earnings-type">Service Fee:</span>
+												<span className="earnings-amount">
+													₱{bookingEarnings.serviceFee.toLocaleString("en-PH", {
+														minimumFractionDigits: 2,
+														maximumFractionDigits: 2,
+													})}
+												</span>
+											</div>
+											<div className="earnings-item">
+												<span className="earnings-type">Guest Fee:</span>
+												<span className="earnings-amount">
+													₱{bookingEarnings.guestFee.toLocaleString("en-PH", {
+														minimumFractionDigits: 2,
+														maximumFractionDigits: 2,
+													})}
+												</span>
+											</div>
+											<div className="earnings-item">
+												<span className="earnings-type">Subscription Revenue:</span>
+												<span className="earnings-amount">
+													₱{subscriptionRevenue.toLocaleString("en-PH", {
+														minimumFractionDigits: 2,
+														maximumFractionDigits: 2,
+													})}
+												</span>
+											</div>
+											<div className="earnings-item total">
+												<span className="earnings-type">Total Earnings:</span>
+												<span className="earnings-amount">
+													₱{(bookingEarnings.total + subscriptionRevenue).toLocaleString("en-PH", {
+														minimumFractionDigits: 2,
+														maximumFractionDigits: 2,
+													})}
+												</span>
+											</div>
 										</div>
 									</div>
 								</div>
@@ -5075,7 +5331,7 @@ const AdminDashboard = () => {
 								<div className="transactions-section">
 									<h3>📊 Transaction History</h3>
 
-									{walletTransactions.length === 0 ? (
+									{walletTransactions.length === 0 && completedBookings.length === 0 && subscriptions.length === 0 ? (
 										<div className="empty-state">
 											<div className="empty-icon">📭</div>
 											<p>No transactions yet</p>
@@ -5094,18 +5350,185 @@ const AdminDashboard = () => {
 													</tr>
 												</thead>
 												<tbody>
-													{walletTransactions.map((tx) => {
-														const txDate =
-															tx.createdAt?.toDate?.() || new Date()
-														const isIncoming = [
-															"booking_received",
-															"top_up",
-														].includes(tx.type)
-														const isOutgoing = [
-															"payment",
-														].includes(tx.type)
+													{/* Subscription Payments */}
+													{subscriptions
+														.filter((subscription) => {
+															const price = subscription.price || 0
+															return price > 0
+														})
+														.sort((a, b) => {
+															const dateA = a.createdAt?.toDate?.() || a.createdAt || a.startDate?.toDate?.() || a.startDate || new Date(0)
+															const dateB = b.createdAt?.toDate?.() || b.createdAt || b.startDate?.toDate?.() || b.startDate || new Date(0)
+															return dateB - dateA
+														})
+														.map((subscription) => {
+															const subDate = subscription.createdAt?.toDate?.() || subscription.createdAt || subscription.startDate?.toDate?.() || subscription.startDate || new Date()
+															const price = subscription.price || 0
 
-														return (
+															return (
+																<tr key={`subscription-${subscription.id}`}>
+																	<td>
+																		<div className="tx-date">
+																			<div>
+																				{subDate.toLocaleDateString("en-PH")}
+																			</div>
+																			<div className="tx-time">
+																				{subDate.toLocaleTimeString("en-PH", {
+																					hour: "2-digit",
+																					minute: "2-digit",
+																				})}
+																			</div>
+																		</div>
+																	</td>
+																	<td>
+																		<span className="tx-type subscription_payment">
+																			👑 Subscription Payment
+																		</span>
+																	</td>
+																	<td>
+																		<div className="tx-description">
+																			{subscription.planName && (
+																				<div className="property-title">
+																					{subscription.planName} Plan
+																				</div>
+																			)}
+																			{subscription.userId && (
+																				<div className="recipient">
+																					Host Subscription
+																				</div>
+																			)}
+																			{subscription.paymentMethod && (
+																				<div className="fee-item">
+																					Payment: {subscription.paymentMethod === "wallet" ? "E-Wallet" : subscription.paymentMethod === "paypal" ? "PayPal" : subscription.paymentMethod}
+																				</div>
+																			)}
+																		</div>
+																	</td>
+																	<td>
+																		<span className="tx-amount positive">
+																			+₱{price.toLocaleString("en-PH", {
+																				minimumFractionDigits: 2,
+																				maximumFractionDigits: 2,
+																			})}
+																		</span>
+																	</td>
+																	<td>
+																		—
+																	</td>
+																	<td>
+																		<span className={`status-badge ${subscription.status}`}>
+																			{subscription.status === "active" && "✅"}
+																			{subscription.status || "N/A"}
+																		</span>
+																	</td>
+																</tr>
+															)
+														})}
+													{/* Booking Earnings */}
+													{completedBookings
+														.filter((booking) => {
+															const serviceFee = booking.pricing?.serviceFee || 0
+															const guestFee = booking.pricing?.guestFee || 0
+															return (serviceFee + guestFee) > 0
+														})
+														.sort((a, b) => {
+															const dateA = a.createdAt?.toDate?.() || a.createdAt || new Date(0)
+															const dateB = b.createdAt?.toDate?.() || b.createdAt || new Date(0)
+															return dateB - dateA
+														})
+														.map((booking) => {
+															const bookingDate = booking.createdAt?.toDate?.() || booking.createdAt || new Date()
+															const serviceFee = booking.pricing?.serviceFee || 0
+															const guestFee = booking.pricing?.guestFee || 0
+															const totalEarnings = serviceFee + guestFee
+
+															return (
+																<tr key={`booking-${booking.id}`}>
+																	<td>
+																		<div className="tx-date">
+																			<div>
+																				{bookingDate.toLocaleDateString("en-PH")}
+																			</div>
+																			<div className="tx-time">
+																				{bookingDate.toLocaleTimeString("en-PH", {
+																					hour: "2-digit",
+																					minute: "2-digit",
+																				})}
+																			</div>
+																		</div>
+																	</td>
+																	<td>
+																		<span className="tx-type booking_earning">
+																			💰 Booking Earnings
+																		</span>
+																	</td>
+																	<td>
+																		<div className="tx-description">
+																			{booking.propertyTitle && (
+																				<div className="property-title">
+																					{booking.propertyTitle}
+																				</div>
+																			)}
+																			{booking.guestName && (
+																				<div className="recipient">
+																					Guest: {booking.guestName}
+																				</div>
+																			)}
+																			<div className="fee-breakdown">
+																				<div className="fee-item">
+																					Service Fee: ₱{serviceFee.toLocaleString("en-PH", {
+																						minimumFractionDigits: 2,
+																						maximumFractionDigits: 2,
+																					})}
+																				</div>
+																				<div className="fee-item">
+																					Guest Fee: ₱{guestFee.toLocaleString("en-PH", {
+																						minimumFractionDigits: 2,
+																						maximumFractionDigits: 2,
+																					})}
+																				</div>
+																			</div>
+																		</div>
+																	</td>
+																	<td>
+																		<span className="tx-amount positive">
+																			+₱{totalEarnings.toLocaleString("en-PH", {
+																				minimumFractionDigits: 2,
+																				maximumFractionDigits: 2,
+																			})}
+																		</span>
+																	</td>
+																	<td>
+																		—
+																	</td>
+																	<td>
+																		<span className={`status-badge ${booking.status}`}>
+																			{booking.status === "completed" && "✅"}
+																			{booking.status === "confirmed" && "✅"}
+																			{booking.status || "N/A"}
+																		</span>
+																	</td>
+																</tr>
+															)
+														})}
+													{/* Wallet Transactions */}
+													{walletTransactions
+														.filter((tx) => {
+															const amount = tx.amount || 0
+															return amount !== 0
+														})
+														.map((tx) => {
+															const txDate =
+																tx.createdAt?.toDate?.() || new Date()
+															const isIncoming = [
+																"booking_received",
+																"top_up",
+															].includes(tx.type)
+															const isOutgoing = [
+																"payment",
+															].includes(tx.type)
+
+															return (
 															<tr key={tx.id}>
 																<td>
 																	<div className="tx-date">

@@ -23,3 +23,13 @@
 	transform: scale(1.1);
 	box-shadow: 0 6px 16px rgba(217, 198, 111, 0.4);
 }
+
+@media (max-width: 768px) {
+	.back-to-top-button {
+		bottom: 1.5rem;
+		right: 1.5rem;
+		width: 45px;
+		height: 45px;
+		font-size: 1.1rem;
+	}
+}

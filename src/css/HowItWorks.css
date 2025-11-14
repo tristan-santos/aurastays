@@ -68,3 +68,45 @@
 	color: #6c757d;
 	line-height: 1.6;
 }
+
+@media (max-width: 768px) {
+	.how-it-works {
+		padding: 4rem 1rem;
+	}
+
+	.how-it-works h2 {
+		font-size: 1.75rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.how-it-works .subtitle {
+		font-size: 1rem;
+		margin-bottom: 2.5rem;
+	}
+
+	.steps-container {
+		grid-template-columns: 1fr;
+		gap: 1.5rem;
+	}
+
+	.step-card {
+		padding: 1.75rem;
+		border-radius: 12px;
+	}
+
+	.step-icon {
+		width: 60px;
+		height: 60px;
+		font-size: 1.75rem;
+		margin-bottom: 1.25rem;
+	}
+
+	.step-card h3 {
+		font-size: 1.25rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.step-card p {
+		font-size: 0.95rem;
+	}
+}

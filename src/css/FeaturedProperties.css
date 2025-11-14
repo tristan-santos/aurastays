@@ -82,3 +82,43 @@
 	text-decoration: none;
 	color: inherit;
 }
+
+@media (max-width: 768px) {
+	.featured-properties {
+		padding: 4rem 1rem;
+	}
+
+	.featured-properties h2 {
+		font-size: 1.75rem;
+		margin-bottom: 2.5rem;
+	}
+
+	.properties-container {
+		grid-template-columns: 1fr;
+		gap: 1.5rem;
+	}
+
+	.property-card {
+		border-radius: 12px;
+	}
+
+	.property-image {
+		height: 200px;
+	}
+
+	.property-content {
+		padding: 1.25rem;
+	}
+
+	.property-title-featured {
+		font-size: 1.05rem;
+	}
+
+	.property-location {
+		font-size: 0.9rem;
+	}
+
+	.property-price {
+		font-size: 1rem;
+	}
+}
