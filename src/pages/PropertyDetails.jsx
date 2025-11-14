@@ -157,7 +157,7 @@ export default function PropertyDetails() {
 	const [editPromoMinDays, setEditPromoMinDays] = useState("")
 	const [editPromoIsActive, setEditPromoIsActive] = useState(true)
 	const [isUpdatingPromo, setIsUpdatingPromo] = useState(false)
-	
+
 	// Create new promo states
 	const [showCreatePromoForm, setShowCreatePromoForm] = useState(false)
 	const [newCoupon, setNewCoupon] = useState({
@@ -237,9 +237,13 @@ export default function PropertyDetails() {
 			if (e.key === "Escape") {
 				setShowFullSizeImage(false)
 			} else if (e.key === "ArrowLeft" && imagesList.length > 1) {
-				setFullSizeImageIndex((prev) => (prev === 0 ? imagesList.length - 1 : prev - 1))
+				setFullSizeImageIndex((prev) =>
+					prev === 0 ? imagesList.length - 1 : prev - 1
+				)
 			} else if (e.key === "ArrowRight" && imagesList.length > 1) {
-				setFullSizeImageIndex((prev) => (prev === imagesList.length - 1 ? 0 : prev + 1))
+				setFullSizeImageIndex((prev) =>
+					prev === imagesList.length - 1 ? 0 : prev + 1
+				)
 			}
 		}
 
@@ -293,7 +297,7 @@ export default function PropertyDetails() {
 				id: doc.id,
 				...doc.data(),
 			}))
-			
+
 			// Filter out expired coupons
 			const now = new Date()
 			const activeCoupons = coupons.filter((coupon) => {
@@ -302,7 +306,7 @@ export default function PropertyDetails() {
 				}
 				return true
 			})
-			
+
 			setPropertyCoupons(activeCoupons)
 		} catch (error) {
 			console.error("Error fetching property coupons:", error)
@@ -638,20 +642,23 @@ export default function PropertyDetails() {
 			querySnapshot.forEach((doc) => {
 				const booking = doc.data()
 				// Only include confirmed, pending, or other active statuses (not cancelled)
-				if (booking.status !== "cancelled" && booking.status !== "cancellation_requested") {
+				if (
+					booking.status !== "cancelled" &&
+					booking.status !== "cancellation_requested"
+				) {
 					// If bookedDates array exists, use it
 					if (booking.bookedDates && Array.isArray(booking.bookedDates)) {
 						dates.push(...booking.bookedDates)
-					} 
+					}
 					// Otherwise, generate dates from checkInDate and checkOutDate
 					else if (booking.checkInDate && booking.checkOutDate) {
-						const checkIn = booking.checkInDate.toDate 
-							? booking.checkInDate.toDate() 
+						const checkIn = booking.checkInDate.toDate
+							? booking.checkInDate.toDate()
 							: new Date(booking.checkInDate)
-						const checkOut = booking.checkOutDate.toDate 
-							? booking.checkOutDate.toDate() 
+						const checkOut = booking.checkOutDate.toDate
+							? booking.checkOutDate.toDate()
 							: new Date(booking.checkOutDate)
-						
+
 						// Generate all dates between check-in and check-out
 						const bookingDates = getDatesBetween(
 							checkIn.toISOString().split("T")[0],
@@ -661,7 +668,7 @@ export default function PropertyDetails() {
 					}
 				}
 			})
-			
+
 			// Merge with blocked dates from property
 			try {
 				const propRef = docFirestore(db, "properties", propertyId)
@@ -812,7 +819,7 @@ export default function PropertyDetails() {
 				return dateB - dateA
 			})
 			setReviews(reviewsData)
-			
+
 			// Update property rating and reviews count dynamically
 			if (reviewsData.length > 0) {
 				const totalRating = reviewsData.reduce(
@@ -820,14 +827,14 @@ export default function PropertyDetails() {
 					0
 				)
 				const averageRating = totalRating / reviewsData.length
-				
+
 				// Update property document
 				const propertyRef = doc(db, "properties", propertyId)
 				await updateDoc(propertyRef, {
 					rating: Math.round(averageRating * 10) / 10, // Round to 1 decimal
 					reviewsCount: reviewsData.length,
 				})
-				
+
 				// Update local property state
 				if (property) {
 					setProperty({
@@ -843,7 +850,7 @@ export default function PropertyDetails() {
 					rating: 0,
 					reviewsCount: 0,
 				})
-				
+
 				// Update local property state
 				if (property) {
 					setProperty({
@@ -861,24 +868,24 @@ export default function PropertyDetails() {
 	// Fetch wishlists for this property (only visible to host and the guest who created them)
 	const fetchPropertyWishlists = async () => {
 		if (!property || !currentUser) return
-		
+
 		try {
 			// Get all users and check their wishes array
 			const usersRef = collection(db, "users")
 			const usersSnapshot = await getDocs(usersRef)
 			const wishlists = []
-			
+
 			usersSnapshot.forEach((userDoc) => {
 				const userData = userDoc.data()
 				const wishes = Array.isArray(userData.wishes) ? userData.wishes : []
-				
+
 				wishes.forEach((wish) => {
 					// Only include wishlists for this property
 					if (wish.propertyId === propertyId && wish.isCreated) {
 						// Only show to host or the guest who created it
 						const isHost = property.hostId === currentUser.uid
 						const isGuest = wish.guestId === currentUser.uid
-						
+
 						if (isHost || isGuest) {
 							wishlists.push({
 								...wish,
@@ -889,7 +896,7 @@ export default function PropertyDetails() {
 					}
 				})
 			})
-			
+
 			setPropertyWishlists(wishlists)
 		} catch (error) {
 			console.error("Error fetching property wishlists:", error)
@@ -1376,7 +1383,10 @@ export default function PropertyDetails() {
 			return
 		}
 
-		if (newCoupon.discountType === "percentage" && parseFloat(newCoupon.discountValue) > 100) {
+		if (
+			newCoupon.discountType === "percentage" &&
+			parseFloat(newCoupon.discountValue) > 100
+		) {
 			toast.error("Percentage discount cannot exceed 100%")
 			return
 		}
@@ -1433,28 +1443,47 @@ export default function PropertyDetails() {
 			fetchPropertyPromos(property.id)
 		} catch (error) {
 			console.error("Error creating promo:", error)
-			toast.error("❌ Failed to create promo: " + getFirebaseErrorMessage(error))
+			toast.error(
+				"❌ Failed to create promo: " + getFirebaseErrorMessage(error)
+			)
 		} finally {
 			setIsCreatingPromo(false)
 		}
 	}
 
 	// NumberStepper component for numeric inputs
-	const NumberStepper = ({ value, onChange, min = 0, max, step = 1, placeholder, style = {} }) => {
+	const NumberStepper = ({
+		value,
+		onChange,
+		min = 0,
+		max,
+		step = 1,
+		placeholder,
+		style = {},
+	}) => {
 		const numValue = parseInt(value) || 0
-		
+
 		const handleDecrease = () => {
 			const newValue = Math.max(min, numValue - step)
 			onChange({ target: { value: newValue.toString() } })
 		}
-		
+
 		const handleIncrease = () => {
-			const newValue = max !== undefined ? Math.min(max, numValue + step) : numValue + step
+			const newValue =
+				max !== undefined ? Math.min(max, numValue + step) : numValue + step
 			onChange({ target: { value: newValue.toString() } })
 		}
-		
+
 		return (
-			<div className="number-stepper" style={{ display: "flex", alignItems: "center", gap: "0.75rem", ...style }}>
+			<div
+				className="number-stepper"
+				style={{
+					display: "flex",
+					alignItems: "center",
+					gap: "0.75rem",
+					...style,
+				}}
+			>
 				<button
 					type="button"
 					onClick={handleDecrease}
@@ -1516,8 +1545,10 @@ export default function PropertyDetails() {
 						height: "44px",
 						border: "1px solid #b0b0b0",
 						borderRadius: "50%",
-						background: max !== undefined && numValue >= max ? "#f5f5f5" : "white",
-						cursor: max !== undefined && numValue >= max ? "not-allowed" : "pointer",
+						background:
+							max !== undefined && numValue >= max ? "#f5f5f5" : "white",
+						cursor:
+							max !== undefined && numValue >= max ? "not-allowed" : "pointer",
 						display: "flex",
 						alignItems: "center",
 						justifyContent: "center",
@@ -1558,7 +1589,10 @@ export default function PropertyDetails() {
 		const days = []
 		for (let i = 0; i < firstDay; i++) days.push(null)
 		for (let day = 1; day <= daysInMonth; day++) {
-			const dateString = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+			const dateString = `${year}-${String(month + 1).padStart(
+				2,
+				"0"
+			)}-${String(day).padStart(2, "0")}`
 			days.push({
 				day,
 				dateString,
@@ -1570,13 +1604,19 @@ export default function PropertyDetails() {
 
 	const previousCouponMonth = () => {
 		setCouponCurrentMonth(
-			new Date(couponCurrentMonth.getFullYear(), couponCurrentMonth.getMonth() - 1)
+			new Date(
+				couponCurrentMonth.getFullYear(),
+				couponCurrentMonth.getMonth() - 1
+			)
 		)
 	}
 
 	const nextCouponMonth = () => {
 		setCouponCurrentMonth(
-			new Date(couponCurrentMonth.getFullYear(), couponCurrentMonth.getMonth() + 1)
+			new Date(
+				couponCurrentMonth.getFullYear(),
+				couponCurrentMonth.getMonth() + 1
+			)
 		)
 	}
 
@@ -1586,7 +1626,11 @@ export default function PropertyDetails() {
 			setNewCoupon({
 				...newCoupon,
 				validFrom: dateString,
-				validUntil: newCoupon.validUntil && new Date(newCoupon.validUntil) <= new Date(dateString) ? "" : newCoupon.validUntil,
+				validUntil:
+					newCoupon.validUntil &&
+					new Date(newCoupon.validUntil) <= new Date(dateString)
+						? ""
+						: newCoupon.validUntil,
 			})
 			setSelectingValidFrom(false)
 			toast.success("Valid From date selected. Now select Valid Until date.")
@@ -1905,7 +1949,9 @@ export default function PropertyDetails() {
 			}
 
 			await addDoc(collection(db, "propertyReports"), reportData)
-			toast.success("Report submitted successfully. Thank you for helping keep AuraStays safe!")
+			toast.success(
+				"Report submitted successfully. Thank you for helping keep AuraStays safe!"
+			)
 			setShowReportModal(false)
 			setReportReason("")
 			setReportDescription("")
@@ -1948,12 +1994,12 @@ export default function PropertyDetails() {
 		const checkIn = new Date(checkInDate)
 		const checkOut = new Date(checkOutDate)
 		const nights = calculateNights()
-		
+
 		if (nights <= 0) {
 			setAutoAppliedVoucher(null)
 			return
 		}
-		
+
 		const basePrice = property?.pricing?.basePrice || 0
 		const subtotal = basePrice * nights
 
@@ -1967,11 +2013,12 @@ export default function PropertyDetails() {
 				if (!voucherDetails) return
 
 				// Check if voucher is active
-				const isActive = voucherDetails.isActive !== undefined
-					? typeof voucherDetails.isActive === "boolean"
-						? voucherDetails.isActive
-						: String(voucherDetails.isActive).toLowerCase() === "true"
-					: true
+				const isActive =
+					voucherDetails.isActive !== undefined
+						? typeof voucherDetails.isActive === "boolean"
+							? voucherDetails.isActive
+							: String(voucherDetails.isActive).toLowerCase() === "true"
+						: true
 
 				if (!isActive) return
 
@@ -1996,12 +2043,17 @@ export default function PropertyDetails() {
 				// Calculate discount
 				let discount = 0
 				const discountType = voucherDetails.discountType || "percent"
-				const discountValue = parseFloat(voucherDetails.discount || voucherDetails.discountValue || 0)
+				const discountValue = parseFloat(
+					voucherDetails.discount || voucherDetails.discountValue || 0
+				)
 
 				if (discountType === "percent" || discountType === "percentage") {
 					discount = (subtotal * discountValue) / 100
 					// Check max discount if specified
-					if (voucherDetails.maxDiscount && discount > voucherDetails.maxDiscount) {
+					if (
+						voucherDetails.maxDiscount &&
+						discount > voucherDetails.maxDiscount
+					) {
 						discount = voucherDetails.maxDiscount
 					}
 				} else {
@@ -2037,7 +2089,7 @@ export default function PropertyDetails() {
 
 		const subtotal = basePrice * nights
 		const totalBeforeDiscount = subtotal + cleaningFee + serviceFee + guestFee
-		
+
 		// Use auto-applied voucher discount if no manual promo is applied
 		// Manual promo takes precedence
 		// Recalculate discount if voucher exists and nights > 0 (to ensure it's up to date)
@@ -2048,18 +2100,21 @@ export default function PropertyDetails() {
 			// Recalculate discount to ensure it's based on current subtotal
 			const discountType = autoAppliedVoucher.discountType || "percent"
 			const discountValue = autoAppliedVoucher.discountValue || 0
-			
+
 			if (discountType === "percent" || discountType === "percentage") {
 				totalDiscount = (subtotal * discountValue) / 100
 				// Check max discount if specified
-				if (autoAppliedVoucher.details?.maxDiscount && totalDiscount > autoAppliedVoucher.details.maxDiscount) {
+				if (
+					autoAppliedVoucher.details?.maxDiscount &&
+					totalDiscount > autoAppliedVoucher.details.maxDiscount
+				) {
 					totalDiscount = autoAppliedVoucher.details.maxDiscount
 				}
 			} else {
 				totalDiscount = discountValue
 			}
 		}
-		
+
 		const total = totalBeforeDiscount - totalDiscount
 
 		// Calculate discounted price per night
@@ -3195,11 +3250,15 @@ export default function PropertyDetails() {
 	const sendBookingMessageForDeletion = async (booking, refundAmount) => {
 		try {
 			if (!booking.guestId) {
-				console.warn("[DeleteProperty] No guestId found for booking", booking.id)
+				console.warn(
+					"[DeleteProperty] No guestId found for booking",
+					booking.id
+				)
 				return
 			}
 
-			const displayName = userData?.displayName || currentUser?.displayName || "Host"
+			const displayName =
+				userData?.displayName || currentUser?.displayName || "Host"
 			const userEmail = userData?.email || currentUser?.email || ""
 
 			// Find or create conversation between host and guest
@@ -3212,9 +3271,18 @@ export default function PropertyDetails() {
 			const conversationsSnapshot = await getDocs(conversationsQuery)
 
 			let conversationId
-			const messageBody = `We regret to inform you that the property "${property.title}" has been removed from our platform by the host. Your booking from ${formatDate(booking.checkInDate)} to ${formatDate(booking.checkOutDate)} has been cancelled.${refundAmount > 0 ? ` A full refund of ₱${refundAmount.toLocaleString()} has been processed and added to your e-wallet.` : ""} We apologize for any inconvenience. Please contact support if you need assistance finding alternative accommodations.`
+			const messageBody = `We regret to inform you that the property "${
+				property.title
+			}" has been removed from our platform by the host. Your booking from ${formatDate(
+				booking.checkInDate
+			)} to ${formatDate(booking.checkOutDate)} has been cancelled.${
+				refundAmount > 0
+					? ` A full refund of ₱${refundAmount.toLocaleString()} has been processed and added to your e-wallet.`
+					: ""
+			} We apologize for any inconvenience. Please contact support if you need assistance finding alternative accommodations.`
 			const messageSubject = `Property Deleted: ${property.title}`
-			const lastMessage = "Property has been deleted and your booking has been cancelled."
+			const lastMessage =
+				"Property has been deleted and your booking has been cancelled."
 
 			if (!conversationsSnapshot.empty) {
 				// Use existing conversation
@@ -3312,7 +3380,9 @@ export default function PropertyDetails() {
 				}
 			})
 
-			console.log(`[DeleteProperty] Found ${activeBookings.length} active bookings to refund`)
+			console.log(
+				`[DeleteProperty] Found ${activeBookings.length} active bookings to refund`
+			)
 
 			// Process refunds for each active booking
 			for (const booking of activeBookings) {
@@ -3351,7 +3421,9 @@ export default function PropertyDetails() {
 							})
 
 							console.log(
-								`[DeleteProperty] Refunded ₱${refundAmount.toLocaleString()} to guest ${booking.guestId}`
+								`[DeleteProperty] Refunded ₱${refundAmount.toLocaleString()} to guest ${
+									booking.guestId
+								}`
 							)
 						}
 
@@ -3363,7 +3435,10 @@ export default function PropertyDetails() {
 						if (hostDoc.exists()) {
 							const hostData = hostDoc.data()
 							const hostCurrentBalance = hostData?.walletBalance || 0
-							const hostNewBalance = Math.max(0, hostCurrentBalance - refundAmount)
+							const hostNewBalance = Math.max(
+								0,
+								hostCurrentBalance - refundAmount
+							)
 
 							// Update host wallet
 							await updateDoc(hostRef, {
@@ -3419,9 +3494,15 @@ export default function PropertyDetails() {
 			const propertyRef = doc(db, "properties", propertyId)
 			await deleteDoc(propertyRef)
 
-			console.log(`[DeleteProperty] Property ${propertyId} deleted successfully`)
+			console.log(
+				`[DeleteProperty] Property ${propertyId} deleted successfully`
+			)
 			toast.success(
-				`Property deleted successfully. ${activeBookings.length > 0 ? `${activeBookings.length} booking(s) cancelled and refunded.` : ""}`
+				`Property deleted successfully. ${
+					activeBookings.length > 0
+						? `${activeBookings.length} booking(s) cancelled and refunded.`
+						: ""
+				}`
 			)
 
 			// Navigate to host dashboard
@@ -3462,7 +3543,10 @@ export default function PropertyDetails() {
 			{/* Navigation Header */}
 			<nav className="top-navbar">
 				{/* Logo */}
-				<div className="navbar-logo" onClick={() => navigate(getDashboardRoute())}>
+				<div
+					className="navbar-logo"
+					onClick={() => navigate(getDashboardRoute())}
+				>
 					<img src={logoPlain} alt="AuraStays" />
 					<span className="logo-text">AuraStays</span>
 				</div>
@@ -3491,14 +3575,18 @@ export default function PropertyDetails() {
 							<button
 								onClick={toggleFavorite}
 								className={`icon-button ${isFavorite ? "active" : ""}`}
-								title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+								title={
+									isFavorite ? "Remove from Favorites" : "Add to Favorites"
+								}
 							>
 								<FaHeart />
 							</button>
 							<button
 								onClick={toggleWishlist}
 								className={`icon-button ${isInWishlist ? "active" : ""}`}
-								title={isInWishlist ? "Remove from Wishlist" : "Add to Wishlist"}
+								title={
+									isInWishlist ? "Remove from Wishlist" : "Add to Wishlist"
+								}
 							>
 								<FaBookmark />
 							</button>
@@ -3636,10 +3724,7 @@ export default function PropertyDetails() {
 							)}
 						</div>
 					) : (
-						<button
-							className="login-btn"
-							onClick={() => navigate("/login")}
-						>
+						<button className="login-btn" onClick={() => navigate("/login")}>
 							Log in
 						</button>
 					)}
@@ -3648,324 +3733,2265 @@ export default function PropertyDetails() {
 
 			{/* Main Content */}
 			<div className="property-details-content">
-			{/* Title Section */}
-			<div className="property-title-section">
-				<h1>{property.title || property.name}</h1>
-				<div className="property-meta">
-					<div className="rating-location">
-						{property.rating && (
-							<span className="rating">
-								<FaStar /> {property.rating} ({property.reviewsCount || 0}{" "}
-								reviews)
+				{/* Title Section */}
+				<div className="property-title-section">
+					<h1>{property.title || property.name}</h1>
+					<div className="property-meta">
+						<div className="rating-location">
+							{property.rating && (
+								<span className="rating">
+									<FaStar /> {property.rating} ({property.reviewsCount || 0}{" "}
+									reviews)
+								</span>
+							)}
+							<span className="location">
+								<FaMapMarkerAlt />
+								{typeof property.location === "object"
+									? `${property.location.city}, ${property.location.province}`
+									: property.location}
 							</span>
-						)}
-						<span className="location">
-							<FaMapMarkerAlt />
-							{typeof property.location === "object"
-								? `${property.location.city}, ${property.location.province}`
-								: property.location}
-						</span>
+						</div>
 					</div>
 				</div>
-			</div>
 
-			{/* Photo Gallery */}
-			<div className="photo-gallery">
-				<div 
-					className="main-photo" 
-					onClick={() => {
-						setFullSizeImageIndex(selectedImage)
-						setShowFullSizeImage(true)
-					}}
-					style={{ cursor: "pointer" }}
-				>
-					<img
-						src={images[selectedImage] || housePlaceholder}
-						alt="Main view"
-						style={{ cursor: "pointer" }}
-					/>
-					<button 
-						className="view-all-photos-btn"
-						onClick={(e) => {
-							e.stopPropagation()
-							setShowAllPhotos(true)
+				{/* Photo Gallery */}
+				<div className="photo-gallery">
+					<div
+						className="main-photo"
+						onClick={() => {
+							setFullSizeImageIndex(selectedImage)
+							setShowFullSizeImage(true)
 						}}
+						style={{ cursor: "pointer" }}
 					>
-						View all {images.length} photos
-					</button>
-				</div>
-				<div className="photo-thumbnails">
-					{images.slice(0, 4).map((img, index) => (
-						<div
-							key={index}
-							className={`thumbnail ${selectedImage === index ? "active" : ""}`}
-							onClick={(e) => {
-								e.stopPropagation()
-								setSelectedImage(index)
-							}}
-						>
-							<img 
-								src={img} 
-								alt={`View ${index + 1}`}
-								style={{ cursor: "pointer" }}
-								onClick={(e) => {
-									e.stopPropagation()
-									setFullSizeImageIndex(index)
-									setShowFullSizeImage(true)
-								}}
-							/>
-						</div>
-					))}
-					{images.length > 4 && (
-						<div
-							className="thumbnail more"
+						<img
+							src={images[selectedImage] || housePlaceholder}
+							alt="Main view"
+							style={{ cursor: "pointer" }}
+						/>
+						<button
+							className="view-all-photos-btn"
 							onClick={(e) => {
 								e.stopPropagation()
 								setShowAllPhotos(true)
 							}}
 						>
-							<span>+{images.length - 4}</span>
-						</div>
-					)}
+							View all {images.length} photos
+						</button>
+					</div>
+					<div className="photo-thumbnails">
+						{images.slice(0, 4).map((img, index) => (
+							<div
+								key={index}
+								className={`thumbnail ${
+									selectedImage === index ? "active" : ""
+								}`}
+								onClick={(e) => {
+									e.stopPropagation()
+									setSelectedImage(index)
+								}}
+							>
+								<img
+									src={img}
+									alt={`View ${index + 1}`}
+									style={{ cursor: "pointer" }}
+									onClick={(e) => {
+										e.stopPropagation()
+										setFullSizeImageIndex(index)
+										setShowFullSizeImage(true)
+									}}
+								/>
+							</div>
+						))}
+						{images.length > 4 && (
+							<div
+								className="thumbnail more"
+								onClick={(e) => {
+									e.stopPropagation()
+									setShowAllPhotos(true)
+								}}
+							>
+								<span>+{images.length - 4}</span>
+							</div>
+						)}
+					</div>
 				</div>
-			</div>
 
-			{/* Main Content */}
-			<div className="property-main-content">
-				{/* Left Column */}
-				<div className="content-left">
-					{/* Property Info */}
-					<section className="info-section">
-						<h2>About this property</h2>
-						<div className="property-specs">
-							{property.guests && (
-								<div className="spec-item">
-									<FaUser />
-									<span>{property.guests} guests</span>
-								</div>
-							)}
-							{property.bedrooms && (
-								<div className="spec-item">
-									<span>{property.bedrooms} bedrooms</span>
-								</div>
-							)}
-							{property.beds && (
-								<div className="spec-item">
-									<span>{property.beds} beds</span>
-								</div>
-							)}
-							{property.bathrooms && (
-								<div className="spec-item">
-									<span>{property.bathrooms} bathrooms</span>
-								</div>
-							)}
-						</div>
-						<p className="description">{property.description}</p>
-					</section>
+				{/* Main Content */}
+				<div className="property-main-content">
+					{/* Left Column */}
+					<div className="content-left">
+						{/* Property Info */}
+						<section className="info-section">
+							<h2>About this property</h2>
+							<div className="property-specs">
+								{property.guests && (
+									<div className="spec-item">
+										<FaUser />
+										<span>{property.guests} guests</span>
+									</div>
+								)}
+								{property.bedrooms && (
+									<div className="spec-item">
+										<span>{property.bedrooms} bedrooms</span>
+									</div>
+								)}
+								{property.beds && (
+									<div className="spec-item">
+										<span>{property.beds} beds</span>
+									</div>
+								)}
+								{property.bathrooms && (
+									<div className="spec-item">
+										<span>{property.bathrooms} bathrooms</span>
+									</div>
+								)}
+							</div>
+							<p className="description">{property.description}</p>
+						</section>
 
-					{/* Amenities */}
-					<section className="amenities-section">
-						<h2>What this place offers</h2>
-						<div className="amenities-grid">
-							{(property.amenities || []).map((amenity, index) => (
-								<div key={index} className="amenity-item">
-									<FaCheck />
-									<span>{amenity}</span>
-								</div>
-							))}
-						</div>
-					</section>
-
-					{/* House Rules */}
-					{property.houseRules && property.houseRules.length > 0 && (
-						<section className="house-rules-section">
-							<h2>House Rules</h2>
-							<div className="house-rules-grid">
-								{property.houseRules.map((rule, index) => (
-									<div key={index} className="house-rule-item">
+						{/* Amenities */}
+						<section className="amenities-section">
+							<h2>What this place offers</h2>
+							<div className="amenities-grid">
+								{(property.amenities || []).map((amenity, index) => (
+									<div key={index} className="amenity-item">
 										<FaCheck />
-										<span>{rule}</span>
+										<span>{amenity}</span>
 									</div>
 								))}
 							</div>
 						</section>
-					)}
 
-					{/* Property Coupons */}
-					{propertyCoupons.length > 0 && (
-						<section className="coupons-section" style={{ marginTop: "3rem", marginBottom: "3rem" }}>
-							<h2>Special Offers</h2>
-							<div className="coupons-grid" style={{ 
-								display: "grid", 
-								gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", 
-								gap: "1rem",
-								marginTop: "1rem"
-							}}>
-								{propertyCoupons.map((coupon) => {
-									const discountDisplay = coupon.discountType === "percentage" || coupon.discountType === "percent"
-										? `${coupon.discountValue || coupon.discount || 0}%`
-										: `₱${(coupon.discountValue || coupon.discount || 0).toLocaleString()}`
-									
-									const validFrom = coupon.validFrom ? new Date(coupon.validFrom).toLocaleDateString("en-US", {
-										month: "short",
-										day: "numeric",
-										year: "numeric"
-									}) : null
-									
-									const validUntil = coupon.validUntil ? new Date(coupon.validUntil).toLocaleDateString("en-US", {
-										month: "short",
-										day: "numeric",
-										year: "numeric"
-									}) : null
-
-									return (
-										<div 
-											key={coupon.id} 
-											className="coupon-card"
-											style={{
-												border: "2px solid var(--primary)",
-												borderRadius: "12px",
-												padding: "1.5rem",
-												background: "linear-gradient(135deg, rgba(97, 191, 156, 0.05) 0%, rgba(97, 191, 156, 0.02) 100%)",
-												position: "relative",
-												overflow: "hidden"
-											}}
-										>
-											<div style={{
-												position: "absolute",
-												top: "0.5rem",
-												right: "0.5rem",
-												background: "var(--primary)",
-												color: "white",
-												padding: "0.5rem 1rem",
-												borderRadius: "20px",
-												fontSize: "1rem",
-												fontWeight: "700",
-												display: "flex",
-												alignItems: "center",
-												gap: "0.5rem"
-											}}>
-												<FaGift style={{ fontSize: "1rem", flexShrink: 0 }} />
-												<span>{coupon.code}</span>
-											</div>
-											
-											<div style={{ marginTop: "1.5rem" }}>
-												<div style={{
-													fontSize: "2rem",
-													fontWeight: "700",
-													color: "var(--primary)",
-													marginBottom: "0.5rem"
-												}}>
-													{discountDisplay} OFF
-												</div>
-												
-												{coupon.description && (
-													<p style={{
-														fontSize: "0.9rem",
-														color: "#666",
-														marginBottom: "1rem",
-														lineHeight: "1.5"
-													}}>
-														{coupon.description}
-													</p>
-												)}
-												
-												{(validFrom || validUntil) && (
-													<div style={{
-														fontSize: "0.85rem",
-														color: "#999",
-														marginTop: "1rem",
-														paddingTop: "1rem",
-														borderTop: "1px solid #e0e0e0"
-													}}>
-														{validFrom && validUntil ? (
-															<>
-																<FaCalendarAlt style={{ marginRight: "0.5rem" }} />
-																Valid: {validFrom} - {validUntil}
-															</>
-														) : validUntil ? (
-															<>
-																<FaCalendarAlt style={{ marginRight: "0.5rem" }} />
-																Valid until: {validUntil}
-															</>
-														) : null}
-													</div>
-												)}
-												
-												{coupon.minPurchase > 0 && (
-													<div style={{
-														fontSize: "0.85rem",
-														color: "#999",
-														marginTop: "0.5rem"
-													}}>
-														Minimum purchase: ₱{coupon.minPurchase.toLocaleString()}
-													</div>
-												)}
-											</div>
+						{/* House Rules */}
+						{property.houseRules && property.houseRules.length > 0 && (
+							<section className="house-rules-section">
+								<h2>House Rules</h2>
+								<div className="house-rules-grid">
+									{property.houseRules.map((rule, index) => (
+										<div key={index} className="house-rule-item">
+											<FaCheck />
+											<span>{rule}</span>
 										</div>
-									)
-								})}
-							</div>
-						</section>
-					)}
+									))}
+								</div>
+							</section>
+						)}
 
-					{/* Booking Availability Info */}
-					{property.availability && (
-						<section className="booking-info-section">
-							<h2>Booking Information</h2>
-							<div className="booking-info-content">
-								{property.availability.instantBook && (
-									<div className="booking-info-item">
-										<FaCheck
-											style={{ color: "var(--primary)", marginRight: "0.5rem" }}
-										/>
-										<span>
-											<strong>Instant Book</strong> - Book immediately without
-											approval
-										</span>
-									</div>
-								)}
-								<div
-									style={{
-										display: "grid",
-										gridTemplateColumns: "repeat(2, 1fr)",
-										gap: "1rem",
-										marginTop: property.availability.instantBook ? "1rem" : "0",
-									}}
-								>
-									{property.availability.minNights && (
+						{/* Booking Availability Info */}
+						{property.availability && (
+							<section className="booking-info-section">
+								<h2>Booking Information</h2>
+								<div className="booking-info-content">
+									{property.availability.instantBook && (
 										<div className="booking-info-item">
+											<FaCheck
+												style={{
+													color: "var(--primary)",
+													marginRight: "0.5rem",
+												}}
+											/>
 											<span>
-												<strong>Minimum Nights:</strong>{" "}
-												{property.availability.minNights} night
-												{property.availability.minNights !== 1 ? "s" : ""}
+												<strong>Instant Book</strong> - Book immediately without
+												approval
 											</span>
 										</div>
 									)}
-									{property.availability.maxNights && (
-										<div className="booking-info-item">
-											<span>
-												<strong>Maximum Nights:</strong>{" "}
-												{property.availability.maxNights} night
-												{property.availability.maxNights !== 1 ? "s" : ""}
+									<div
+										style={{
+											display: "grid",
+											gridTemplateColumns: "repeat(2, 1fr)",
+											gap: "1rem",
+											marginTop: property.availability.instantBook
+												? "1rem"
+												: "0",
+										}}
+									>
+										{property.availability.minNights && (
+											<div className="booking-info-item">
+												<span>
+													<strong>Minimum Nights:</strong>{" "}
+													{property.availability.minNights} night
+													{property.availability.minNights !== 1 ? "s" : ""}
+												</span>
+											</div>
+										)}
+										{property.availability.maxNights && (
+											<div className="booking-info-item">
+												<span>
+													<strong>Maximum Nights:</strong>{" "}
+													{property.availability.maxNights} night
+													{property.availability.maxNights !== 1 ? "s" : ""}
+												</span>
+											</div>
+										)}
+									</div>
+								</div>
+							</section>
+						)}
+
+						{/* Calendar Availability */}
+						<section className="availability-section">
+							<h2>
+								<FaCalendarAlt /> Availability
+							</h2>
+							<div className="calendar-placeholder">
+								<p className="calendar-info">
+									Check available dates for this property
+								</p>
+								<div className="calendar-grid">
+									<div className="month-view">
+										<div className="month-header">
+											<button onClick={previousMonth} className="month-nav-btn">
+												◀
+											</button>
+											<h3>
+												{currentMonth.toLocaleString("default", {
+													month: "long",
+													year: "numeric",
+												})}
+											</h3>
+											<button onClick={nextMonth} className="month-nav-btn">
+												▶
+											</button>
+										</div>
+										<div className="calendar-days">
+											{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+												(day) => (
+													<div key={day} className="day-label">
+														{day}
+													</div>
+												)
+											)}
+											{generateCalendarDays().map((dayData, index) =>
+												dayData ? (
+													<div
+														key={index}
+														className={`calendar-day ${
+															dayData.isBlocked
+																? "blocked"
+																: dayData.isBooked
+																? "booked"
+																: dayData.isPast
+																? "past"
+																: "available"
+														}`}
+														onClick={() => {
+															if (isHost && !dayData.isPast) {
+																handleToggleBlockDate(dayData.dateString)
+															}
+														}}
+														title={
+															dayData.isBlocked
+																? "Blocked by host"
+																: dayData.isBooked
+																? "Already booked"
+																: dayData.isPast
+																? "Past date (not bookable)"
+																: "Available"
+														}
+													>
+														{dayData.day}
+													</div>
+												) : (
+													<div key={index} className="calendar-day empty"></div>
+												)
+											)}
+										</div>
+									</div>
+								</div>
+								<div className="calendar-legend">
+									<div className="legend-item">
+										<span className="legend-color available"></span>
+										Available
+									</div>
+									<div className="legend-item">
+										<span className="legend-color past"></span>
+										Past Date ( Not Bookable)
+									</div>
+									<div className="legend-item">
+										<span className="legend-color booked"></span>
+										Booked
+									</div>
+									<div className="legend-item">
+										<span className="legend-color blocked"></span>
+										Blocked
+									</div>
+								</div>
+							</div>
+						</section>
+
+						{/* Reviews */}
+						<section className="reviews-section">
+							<div className="reviews-header">
+								<h2>
+									<FaStar /> Reviews
+								</h2>
+								{currentUser &&
+									userCompletedBookings.length > 0 &&
+									!reviews.some(
+										(review) => review.userId === currentUser.uid
+									) && (
+										<button
+											className="write-review-btn"
+											onClick={() => setShowReviewModal(true)}
+										>
+											✍️ Write a Review
+										</button>
+									)}
+							</div>
+							{property.rating && reviews.length > 0 && (
+								<div className="reviews-summary">
+									<div className="rating-big">
+										<FaStar /> {property.rating}
+									</div>
+									<div className="review-count">
+										{reviews.length}{" "}
+										{reviews.length === 1 ? "review" : "reviews"}
+									</div>
+								</div>
+							)}
+							<div className="reviews-list">
+								{reviews.length > 0 ? (
+									reviews.slice(0, 10).map((review) => (
+										<div key={review.id} className="review-item">
+											<div className="review-header">
+												<div className="reviewer-info">
+													<div className="reviewer-avatar">
+														{review.userName?.[0]?.toUpperCase() || "U"}
+													</div>
+													<div>
+														<h4>{review.userName || "User"}</h4>
+														<span className="review-date">
+															{review.createdAt?.toDate
+																? review.createdAt
+																		.toDate()
+																		.toLocaleDateString("en-US", {
+																			year: "numeric",
+																			month: "long",
+																			day: "numeric",
+																		})
+																: "Recently"}
+														</span>
+													</div>
+												</div>
+												<div className="review-rating">
+													<FaStar /> {review.rating}
+												</div>
+											</div>
+											<p className="review-text">{review.comment}</p>
+											{review.ratings && (
+												<div className="review-detailed-ratings">
+													<div className="rating-item">
+														<span>Cleanliness</span>
+														<span>
+															<FaStar /> {review.ratings.cleanliness}
+														</span>
+													</div>
+													<div className="rating-item">
+														<span>Accuracy</span>
+														<span>
+															<FaStar /> {review.ratings.accuracy}
+														</span>
+													</div>
+													<div className="rating-item">
+														<span>Communication</span>
+														<span>
+															<FaStar /> {review.ratings.communication}
+														</span>
+													</div>
+													<div className="rating-item">
+														<span>Location</span>
+														<span>
+															<FaStar /> {review.ratings.location}
+														</span>
+													</div>
+													<div className="rating-item">
+														<span>Check-in</span>
+														<span>
+															<FaStar /> {review.ratings.checkIn}
+														</span>
+													</div>
+													<div className="rating-item">
+														<span>Value</span>
+														<span>
+															<FaStar /> {review.ratings.value}
+														</span>
+													</div>
+												</div>
+											)}
+										</div>
+									))
+								) : (
+									<p className="no-reviews">
+										No reviews yet. Be the first to review this property!
+									</p>
+								)}
+							</div>
+						</section>
+
+						{/* Wishlists Section - Only visible to host and guests who created them */}
+						{propertyWishlists.length > 0 && (
+							<section className="wishlists-section">
+								<h2>
+									<FaBookmark /> Guest Wishlists
+								</h2>
+								<div className="wishlists-list">
+									{propertyWishlists.map((wishlist, index) => (
+										<div key={index} className="wishlist-item-card">
+											<div className="wishlist-item-header">
+												<div className="wishlist-guest-info">
+													<FaUser className="guest-icon" />
+													<span className="wishlist-guest-name">
+														{wishlist.guestName}
+													</span>
+												</div>
+												<button
+													className="view-wishlist-btn"
+													onClick={() => {
+														setSelectedWishlist(wishlist)
+														setShowWishlistModal(true)
+													}}
+												>
+													<FaEye /> View Wishlist
+												</button>
+											</div>
+										</div>
+									))}
+								</div>
+							</section>
+						)}
+
+						{/* Location */}
+						<section className="location-section">
+							<h2>
+								<FaMapMarkerAlt /> Location
+							</h2>
+							<div className="location-details">
+								<p>
+									{typeof property.location === "object"
+										? `${property.location.address}, ${property.location.city}, ${property.location.province}`
+										: property.location}
+								</p>
+							</div>
+							<div ref={mapContainer} className="map-container" />
+						</section>
+					</div>
+
+					{/* Right Column - Booking Card or Host Sections */}
+					<div className="content-right">
+						{isHost ? (
+							/* Host View - Promos and Booking History */
+							<div className="host-management-card">
+								<div className="price-section">
+									<div className="price">
+										{property.pricing?.basePrice
+											? formatCurrencyFull(property.pricing.basePrice)
+											: "N/A"}
+										<span className="per-night">/ night</span>
+									</div>
+									{property.rating && property.reviewsCount > 0 && (
+										<div className="rating-small">
+											<FaStar
+												style={{ color: "#FFD700", marginRight: "0.25rem" }}
+											/>
+											{property.rating.toFixed(1)} ({property.reviewsCount}{" "}
+											{property.reviewsCount === 1 ? "review" : "reviews"})
+										</div>
+									)}
+								</div>
+
+								{/* Property Promos Section */}
+								<div className="host-section">
+									<h3>
+										<FaGift /> Property Promos & Vouchers
+									</h3>
+									{propertyPromos.length > 0 ? (
+										<div className="promos-list">
+											{propertyPromos.map((promo) => (
+												<div
+													key={promo.id}
+													className={`promo-item ${
+														!promo.isActive ? "inactive" : ""
+													}`}
+												>
+													<div className="promo-header">
+														<FaTag className="promo-icon" />
+														<span className="promo-code">{promo.code}</span>
+														<span
+															className={`promo-status ${
+																promo.isActive ? "active" : "inactive"
+															}`}
+														>
+															{promo.isActive ? "Active" : "Inactive"}
+														</span>
+													</div>
+													<div className="promo-details">
+														{promo.discountType === "percent" ||
+														promo.discountType === "percentage" ? (
+															<span className="promo-discount">
+																{promo.discount || promo.discountValue}% OFF
+															</span>
+														) : (
+															<span className="promo-discount">
+																₱{promo.discount || promo.discountValue} OFF
+															</span>
+														)}
+														{promo.validFrom && promo.validUntil && (
+															<span className="promo-dates">
+																{new Date(promo.validFrom).toLocaleDateString()}{" "}
+																-{" "}
+																{new Date(
+																	promo.validUntil
+																).toLocaleDateString()}
+															</span>
+														)}
+													</div>
+													<div className="promo-usage">
+														{promo.source === "property_vouchers" ? (
+															<span
+																style={{ fontStyle: "italic", color: "#666" }}
+															>
+																Property Voucher
+															</span>
+														) : (
+															<span>
+																Used: {promo.usageCount || 0}{" "}
+																{promo.usageLimit
+																	? `/ ${promo.usageLimit}`
+																	: ""}{" "}
+																times
+															</span>
+														)}
+													</div>
+												</div>
+											))}
+										</div>
+									) : (
+										<p className="no-data">
+											No promos created for this property yet.
+										</p>
+									)}
+									<button
+										className="manage-promos-btn"
+										onClick={() => setShowManagePromosModal(true)}
+									>
+										<FaGift /> Manage Promos
+									</button>
+									<button
+										className="view-all-bookings-btn"
+										onClick={() =>
+											navigate(`/propertyBookings/${property?.id}`)
+										}
+										style={{ marginTop: "0.75rem" }}
+									>
+										<FaHistory /> View All Bookings
+									</button>
+								</div>
+
+								{/* Upcoming Bookings Section removed */}
+
+								{/* Booking History Section removed */}
+							</div>
+						) : (
+							/* Guest View - Booking Card */
+							<div className="booking-card">
+								<div className="price-section">
+									<div className="price">
+										{(() => {
+											const prices = calculatePrices()
+											const hasAutoDiscount =
+												autoAppliedVoucher && !appliedPromo
+
+											if (
+												hasAutoDiscount &&
+												prices.discountedPrice < prices.originalPrice
+											) {
+												return (
+													<>
+														<span className="original-price">
+															₱{prices.originalPrice.toLocaleString()}
+														</span>
+														<span className="discounted-price">
+															₱
+															{Math.max(
+																0,
+																prices.discountedPrice
+															).toLocaleString()}
+														</span>
+														<span className="per-night">/ night</span>
+														{autoAppliedVoucher && (
+															<span className="voucher-badge">
+																{autoAppliedVoucher.type
+																	.replace(/_/g, " ")
+																	.replace(/\b\w/g, (l) =>
+																		l.toUpperCase()
+																	)}{" "}
+																Promo
+															</span>
+														)}
+													</>
+												)
+											} else {
+												return (
+													<>
+														{property.pricing?.basePrice
+															? formatCurrencyFull(property.pricing.basePrice)
+															: "N/A"}
+														<span className="per-night">/ night</span>
+													</>
+												)
+											}
+										})()}
+									</div>
+									{property.rating && property.reviewsCount > 0 && (
+										<div
+											className="rating-small"
+											style={{
+												display: "flex",
+												alignItems: "center",
+												gap: "0.25rem",
+												fontSize: "0.9rem",
+												color: "#333",
+											}}
+										>
+											<FaStar
+												style={{ color: "#FFD700", fontSize: "0.9rem" }}
+											/>
+											<span>{property.rating.toFixed(1)}</span>
+											<span style={{ color: "#666" }}>
+												({property.reviewsCount})
 											</span>
 										</div>
 									)}
 								</div>
-							</div>
-						</section>
-					)}
 
-					{/* Calendar Availability */}
-					<section className="availability-section">
-						<h2>
-							<FaCalendarAlt /> Availability
-						</h2>
-						<div className="calendar-placeholder">
-							<p className="calendar-info">
-								Check available dates for this property
-							</p>
-							<div className="calendar-grid">
+								{/* Host Info */}
+								<div className="host-info-card">
+									<h3>Hosted by {hostInfo.hostName || "Host"}</h3>
+									<div className="host-details">
+										<div className="host-avatar">
+											{(hostInfo.hostName || "H")[0].toUpperCase()}
+										</div>
+										<div className="host-stats">
+											{hostInfo.superhost && (
+												<div className="host-badge">
+													<FaMedal /> Superhost
+												</div>
+											)}
+											{hostInfo.verified && (
+												<div className="host-badge">
+													<FaShieldAlt /> Verified
+												</div>
+											)}
+											{hostInfo.hostSince && (
+												<div className="host-stat">
+													<FaClock /> Hosting since{" "}
+													{new Date(hostInfo.hostSince).getFullYear()}
+												</div>
+											)}
+										</div>
+									</div>
+									<button
+										className="contact-host-btn"
+										onClick={() => {
+											if (!currentUser) {
+												toast.error("Please login to contact the host")
+												navigate("/login")
+												return
+											}
+											setShowContactHostModal(true)
+										}}
+									>
+										Contact Host
+									</button>
+								</div>
+
+								<div className="booking-form">
+									<div className="date-selector-container">
+										<label>Select Dates</label>
+										<button
+											className="date-selector-btn"
+											onClick={openDatePicker}
+											type="button"
+										>
+											<FaCalendarAlt className="calendar-icon" />
+											<div className="date-display">
+												{checkInDate && checkOutDate ? (
+													<>
+														<span className="date-label">Check-in:</span>
+														<span className="date-value">
+															{new Date(checkInDate).toLocaleDateString(
+																"en-US",
+																{
+																	month: "short",
+																	day: "numeric",
+																	year: "numeric",
+																}
+															)}
+														</span>
+														<span className="date-separator">→</span>
+														<span className="date-label">Check-out:</span>
+														<span className="date-value">
+															{new Date(checkOutDate).toLocaleDateString(
+																"en-US",
+																{
+																	month: "short",
+																	day: "numeric",
+																	year: "numeric",
+																}
+															)}
+														</span>
+													</>
+												) : (
+													<span className="placeholder">
+														Click to select dates
+													</span>
+												)}
+											</div>
+										</button>
+										{checkInDate && checkOutDate && (
+											<span className="nights-display">
+												{calculateNights()}{" "}
+												{calculateNights() === 1 ? "night" : "nights"}
+											</span>
+										)}
+									</div>
+									<div className="guests-input">
+										<label>Guests</label>
+										<select
+											value={numberOfGuests}
+											onChange={(e) =>
+												setNumberOfGuests(Number(e.target.value))
+											}
+										>
+											{Array.from(
+												{
+													length:
+														property.capacity?.guests ||
+														property.capacity?.maxGuests ||
+														8,
+												},
+												(_, i) => i + 1
+											).map((num) => (
+												<option key={num} value={num}>
+													{num} {num === 1 ? "guest" : "guests"}
+												</option>
+											))}
+										</select>
+										{(property.capacity?.guests ||
+											property.capacity?.maxGuests) && (
+											<span className="max-guests-note">
+												Maximum{" "}
+												{property.capacity?.guests ||
+													property.capacity?.maxGuests}{" "}
+												guests allowed
+											</span>
+										)}
+									</div>
+									{checkInDate && checkOutDate ? (
+										<>
+											<div className="downpayment-info">
+												<p>
+													<strong>Full Payment Required:</strong>
+												</p>
+												<p className="downpayment-amount">
+													₱{calculatePrices().total.toLocaleString()}
+												</p>
+												<p className="downpayment-note">
+													Complete payment to secure your booking
+												</p>
+											</div>
+
+											{/* Promo Code Section */}
+											{!appliedPromo ? (
+												<div className="promo-code-section">
+													<label className="promo-label-main">
+														Have a promo code?
+													</label>
+													<div className="promo-input-group">
+														<input
+															type="text"
+															placeholder="Enter promo code"
+															value={promoCode}
+															onChange={(e) =>
+																setPromoCode(e.target.value.toUpperCase())
+															}
+															className="promo-input"
+															maxLength={20}
+														/>
+														<button
+															onClick={validateAndApplyPromo}
+															className="apply-promo-btn"
+															disabled={isValidatingPromo || !promoCode.trim()}
+														>
+															{isValidatingPromo ? "Validating..." : "Apply"}
+														</button>
+													</div>
+												</div>
+											) : (
+												<div className="applied-promo-section">
+													<div className="applied-promo-info">
+														<span className="promo-label">
+															🎁 Promo: {appliedPromo.code}
+														</span>
+														<span className="discount-amount">
+															-₱
+															{calculatePrices().promoDiscount.toLocaleString()}
+														</span>
+													</div>
+													<button
+														onClick={removePromo}
+														className="remove-promo-btn"
+													>
+														Remove Promo
+													</button>
+												</div>
+											)}
+
+											{/* Payment Method Selection */}
+											<div className="payment-method-selection">
+												<label className="payment-label">
+													Choose Payment Method:
+												</label>
+												<div className="payment-methods">
+													<button
+														className={`payment-method-btn ${
+															paymentMethod === "paypal" ? "active" : ""
+														}`}
+														onClick={() => setPaymentMethod("paypal")}
+													>
+														<span className="method-icon">💳</span>
+														<span>PayPal</span>
+													</button>
+													<button
+														className={`payment-method-btn ${
+															paymentMethod === "wallet" ? "active" : ""
+														}`}
+														onClick={() => setPaymentMethod("wallet")}
+													>
+														<span className="method-icon">💰</span>
+														<span>E-Wallet</span>
+														<span className="wallet-balance-hint">
+															₱{walletBalance.toLocaleString()}
+														</span>
+													</button>
+												</div>
+											</div>
+
+											{/* PayPal Payment */}
+											{paymentMethod === "paypal" ? (
+												<>
+													<button
+														className="book-now-btn paypal-btn"
+														onClick={handlePayPalPayment}
+														disabled={isProcessingPayment || !isPayPalLoaded}
+													>
+														{!isPayPalLoaded
+															? "Loading PayPal..."
+															: isProcessingPayment
+															? "Processing..."
+															: "Pay with PayPal"}
+													</button>
+													<div
+														ref={paypalRef}
+														className="paypal-button-container"
+													></div>
+												</>
+											) : (
+												/* Wallet Payment */
+												<button
+													className="book-now-btn wallet-btn"
+													onClick={handleWalletPayment}
+													disabled={
+														isProcessingPayment ||
+														walletBalance < calculatePrices().total
+													}
+												>
+													{isProcessingPayment
+														? "Processing..."
+														: walletBalance < calculatePrices().total
+														? `Insufficient Balance (₱${(
+																calculatePrices().total - walletBalance
+														  ).toLocaleString()} short)`
+														: "Pay with E-Wallet"}
+												</button>
+											)}
+
+											<p className="nights-info">
+												{calculateNights()}{" "}
+												{calculateNights() === 1 ? "night" : "nights"}
+											</p>
+										</>
+									) : (
+										<>
+											<button className="book-now-btn" disabled>
+												Select Dates to Book
+											</button>
+											<p className="book-notice">
+												Choose check-in and check-out dates
+											</p>
+										</>
+									)}
+								</div>
+
+								<div className="price-breakdown">
+									{(() => {
+										const prices = calculatePrices()
+										return (
+											<>
+												{prices.nights > 0 && (
+													<div className="breakdown-item">
+														<span>
+															{formatCurrencyFull(prices.basePrice)} x{" "}
+															{prices.nights}{" "}
+															{prices.nights === 1 ? "night" : "nights"}
+														</span>
+														<span>{formatCurrencyFull(prices.subtotal)}</span>
+													</div>
+												)}
+												<div className="breakdown-item">
+													<span>Cleaning fee</span>
+													<span>₱{prices.cleaningFee.toLocaleString()}</span>
+												</div>
+												<div className="breakdown-item">
+													<span>Service fee</span>
+													<span>₱{prices.serviceFee.toLocaleString()}</span>
+												</div>
+												<div className="breakdown-item">
+													<span>
+														Guest fee ({prices.numberOfGuests}{" "}
+														{prices.numberOfGuests === 1 ? "guest" : "guests"})
+													</span>
+													<span>₱{prices.guestFee.toLocaleString()}</span>
+												</div>
+
+												{/* Show discount in breakdown if promo or auto-voucher is applied */}
+												{(appliedPromo || autoAppliedVoucher) &&
+													prices.promoDiscount > 0 && (
+														<div className="breakdown-item promo-discount">
+															<span className="promo-label">
+																🎁{" "}
+																{appliedPromo
+																	? "Promo"
+																	: autoAppliedVoucher?.type
+																			.replace(/_/g, " ")
+																			.replace(/\b\w/g, (l) =>
+																				l.toUpperCase()
+																			)}{" "}
+																Discount
+															</span>
+															<span className="discount-amount">
+																-₱{prices.promoDiscount.toLocaleString()}
+															</span>
+														</div>
+													)}
+
+												<div className="breakdown-total">
+													<span>Total</span>
+													<span>
+														₱
+														{prices.nights > 0
+															? prices.total.toLocaleString()
+															: (
+																	prices.cleaningFee +
+																	prices.serviceFee +
+																	prices.guestFee
+															  ).toLocaleString()}
+													</span>
+												</div>
+											</>
+										)
+									})()}
+								</div>
+							</div>
+						)}
+					</div>
+				</div>
+
+				{/* Report Modal */}
+				{showReportModal && (
+					<div
+						className="share-modal-overlay"
+						onClick={() => setShowReportModal(false)}
+					>
+						<div
+							className="share-modal-content"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<div className="share-modal-header">
+								<h3>Report Property</h3>
+								<button
+									className="close-share-modal"
+									onClick={() => setShowReportModal(false)}
+								>
+									<FaTimes />
+								</button>
+							</div>
+							<div className="report-form">
+								<p className="report-description">
+									Help us keep AuraStays safe by reporting any issues with this
+									property.
+								</p>
+								<div className="form-group">
+									<label>Reason for Reporting</label>
+									<select
+										value={reportReason}
+										onChange={(e) => setReportReason(e.target.value)}
+										className="report-select"
+									>
+										<option value="">Select a reason</option>
+										<option value="inaccurate">Inaccurate Information</option>
+										<option value="misleading">Misleading Photos</option>
+										<option value="safety">Safety Concerns</option>
+										<option value="fraud">Suspected Fraud</option>
+										<option value="inappropriate">Inappropriate Content</option>
+										<option value="spam">Spam or Scam</option>
+										<option value="other">Other</option>
+									</select>
+								</div>
+								<div className="form-group">
+									<label>Additional Details</label>
+									<textarea
+										value={reportDescription}
+										onChange={(e) => setReportDescription(e.target.value)}
+										placeholder="Please provide more details about the issue..."
+										className="report-textarea"
+										rows="5"
+									/>
+								</div>
+								<div className="report-actions">
+									<button
+										className="cancel-btn"
+										onClick={() => {
+											setShowReportModal(false)
+											setReportReason("")
+											setReportDescription("")
+										}}
+										disabled={isSubmittingReport}
+									>
+										Cancel
+									</button>
+									<button
+										className="submit-report-btn"
+										onClick={handleSubmitReport}
+										disabled={!reportReason || isSubmittingReport}
+									>
+										{isSubmittingReport ? "Submitting..." : "Submit Report"}
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				)}
+
+				{/* Share Modal */}
+				{showShareModal && (
+					<div
+						className="share-modal-overlay"
+						onClick={() => setShowShareModal(false)}
+					>
+						<div
+							className="share-modal-content"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<div className="share-modal-header">
+								<h3>Share this property</h3>
+								<button
+									className="close-share-modal"
+									onClick={() => setShowShareModal(false)}
+								>
+									<FaTimes />
+								</button>
+							</div>
+							<div className="share-link-section">
+								<input type="text" value={shareableUrl} readOnly />
+								<button onClick={copyToClipboard} className="copy-link-btn">
+									<FaCopy /> Copy
+								</button>
+							</div>
+							<div className="share-options">
+								<button
+									className="share-option facebook"
+									onClick={() => handleShare("Facebook")}
+								>
+									<FaFacebook />
+									<span>Facebook</span>
+								</button>
+								<button
+									className="share-option twitter"
+									onClick={() => handleShare("Twitter")}
+								>
+									<FaTwitter />
+									<span>Twitter</span>
+								</button>
+								<button
+									className="share-option instagram"
+									onClick={() => handleShare("Instagram")}
+								>
+									<FaInstagram />
+									<span>Instagram</span>
+								</button>
+								<button
+									className="share-option linkedin"
+									onClick={() => handleShare("LinkedIn")}
+								>
+									<FaLinkedin />
+									<span>LinkedIn</span>
+								</button>
+								<button
+									className="share-option whatsapp"
+									onClick={() => handleShare("WhatsApp")}
+								>
+									<FaWhatsapp />
+									<span>WhatsApp</span>
+								</button>
+							</div>
+						</div>
+					</div>
+				)}
+
+				{/* All Photos Modal */}
+				{showAllPhotos && (
+					<div
+						className="all-photos-modal-overlay"
+						onClick={() => setShowAllPhotos(false)}
+					>
+						<div
+							className="all-photos-modal-content"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<button
+								className="close-photos-modal"
+								onClick={() => setShowAllPhotos(false)}
+							>
+								<FaTimes />
+							</button>
+							<h2>All Photos</h2>
+							<div className="all-photos-grid">
+								{images.map((img, index) => (
+									<img
+										key={index}
+										src={img}
+										alt={`Property view ${index + 1}`}
+										style={{ cursor: "pointer" }}
+										onClick={() => {
+											setFullSizeImageIndex(index)
+											setShowAllPhotos(false)
+											setShowFullSizeImage(true)
+										}}
+									/>
+								))}
+							</div>
+						</div>
+					</div>
+				)}
+
+				{/* Manage Promos Modal */}
+				{showManagePromosModal && (
+					<div
+						className="manage-promos-modal-overlay"
+						onClick={() => setShowManagePromosModal(false)}
+					>
+						<div
+							className="manage-promos-modal-content"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<div className="manage-promos-modal-header">
+								<h2>
+									<FaGift /> Manage Promos for {property.title}
+								</h2>
+								<button
+									className="close-promos-modal"
+									onClick={() => setShowManagePromosModal(false)}
+								>
+									<FaTimes />
+								</button>
+							</div>
+
+							<div className="manage-promos-body">
+								{/* Create New Promo Section */}
+								<div
+									className="create-promo-section"
+									style={{ marginBottom: "2rem" }}
+								>
+									{!showCreatePromoForm ? (
+										<button
+											className="create-promo-btn"
+											onClick={() => setShowCreatePromoForm(true)}
+											style={{
+												display: "flex",
+												alignItems: "center",
+												gap: "0.5rem",
+												padding: "0.75rem 1.5rem",
+												background: "var(--primary)",
+												color: "white",
+												border: "none",
+												borderRadius: "8px",
+												fontSize: "1rem",
+												fontWeight: 600,
+												cursor: "pointer",
+												transition: "all 0.2s ease",
+											}}
+											onMouseEnter={(e) => {
+												e.target.style.background = "#5fa887"
+												e.target.style.transform = "translateY(-2px)"
+											}}
+											onMouseLeave={(e) => {
+												e.target.style.background = "var(--primary)"
+												e.target.style.transform = "translateY(0)"
+											}}
+										>
+											<FaPlus /> Create New Promo
+										</button>
+									) : (
+										<div
+											className="create-promo-form"
+											style={{
+												padding: "1.5rem",
+												background: "#f9f9f9",
+												borderRadius: "12px",
+												border: "2px solid var(--primary)",
+											}}
+										>
+											<div
+												style={{
+													display: "flex",
+													justifyContent: "space-between",
+													alignItems: "center",
+													marginBottom: "1.5rem",
+												}}
+											>
+												<h3 style={{ margin: 0 }}>Create New Promo</h3>
+												<button
+													type="button"
+													onClick={() => {
+														setShowCreatePromoForm(false)
+														setNewCoupon({
+															code: "",
+															description: "",
+															discountType: "percentage",
+															discountValue: 0,
+															minPurchase: 0,
+															maxDiscount: 0,
+															usageLimit: 0,
+															usagePerUser: 1,
+															validFrom: "",
+															validUntil: "",
+															isActive: true,
+														})
+													}}
+													style={{
+														background: "transparent",
+														border: "none",
+														cursor: "pointer",
+														fontSize: "1.25rem",
+														color: "#666",
+													}}
+												>
+													<FaTimes />
+												</button>
+											</div>
+
+											<div
+												className="form-group"
+												style={{ marginBottom: "1rem" }}
+											>
+												<label>Coupon Code *</label>
+												<input
+													type="text"
+													placeholder="e.g., SUMMER2024"
+													value={newCoupon.code}
+													onChange={(e) =>
+														setNewCoupon({
+															...newCoupon,
+															code: e.target.value.toUpperCase(),
+														})
+													}
+													maxLength={20}
+													style={{ textTransform: "uppercase" }}
+												/>
+											</div>
+
+											<div
+												className="form-group"
+												style={{ marginBottom: "1rem" }}
+											>
+												<label>Description *</label>
+												<textarea
+													placeholder="Describe what this coupon offers..."
+													value={newCoupon.description}
+													onChange={(e) =>
+														setNewCoupon({
+															...newCoupon,
+															description: e.target.value,
+														})
+													}
+													rows={3}
+												/>
+											</div>
+
+											<div
+												className="form-group"
+												style={{ marginBottom: "1rem" }}
+											>
+												<label>Discount Type</label>
+												<div
+													className="radio-group"
+													style={{ display: "flex", gap: "1rem" }}
+												>
+													<label
+														className="radio-label"
+														style={{
+															display: "flex",
+															alignItems: "center",
+															gap: "0.5rem",
+														}}
+													>
+														<input
+															type="radio"
+															name="newDiscountType"
+															value="percentage"
+															checked={newCoupon.discountType === "percentage"}
+															onChange={(e) =>
+																setNewCoupon({
+																	...newCoupon,
+																	discountType: e.target.value,
+																})
+															}
+														/>
+														Percentage (%)
+													</label>
+													<label
+														className="radio-label"
+														style={{
+															display: "flex",
+															alignItems: "center",
+															gap: "0.5rem",
+														}}
+													>
+														<input
+															type="radio"
+															name="newDiscountType"
+															value="fixed"
+															checked={newCoupon.discountType === "fixed"}
+															onChange={(e) =>
+																setNewCoupon({
+																	...newCoupon,
+																	discountType: e.target.value,
+																})
+															}
+														/>
+														Fixed Amount (₱)
+													</label>
+												</div>
+											</div>
+
+											<div
+												className="form-group"
+												style={{ marginBottom: "1rem" }}
+											>
+												<label>
+													Discount Value{" "}
+													{newCoupon.discountType === "percentage"
+														? "(%)"
+														: "(₱)"}{" "}
+													*
+												</label>
+												<NumberStepper
+													value={newCoupon.discountValue}
+													onChange={(e) =>
+														setNewCoupon({
+															...newCoupon,
+															discountValue: e.target.value,
+														})
+													}
+													min={0}
+													max={
+														newCoupon.discountType === "percentage"
+															? 100
+															: undefined
+													}
+													step={
+														newCoupon.discountType === "percentage" ? 1 : 10
+													}
+													placeholder={
+														newCoupon.discountType === "percentage"
+															? "e.g., 20"
+															: "e.g., 500"
+													}
+												/>
+											</div>
+
+											<div
+												style={{
+													display: "grid",
+													gridTemplateColumns: "1fr 1fr",
+													gap: "1rem",
+													marginBottom: "1rem",
+												}}
+											>
+												<div className="form-group">
+													<label>Minimum Purchase (₱)</label>
+													<NumberStepper
+														value={newCoupon.minPurchase}
+														onChange={(e) =>
+															setNewCoupon({
+																...newCoupon,
+																minPurchase: e.target.value,
+															})
+														}
+														min={0}
+														step={100}
+														placeholder="0"
+													/>
+													<small
+														style={{
+															display: "block",
+															marginTop: "0.25rem",
+															fontSize: "0.75rem",
+															color: "#666",
+														}}
+													>
+														Minimum booking amount required
+													</small>
+												</div>
+												<div className="form-group">
+													<label>Maximum Discount (₱)</label>
+													<NumberStepper
+														value={newCoupon.maxDiscount}
+														onChange={(e) =>
+															setNewCoupon({
+																...newCoupon,
+																maxDiscount: e.target.value,
+															})
+														}
+														min={0}
+														step={100}
+														placeholder="0"
+													/>
+													<small
+														style={{
+															display: "block",
+															marginTop: "0.25rem",
+															fontSize: "0.75rem",
+															color: "#666",
+														}}
+													>
+														Max discount cap (0 = no limit)
+													</small>
+												</div>
+											</div>
+
+											<div
+												style={{
+													display: "grid",
+													gridTemplateColumns: "1fr 1fr",
+													gap: "1rem",
+													marginBottom: "1rem",
+												}}
+											>
+												<div className="form-group">
+													<label>Usage Limit</label>
+													<NumberStepper
+														value={newCoupon.usageLimit}
+														onChange={(e) =>
+															setNewCoupon({
+																...newCoupon,
+																usageLimit: e.target.value,
+															})
+														}
+														min={0}
+														placeholder="0"
+													/>
+													<small
+														style={{
+															display: "block",
+															marginTop: "0.25rem",
+															fontSize: "0.75rem",
+															color: "#666",
+														}}
+													>
+														Total times this coupon can be used
+													</small>
+													<small
+														style={{
+															display: "block",
+															marginTop: "0.25rem",
+															fontSize: "0.75rem",
+															color: "#999",
+															fontStyle: "italic",
+														}}
+													>
+														(0 for unlimited)
+													</small>
+												</div>
+												<div className="form-group">
+													<label>Usage Per User</label>
+													<NumberStepper
+														value={newCoupon.usagePerUser}
+														onChange={(e) =>
+															setNewCoupon({
+																...newCoupon,
+																usagePerUser: e.target.value || 1,
+															})
+														}
+														min={1}
+														placeholder="1"
+													/>
+													<small
+														style={{
+															display: "block",
+															marginTop: "0.25rem",
+															fontSize: "0.75rem",
+															color: "#666",
+														}}
+													>
+														How many times each user can use it
+													</small>
+													<small
+														style={{
+															display: "block",
+															marginTop: "0.25rem",
+															fontSize: "0.75rem",
+															color: "#999",
+															fontStyle: "italic",
+														}}
+													>
+														(0 for unlimited)
+													</small>
+												</div>
+											</div>
+
+											<div
+												style={{
+													display: "grid",
+													gridTemplateColumns: "1fr 1fr",
+													gap: "1rem",
+													marginBottom: "1rem",
+												}}
+											>
+												<div className="form-group">
+													<label>Valid From</label>
+													<button
+														type="button"
+														onClick={() => openCouponDatePicker(true)}
+														style={{
+															width: "100%",
+															padding: "0.75rem",
+															border: "1px solid #b0b0b0",
+															borderRadius: "6px",
+															fontSize: "0.9rem",
+															background: "white",
+															cursor: "pointer",
+															display: "flex",
+															alignItems: "center",
+															justifyContent: "center",
+															gap: "0.5rem",
+															transition: "all 0.2s ease",
+														}}
+														onMouseEnter={(e) => {
+															e.target.style.borderColor = "var(--primary)"
+															e.target.style.background =
+																"rgba(97, 191, 156, 0.05)"
+														}}
+														onMouseLeave={(e) => {
+															e.target.style.borderColor = "#b0b0b0"
+															e.target.style.background = "white"
+														}}
+													>
+														<FaCalendarAlt />
+														<span>
+															{newCoupon.validFrom
+																? new Date(
+																		newCoupon.validFrom
+																  ).toLocaleDateString("en-US", {
+																		month: "short",
+																		day: "numeric",
+																		year: "numeric",
+																  })
+																: "Select date"}
+														</span>
+													</button>
+												</div>
+												<div className="form-group">
+													<label>Valid Until</label>
+													<button
+														type="button"
+														onClick={() => openCouponDatePicker(false)}
+														style={{
+															width: "100%",
+															padding: "0.75rem",
+															border: "1px solid #b0b0b0",
+															borderRadius: "6px",
+															fontSize: "0.9rem",
+															background: "white",
+															cursor: "pointer",
+															display: "flex",
+															alignItems: "center",
+															justifyContent: "center",
+															gap: "0.5rem",
+															transition: "all 0.2s ease",
+														}}
+														onMouseEnter={(e) => {
+															e.target.style.borderColor = "var(--primary)"
+															e.target.style.background =
+																"rgba(97, 191, 156, 0.05)"
+														}}
+														onMouseLeave={(e) => {
+															e.target.style.borderColor = "#b0b0b0"
+															e.target.style.background = "white"
+														}}
+													>
+														<FaCalendarAlt />
+														<span>
+															{newCoupon.validUntil
+																? new Date(
+																		newCoupon.validUntil
+																  ).toLocaleDateString("en-US", {
+																		month: "short",
+																		day: "numeric",
+																		year: "numeric",
+																  })
+																: "Select date"}
+														</span>
+													</button>
+												</div>
+											</div>
+
+											<div
+												className="form-group"
+												style={{ marginBottom: "1rem" }}
+											>
+												<label
+													style={{
+														display: "flex",
+														alignItems: "center",
+														gap: "0.5rem",
+														cursor: "pointer",
+														userSelect: "none",
+													}}
+												>
+													<input
+														type="checkbox"
+														checked={newCoupon.isActive}
+														onChange={(e) =>
+															setNewCoupon({
+																...newCoupon,
+																isActive: e.target.checked,
+															})
+														}
+														style={{
+															width: "18px",
+															height: "18px",
+															cursor: "pointer",
+															margin: 0,
+															flexShrink: 0,
+														}}
+													/>
+													<span style={{ lineHeight: "1.5" }}>
+														Active (Coupon will be available for use)
+													</span>
+												</label>
+											</div>
+
+											<div style={{ display: "flex", gap: "1rem" }}>
+												<button
+													type="button"
+													onClick={handleCreatePromo}
+													disabled={
+														isCreatingPromo ||
+														!newCoupon.code.trim() ||
+														!newCoupon.description.trim() ||
+														!newCoupon.discountValue
+													}
+													style={{
+														padding: "0.75rem 2rem",
+														background:
+															isCreatingPromo ||
+															!newCoupon.code.trim() ||
+															!newCoupon.description.trim() ||
+															!newCoupon.discountValue
+																? "#ccc"
+																: "var(--primary)",
+														color: "white",
+														border: "none",
+														borderRadius: "8px",
+														fontSize: "1rem",
+														fontWeight: 600,
+														cursor:
+															isCreatingPromo ||
+															!newCoupon.code.trim() ||
+															!newCoupon.description.trim() ||
+															!newCoupon.discountValue
+																? "not-allowed"
+																: "pointer",
+													}}
+												>
+													{isCreatingPromo ? "Creating..." : "Create Promo"}
+												</button>
+												<button
+													type="button"
+													onClick={() => {
+														setShowCreatePromoForm(false)
+														setNewCoupon({
+															code: "",
+															description: "",
+															discountType: "percentage",
+															discountValue: 0,
+															minPurchase: 0,
+															maxDiscount: 0,
+															usageLimit: 0,
+															usagePerUser: 1,
+															validFrom: "",
+															validUntil: "",
+															isActive: true,
+														})
+													}}
+													style={{
+														padding: "0.75rem 2rem",
+														background: "transparent",
+														color: "#666",
+														border: "1px solid #ccc",
+														borderRadius: "8px",
+														fontSize: "1rem",
+														cursor: "pointer",
+													}}
+												>
+													Cancel
+												</button>
+											</div>
+										</div>
+									)}
+								</div>
+
+								{/* Existing Promos List */}
+								<div className="existing-promos-section">
+									<h3>Existing Promos ({propertyPromos.length})</h3>
+									{propertyPromos.length > 0 ? (
+										<div className="promos-management-list">
+											{propertyPromos.map((promo) => (
+												<div key={promo.id} className="promo-management-item">
+													{editingPromo?.id === promo.id &&
+													promo.source === "property_vouchers" ? (
+														/* Edit Mode */
+														<div className="edit-voucher-form">
+															<div className="edit-voucher-header">
+																<h4>Edit {promo.description}</h4>
+																<button
+																	className="cancel-edit-btn"
+																	onClick={handleCancelEdit}
+																>
+																	<FaTimes />
+																</button>
+															</div>
+															<div className="voucher-edit-form">
+																<div className="form-row">
+																	<div className="form-group">
+																		<label>Discount Type</label>
+																		<select
+																			value={editPromoDiscountType}
+																			onChange={(e) =>
+																				setEditPromoDiscountType(e.target.value)
+																			}
+																		>
+																			<option value="percentage">
+																				Percentage (%)
+																			</option>
+																			<option value="fixed">
+																				Fixed Amount (₱)
+																			</option>
+																		</select>
+																	</div>
+																	<div className="form-group">
+																		<label>Discount Value *</label>
+																		<input
+																			type="number"
+																			placeholder={
+																				editPromoDiscountType === "percentage"
+																					? "20"
+																					: "500"
+																			}
+																			value={editPromoDiscount}
+																			onChange={(e) =>
+																				setEditPromoDiscount(e.target.value)
+																			}
+																			min="0"
+																			max={
+																				editPromoDiscountType === "percentage"
+																					? "100"
+																					: undefined
+																			}
+																		/>
+																	</div>
+																</div>
+																{(() => {
+																	// Get voucher type - either from promo.voucherType or extract from id
+																	const voucherType =
+																		promo.voucherType ||
+																		promo.id.split("_").slice(2).join("_")
+																	const isFixed =
+																		isFixedDateVoucher(voucherType)
+
+																	// For long_stay, show minimum days field
+																	if (voucherType === "long_stay") {
+																		return (
+																			<div className="form-row">
+																				<div className="form-group">
+																					<label>
+																						Minimum Days to Make a Discount *
+																					</label>
+																					<input
+																						type="number"
+																						placeholder="e.g., 7"
+																						value={editPromoMinDays}
+																						onChange={(e) =>
+																							setEditPromoMinDays(
+																								e.target.value
+																							)
+																						}
+																						min="1"
+																						required
+																					/>
+																					<small>
+																						Minimum number of days required to
+																						apply this discount
+																					</small>
+																				</div>
+																			</div>
+																		)
+																	}
+
+																	// For other non-fixed vouchers, show date fields
+																	if (!isFixed) {
+																		return (
+																			<div className="form-row">
+																				<div className="form-group">
+																					<label>Valid From (Optional)</label>
+																					<input
+																						type="date"
+																						value={editPromoValidFrom}
+																						onChange={(e) =>
+																							setEditPromoValidFrom(
+																								e.target.value
+																							)
+																						}
+																						min={
+																							new Date()
+																								.toISOString()
+																								.split("T")[0]
+																						}
+																					/>
+																				</div>
+																				<div className="form-group">
+																					<label>Valid Until (Optional)</label>
+																					<input
+																						type="date"
+																						value={editPromoValidUntil}
+																						onChange={(e) =>
+																							setEditPromoValidUntil(
+																								e.target.value
+																							)
+																						}
+																						min={
+																							editPromoValidFrom ||
+																							new Date()
+																								.toISOString()
+																								.split("T")[0]
+																						}
+																					/>
+																				</div>
+																			</div>
+																		)
+																	}
+
+																	return null
+																})()}
+																<div className="form-row">
+																	<div className="form-group">
+																		<label>Status</label>
+																		<div className="toggle-switch-container">
+																			<label className="toggle-switch-label">
+																				<input
+																					type="checkbox"
+																					checked={editPromoIsActive}
+																					onChange={(e) =>
+																						setEditPromoIsActive(
+																							e.target.checked
+																						)
+																					}
+																					className="toggle-switch-input"
+																				/>
+																				<span className="toggle-switch-slider"></span>
+																				<span className="toggle-switch-text">
+																					{editPromoIsActive
+																						? "Active"
+																						: "Inactive"}
+																				</span>
+																			</label>
+																		</div>
+																	</div>
+																</div>
+																<div className="edit-form-actions">
+																	<button
+																		className="cancel-edit-form-btn"
+																		onClick={handleCancelEdit}
+																	>
+																		Cancel
+																	</button>
+																	<button
+																		className="save-edit-btn"
+																		onClick={handleUpdateVoucher}
+																		disabled={
+																			isUpdatingPromo ||
+																			!editPromoDiscount ||
+																			// Only require minimum days for long_stay if voucher is active
+																			(editPromoIsActive &&
+																				(promo.voucherType === "long_stay" ||
+																					(promo.id &&
+																						promo.id.includes("long_stay"))) &&
+																				!editPromoMinDays)
+																		}
+																	>
+																		{isUpdatingPromo
+																			? "Saving..."
+																			: "Save Changes"}
+																	</button>
+																</div>
+															</div>
+														</div>
+													) : (
+														/* View Mode */
+														<>
+															<div className="promo-mgmt-header">
+																<div
+																	className="promo-mgmt-info"
+																	style={{
+																		cursor:
+																			promo.source === "property_vouchers"
+																				? "pointer"
+																				: "default",
+																	}}
+																	onClick={() =>
+																		promo.source === "property_vouchers" &&
+																		handleStartEditVoucher(promo)
+																	}
+																>
+																	<FaTag className="promo-mgmt-icon" />
+																	<div>
+																		<span className="promo-mgmt-code">
+																			{promo.code}
+																		</span>
+																		<span className="promo-mgmt-desc">
+																			{promo.description}
+																		</span>
+																	</div>
+																</div>
+																<div className="promo-mgmt-actions">
+																	{promo.source !== "property_vouchers" && (
+																		<>
+																			<button
+																				className={`toggle-promo-btn ${
+																					promo.isActive ? "active" : "inactive"
+																				}`}
+																				onClick={() =>
+																					handleTogglePromoStatus(
+																						promo.id,
+																						promo.isActive
+																					)
+																				}
+																			>
+																				{promo.isActive
+																					? "Deactivate"
+																					: "Activate"}
+																			</button>
+																			<button
+																				className="delete-promo-btn"
+																				onClick={() =>
+																					handleDeletePromo(promo.id)
+																				}
+																			>
+																				<FaTimes /> Delete
+																			</button>
+																		</>
+																	)}
+																	{promo.source === "property_vouchers" && (
+																		<span className="voucher-badge">
+																			Property Voucher - Click to Edit
+																		</span>
+																	)}
+																</div>
+															</div>
+															<div className="promo-mgmt-details">
+																<div className="promo-mgmt-detail-item">
+																	<span className="detail-label">
+																		Discount:
+																	</span>
+																	<span className="detail-value">
+																		{promo.discountType === "percent" ||
+																		promo.discountType === "percentage"
+																			? `${
+																					promo.discount || promo.discountValue
+																			  }%`
+																			: `₱${
+																					promo.discount || promo.discountValue
+																			  }`}
+																	</span>
+																</div>
+																{promo.validFrom && promo.validUntil && (
+																	<div className="promo-mgmt-detail-item">
+																		<span className="detail-label">Valid:</span>
+																		<span className="detail-value">
+																			{new Date(
+																				promo.validFrom
+																			).toLocaleDateString()}{" "}
+																			-{" "}
+																			{new Date(
+																				promo.validUntil
+																			).toLocaleDateString()}
+																		</span>
+																	</div>
+																)}
+																{promo.source !== "property_vouchers" && (
+																	<div className="promo-mgmt-detail-item">
+																		<span className="detail-label">
+																			Status:
+																		</span>
+																		<span
+																			className={`detail-value status-${
+																				promo.isActive ? "active" : "inactive"
+																			}`}
+																		>
+																			{promo.isActive ? "Active" : "Inactive"}
+																		</span>
+																	</div>
+																)}
+																{promo.source !== "property_vouchers" && (
+																	<div className="promo-mgmt-detail-item">
+																		<span className="detail-label">Used:</span>
+																		<span className="detail-value">
+																			{promo.usageCount || 0} times
+																		</span>
+																	</div>
+																)}
+															</div>
+														</>
+													)}
+												</div>
+											))}
+										</div>
+									) : (
+										<p className="no-promos-message">
+											No promos created yet. Create one above!
+										</p>
+									)}
+								</div>
+							</div>
+						</div>
+					</div>
+				)}
+
+				{/* Coupon Date Picker Modal */}
+				{showCouponDateModal && (
+					<div
+						className="date-picker-modal-overlay"
+						onClick={() => setShowCouponDateModal(false)}
+					>
+						<div
+							className="date-picker-modal-content"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<button
+								className="close-date-modal"
+								onClick={() => setShowCouponDateModal(false)}
+							>
+								<FaTimes />
+							</button>
+							<h2>
+								<FaCalendarAlt /> Select Coupon Validity Dates
+							</h2>
+							<div className="modal-date-info">
+								<div className="selected-dates-display">
+									{newCoupon.validFrom && (
+										<div className="selected-date-item check-in">
+											<span className="date-type">Valid From:</span>
+											<span className="date-text">
+												{new Date(newCoupon.validFrom).toLocaleDateString(
+													"en-US",
+													{
+														weekday: "short",
+														month: "short",
+														day: "numeric",
+														year: "numeric",
+													}
+												)}
+											</span>
+										</div>
+									)}
+									{newCoupon.validUntil && (
+										<div className="selected-date-item check-out">
+											<span className="date-type">Valid Until:</span>
+											<span className="date-text">
+												{new Date(newCoupon.validUntil).toLocaleDateString(
+													"en-US",
+													{
+														weekday: "short",
+														month: "short",
+														day: "numeric",
+														year: "numeric",
+													}
+												)}
+											</span>
+										</div>
+									)}
+									{!newCoupon.validFrom && !newCoupon.validUntil && (
+										<p className="instruction-text">
+											{selectingValidFrom
+												? "Click on a date to select Valid From"
+												: "Click on a date to select Valid Until"}
+										</p>
+									)}
+								</div>
+							</div>
+
+							<div className="modal-calendar">
+								<div className="month-view">
+									<div className="month-header">
+										<button
+											onClick={previousCouponMonth}
+											className="month-nav-btn"
+										>
+											◀
+										</button>
+										<h3>
+											{couponCurrentMonth.toLocaleString("default", {
+												month: "long",
+												year: "numeric",
+											})}
+										</h3>
+										<button onClick={nextCouponMonth} className="month-nav-btn">
+											▶
+										</button>
+									</div>
+									<div className="calendar-days">
+										{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+											(day) => (
+												<div key={day} className="day-label">
+													{day}
+												</div>
+											)
+										)}
+										{generateCouponCalendarDays().map((dayData, index) =>
+											dayData ? (
+												<div
+													key={index}
+													className={`calendar-day ${
+														dayData.isPast ? "past" : "available"
+													} ${
+														dayData.dateString === newCoupon.validFrom
+															? "selected-check-in"
+															: ""
+													} ${
+														dayData.dateString === newCoupon.validUntil
+															? "selected-check-out"
+															: ""
+													}`}
+													onClick={() => {
+														if (!dayData.isPast) {
+															handleCouponCalendarDayClick(dayData.dateString)
+														}
+													}}
+													title={dayData.isPast ? "Past date" : "Available"}
+												>
+													{dayData.day}
+												</div>
+											) : (
+												<div key={index} className="calendar-day empty"></div>
+											)
+										)}
+									</div>
+								</div>
+								<div className="calendar-legend">
+									<div className="legend-item">
+										<span className="legend-color available"></span>
+										Available
+									</div>
+									<div className="legend-item">
+										<span className="legend-color past"></span>
+										Past Date
+									</div>
+									<div className="legend-item">
+										<span className="legend-color selected-check-in"></span>
+										Valid From
+									</div>
+									<div className="legend-item">
+										<span className="legend-color selected-check-out"></span>
+										Valid Until
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				)}
+
+				{/* Date Picker Modal */}
+				{showDatePickerModal && (
+					<div
+						className="date-picker-modal-overlay"
+						onClick={() => setShowDatePickerModal(false)}
+					>
+						<div
+							className="date-picker-modal-content"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<button
+								className="close-date-modal"
+								onClick={() => setShowDatePickerModal(false)}
+							>
+								<FaTimes />
+							</button>
+							<h2>
+								<FaCalendarAlt /> Select Your Dates
+							</h2>
+							<div className="modal-date-info">
+								<div className="selected-dates-display">
+									{checkInDate && (
+										<div className="selected-date-item check-in">
+											<span className="date-type">Check-in:</span>
+											<span className="date-text">
+												{new Date(checkInDate).toLocaleDateString("en-US", {
+													weekday: "short",
+													month: "short",
+													day: "numeric",
+													year: "numeric",
+												})}
+											</span>
+										</div>
+									)}
+									{checkOutDate && (
+										<div className="selected-date-item check-out">
+											<span className="date-type">Check-out:</span>
+											<span className="date-text">
+												{new Date(checkOutDate).toLocaleDateString("en-US", {
+													weekday: "short",
+													month: "short",
+													day: "numeric",
+													year: "numeric",
+												})}
+											</span>
+										</div>
+									)}
+									{!checkInDate && !checkOutDate && (
+										<p className="instruction-text">
+											{selectingCheckIn
+												? "Click on a date to select check-in"
+												: "Click on a date to select check-out"}
+										</p>
+									)}
+								</div>
+							</div>
+
+							<div className="modal-calendar">
 								<div className="month-view">
 									<div className="month-header">
 										<button onClick={previousMonth} className="month-nav-btn">
@@ -4001,10 +6027,23 @@ export default function PropertyDetails() {
 															: dayData.isPast
 															? "past"
 															: "available"
+													} ${
+														dayData.dateString === checkInDate
+															? "selected-check-in"
+															: ""
+													} ${
+														dayData.dateString === checkOutDate
+															? "selected-check-out"
+															: ""
 													}`}
 													onClick={() => {
 														if (isHost && !dayData.isPast) {
 															handleToggleBlockDate(dayData.dateString)
+														} else {
+															handleCalendarDayClick(
+																dayData.dateString,
+																dayData.isBooked || dayData.isBlocked
+															)
 														}
 													}}
 													title={
@@ -4013,7 +6052,7 @@ export default function PropertyDetails() {
 															: dayData.isBooked
 															? "Already booked"
 															: dayData.isPast
-															? "Past date (not bookable)"
+															? "Past date (bookable)"
 															: "Available"
 													}
 												>
@@ -4025,2603 +6064,795 @@ export default function PropertyDetails() {
 										)}
 									</div>
 								</div>
-							</div>
-							<div className="calendar-legend">
-								<div className="legend-item">
-									<span className="legend-color available"></span>
-									Available
-								</div>
-								<div className="legend-item">
-									<span className="legend-color past"></span>
-									Past Date ( Not Bookable)
-								</div>
-								<div className="legend-item">
-									<span className="legend-color booked"></span>
-									Booked
-								</div>
-								<div className="legend-item">
-									<span className="legend-color blocked"></span>
-									Blocked
-								</div>
-							</div>
-						</div>
-					</section>
-
-					{/* Reviews */}
-					<section className="reviews-section">
-						<div className="reviews-header">
-							<h2>
-								<FaStar /> Reviews
-							</h2>
-							{currentUser &&
-								userCompletedBookings.length > 0 &&
-								!reviews.some(
-									(review) => review.userId === currentUser.uid
-								) && (
-									<button
-										className="write-review-btn"
-										onClick={() => setShowReviewModal(true)}
-									>
-										✍️ Write a Review
-									</button>
-								)}
-						</div>
-						{property.rating && reviews.length > 0 && (
-							<div className="reviews-summary">
-								<div className="rating-big">
-									<FaStar /> {property.rating}
-								</div>
-								<div className="review-count">
-									{reviews.length} {reviews.length === 1 ? "review" : "reviews"}
-								</div>
-							</div>
-						)}
-						<div className="reviews-list">
-							{reviews.length > 0 ? (
-								reviews.slice(0, 10).map((review) => (
-									<div key={review.id} className="review-item">
-										<div className="review-header">
-											<div className="reviewer-info">
-												<div className="reviewer-avatar">
-													{review.userName?.[0]?.toUpperCase() || "U"}
-												</div>
-												<div>
-													<h4>{review.userName || "User"}</h4>
-													<span className="review-date">
-														{review.createdAt?.toDate
-															? review.createdAt
-																	.toDate()
-																	.toLocaleDateString("en-US", {
-																		year: "numeric",
-																		month: "long",
-																		day: "numeric",
-																	})
-															: "Recently"}
-													</span>
-												</div>
-											</div>
-											<div className="review-rating">
-												<FaStar /> {review.rating}
-											</div>
-										</div>
-										<p className="review-text">{review.comment}</p>
-										{review.ratings && (
-											<div className="review-detailed-ratings">
-												<div className="rating-item">
-													<span>Cleanliness</span>
-													<span>
-														<FaStar /> {review.ratings.cleanliness}
-													</span>
-												</div>
-												<div className="rating-item">
-													<span>Accuracy</span>
-													<span>
-														<FaStar /> {review.ratings.accuracy}
-													</span>
-												</div>
-												<div className="rating-item">
-													<span>Communication</span>
-													<span>
-														<FaStar /> {review.ratings.communication}
-													</span>
-												</div>
-												<div className="rating-item">
-													<span>Location</span>
-													<span>
-														<FaStar /> {review.ratings.location}
-													</span>
-												</div>
-												<div className="rating-item">
-													<span>Check-in</span>
-													<span>
-														<FaStar /> {review.ratings.checkIn}
-													</span>
-												</div>
-												<div className="rating-item">
-													<span>Value</span>
-													<span>
-														<FaStar /> {review.ratings.value}
-													</span>
-												</div>
-											</div>
-										)}
+								<div className="calendar-legend">
+									<div className="legend-item">
+										<span className="legend-color available"></span>
+										Available
 									</div>
-								))
-							) : (
-								<p className="no-reviews">
-									No reviews yet. Be the first to review this property!
+									<div className="legend-item">
+										<span className="legend-color past"></span>
+										Past Date (Bookable)
+									</div>
+									<div className="legend-item">
+										<span className="legend-color booked"></span>
+										Booked/Unavailable
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				)}
+
+				{/* Review Modal */}
+				{showReviewModal && (
+					<div
+						className="review-modal-overlay"
+						onClick={() => setShowReviewModal(false)}
+					>
+						<div
+							className="review-modal-content"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<div className="review-modal-header">
+								<h3>✍️ Write a Review</h3>
+								<button
+									className="close-review-modal"
+									onClick={() => setShowReviewModal(false)}
+								>
+									<FaTimes />
+								</button>
+							</div>
+
+							<div className="review-modal-body">
+								<p className="review-intro">
+									Share your experience with others! Rate your stay and help
+									future guests make informed decisions.
 								</p>
-							)}
-						</div>
-					</section>
 
-					{/* Wishlists Section - Only visible to host and guests who created them */}
-					{propertyWishlists.length > 0 && (
-						<section className="wishlists-section">
-							<h2>
-								<FaBookmark /> Guest Wishlists
-							</h2>
-							<div className="wishlists-list">
-								{propertyWishlists.map((wishlist, index) => (
-									<div key={index} className="wishlist-item-card">
-										<div className="wishlist-item-header">
-											<div className="wishlist-guest-info">
-												<FaUser className="guest-icon" />
-												<span className="wishlist-guest-name">{wishlist.guestName}</span>
-											</div>
-											<button
-												className="view-wishlist-btn"
-												onClick={() => {
-													setSelectedWishlist(wishlist)
-													setShowWishlistModal(true)
-												}}
-											>
-												<FaEye /> View Wishlist
-											</button>
+								<div className="rating-categories">
+									<div className="rating-category">
+										<label>Cleanliness</label>
+										<div className="star-rating-input">
+											{[1, 2, 3, 4, 5].map((star) => (
+												<FaStar
+													key={star}
+													className={
+														star <= reviewFormData.cleanliness ? "active" : ""
+													}
+													onClick={() =>
+														setReviewFormData({
+															...reviewFormData,
+															cleanliness: star,
+														})
+													}
+												/>
+											))}
+											<span className="rating-value">
+												{reviewFormData.cleanliness}
+											</span>
 										</div>
 									</div>
-								))}
-							</div>
-						</section>
-					)}
 
-					{/* Location */}
-					<section className="location-section">
-						<h2>
-							<FaMapMarkerAlt /> Location
-						</h2>
-						<div className="location-details">
-							<p>
-								{typeof property.location === "object"
-									? `${property.location.address}, ${property.location.city}, ${property.location.province}`
-									: property.location}
-							</p>
-						</div>
-						<div ref={mapContainer} className="map-container" />
-					</section>
-				</div>
+									<div className="rating-category">
+										<label>Accuracy</label>
+										<div className="star-rating-input">
+											{[1, 2, 3, 4, 5].map((star) => (
+												<FaStar
+													key={star}
+													className={
+														star <= reviewFormData.accuracy ? "active" : ""
+													}
+													onClick={() =>
+														setReviewFormData({
+															...reviewFormData,
+															accuracy: star,
+														})
+													}
+												/>
+											))}
+											<span className="rating-value">
+												{reviewFormData.accuracy}
+											</span>
+										</div>
+									</div>
 
-				{/* Right Column - Booking Card or Host Sections */}
-				<div className="content-right">
-					{isHost ? (
-						/* Host View - Promos and Booking History */
-						<div className="host-management-card">
-							<div className="price-section">
-								<div className="price">
-									{property.pricing?.basePrice ? formatCurrencyFull(property.pricing.basePrice) : "N/A"}
-									<span className="per-night">/ night</span>
+									<div className="rating-category">
+										<label>Communication</label>
+										<div className="star-rating-input">
+											{[1, 2, 3, 4, 5].map((star) => (
+												<FaStar
+													key={star}
+													className={
+														star <= reviewFormData.communication ? "active" : ""
+													}
+													onClick={() =>
+														setReviewFormData({
+															...reviewFormData,
+															communication: star,
+														})
+													}
+												/>
+											))}
+											<span className="rating-value">
+												{reviewFormData.communication}
+											</span>
+										</div>
+									</div>
+
+									<div className="rating-category">
+										<label>Location</label>
+										<div className="star-rating-input">
+											{[1, 2, 3, 4, 5].map((star) => (
+												<FaStar
+													key={star}
+													className={
+														star <= reviewFormData.location ? "active" : ""
+													}
+													onClick={() =>
+														setReviewFormData({
+															...reviewFormData,
+															location: star,
+														})
+													}
+												/>
+											))}
+											<span className="rating-value">
+												{reviewFormData.location}
+											</span>
+										</div>
+									</div>
+
+									<div className="rating-category">
+										<label>Check-in Experience</label>
+										<div className="star-rating-input">
+											{[1, 2, 3, 4, 5].map((star) => (
+												<FaStar
+													key={star}
+													className={
+														star <= reviewFormData.checkIn ? "active" : ""
+													}
+													onClick={() =>
+														setReviewFormData({
+															...reviewFormData,
+															checkIn: star,
+														})
+													}
+												/>
+											))}
+											<span className="rating-value">
+												{reviewFormData.checkIn}
+											</span>
+										</div>
+									</div>
+
+									<div className="rating-category">
+										<label>Value for Money</label>
+										<div className="star-rating-input">
+											{[1, 2, 3, 4, 5].map((star) => (
+												<FaStar
+													key={star}
+													className={
+														star <= reviewFormData.value ? "active" : ""
+													}
+													onClick={() =>
+														setReviewFormData({
+															...reviewFormData,
+															value: star,
+														})
+													}
+												/>
+											))}
+											<span className="rating-value">
+												{reviewFormData.value}
+											</span>
+										</div>
+									</div>
 								</div>
-								{property.rating && property.reviewsCount > 0 && (
-									<div className="rating-small">
-										<FaStar style={{ color: "#FFD700", marginRight: "0.25rem" }} /> 
-										{property.rating.toFixed(1)} ({property.reviewsCount}{" "}
-										{property.reviewsCount === 1 ? "review" : "reviews"})
-									</div>
-								)}
-							</div>
 
-							{/* Property Promos Section */}
-							<div className="host-section">
-								<h3>
-									<FaGift /> Property Promos & Vouchers
-								</h3>
-								{propertyPromos.length > 0 ? (
-									<div className="promos-list">
-										{propertyPromos.map((promo) => (
-											<div
-												key={promo.id}
-												className={`promo-item ${
-													!promo.isActive ? "inactive" : ""
-												}`}
-											>
-												<div className="promo-header">
-													<FaTag className="promo-icon" />
-													<span className="promo-code">{promo.code}</span>
-													<span
-														className={`promo-status ${
-															promo.isActive ? "active" : "inactive"
-														}`}
-													>
-														{promo.isActive ? "Active" : "Inactive"}
-													</span>
-												</div>
-												<div className="promo-details">
-													{promo.discountType === "percent" ||
-													promo.discountType === "percentage" ? (
-														<span className="promo-discount">
-															{promo.discount || promo.discountValue}% OFF
-														</span>
-													) : (
-														<span className="promo-discount">
-															₱{promo.discount || promo.discountValue} OFF
-														</span>
-													)}
-													{promo.validFrom && promo.validUntil && (
-														<span className="promo-dates">
-															{new Date(promo.validFrom).toLocaleDateString()} -{" "}
-															{new Date(promo.validUntil).toLocaleDateString()}
-														</span>
-													)}
-												</div>
-												<div className="promo-usage">
-													{promo.source === "property_vouchers" ? (
-														<span
-															style={{ fontStyle: "italic", color: "#666" }}
-														>
-															Property Voucher
-														</span>
-													) : (
-														<span>
-															Used: {promo.usageCount || 0}{" "}
-															{promo.usageLimit ? `/ ${promo.usageLimit}` : ""}{" "}
-															times
-														</span>
-													)}
-												</div>
-											</div>
-										))}
-									</div>
-								) : (
-									<p className="no-data">
-										No promos created for this property yet.
-									</p>
-								)}
-								<button
-									className="manage-promos-btn"
-									onClick={() => setShowManagePromosModal(true)}
-								>
-									<FaGift /> Manage Promos
-								</button>
-								<button
-									className="view-all-bookings-btn"
-									onClick={() => navigate(`/propertyBookings/${property?.id}`)}
-									style={{ marginTop: "0.75rem" }}
-								>
-									<FaHistory /> View All Bookings
-								</button>
-							</div>
-
-							{/* Upcoming Bookings Section removed */}
-
-							{/* Booking History Section removed */}
-						</div>
-					) : (
-						/* Guest View - Booking Card */
-						<div className="booking-card">
-							<div className="price-section">
-								<div className="price">
-									{(() => {
-										const prices = calculatePrices()
-										const hasAutoDiscount = autoAppliedVoucher && !appliedPromo
-										
-										if (hasAutoDiscount && prices.discountedPrice < prices.originalPrice) {
-											return (
-												<>
-													<span className="original-price">
-														₱{prices.originalPrice.toLocaleString()}
-													</span>
-													<span className="discounted-price">
-														₱{Math.max(0, prices.discountedPrice).toLocaleString()}
-													</span>
-													<span className="per-night">/ night</span>
-													{autoAppliedVoucher && (
-														<span className="voucher-badge">
-															{autoAppliedVoucher.type.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())} Promo
-														</span>
-													)}
-												</>
-											)
-										} else {
-											return (
-												<>
-													{property.pricing?.basePrice ? formatCurrencyFull(property.pricing.basePrice) : "N/A"}
-													<span className="per-night">/ night</span>
-												</>
-											)
+								<div className="review-comment-section">
+									<label>Your Review</label>
+									<textarea
+										placeholder="Share your experience... (minimum 20 characters)"
+										value={reviewFormData.comment}
+										onChange={(e) =>
+											setReviewFormData({
+												...reviewFormData,
+												comment: e.target.value,
+											})
 										}
-									})()}
+										rows={5}
+										minLength={20}
+									/>
+									<small className="character-count">
+										{reviewFormData.comment.length} characters (minimum 20)
+									</small>
 								</div>
-								{property.rating && property.reviewsCount > 0 && (
-									<div className="rating-small" style={{
-										display: "flex",
-										alignItems: "center",
-										gap: "0.25rem",
-										fontSize: "0.9rem",
-										color: "#333"
-									}}>
-										<FaStar style={{ color: "#FFD700", fontSize: "0.9rem" }} /> 
-										<span>{property.rating.toFixed(1)}</span>
-										<span style={{ color: "#666" }}>({property.reviewsCount})</span>
-									</div>
-								)}
 							</div>
 
-							{/* Host Info */}
-							<div className="host-info-card">
-								<h3>Hosted by {hostInfo.hostName || "Host"}</h3>
-								<div className="host-details">
-									<div className="host-avatar">
-										{(hostInfo.hostName || "H")[0].toUpperCase()}
-									</div>
-									<div className="host-stats">
-										{hostInfo.superhost && (
-											<div className="host-badge">
-												<FaMedal /> Superhost
-											</div>
-										)}
-										{hostInfo.verified && (
-											<div className="host-badge">
-												<FaShieldAlt /> Verified
-											</div>
-										)}
-										{hostInfo.hostSince && (
-											<div className="host-stat">
-												<FaClock /> Hosting since{" "}
-												{new Date(hostInfo.hostSince).getFullYear()}
-											</div>
-										)}
-									</div>
-								</div>
-								<button 
-									className="contact-host-btn"
-									onClick={() => {
-										if (!currentUser) {
-											toast.error("Please login to contact the host")
-											navigate("/login")
-											return
-										}
-										setShowContactHostModal(true)
-									}}
+							<div className="review-modal-footer">
+								<button
+									className="cancel-review-btn"
+									onClick={() => setShowReviewModal(false)}
+									disabled={isSubmittingReview}
 								>
-									Contact Host
+									Cancel
+								</button>
+								<button
+									className="submit-review-btn"
+									onClick={handleSubmitReview}
+									disabled={
+										isSubmittingReview ||
+										reviewFormData.comment.trim().length < 20
+									}
+								>
+									{isSubmittingReview ? "Submitting..." : "Submit Review"}
 								</button>
 							</div>
+						</div>
+					</div>
+				)}
 
-							<div className="booking-form">
-								<div className="date-selector-container">
-									<label>Select Dates</label>
-									<button
-										className="date-selector-btn"
-										onClick={openDatePicker}
-										type="button"
-									>
-										<FaCalendarAlt className="calendar-icon" />
-										<div className="date-display">
-											{checkInDate && checkOutDate ? (
-												<>
-													<span className="date-label">Check-in:</span>
-													<span className="date-value">
-														{new Date(checkInDate).toLocaleDateString("en-US", {
-															month: "short",
-															day: "numeric",
-															year: "numeric",
-														})}
-													</span>
-													<span className="date-separator">→</span>
-													<span className="date-label">Check-out:</span>
-													<span className="date-value">
-														{new Date(checkOutDate).toLocaleDateString(
-															"en-US",
-															{
-																month: "short",
-																day: "numeric",
-																year: "numeric",
-															}
-														)}
-													</span>
-												</>
-											) : (
-												<span className="placeholder">
-													Click to select dates
-												</span>
-											)}
-										</div>
-									</button>
-									{checkInDate && checkOutDate && (
-										<span className="nights-display">
-											{calculateNights()}{" "}
-											{calculateNights() === 1 ? "night" : "nights"}
-										</span>
-									)}
-								</div>
-								<div className="guests-input">
-									<label>Guests</label>
-									<select
-										value={numberOfGuests}
-										onChange={(e) => setNumberOfGuests(Number(e.target.value))}
-									>
-										{Array.from(
-											{
-												length:
-													property.capacity?.guests ||
-													property.capacity?.maxGuests ||
-													8,
-											},
-											(_, i) => i + 1
-										).map((num) => (
-											<option key={num} value={num}>
-												{num} {num === 1 ? "guest" : "guests"}
-											</option>
-										))}
-									</select>
-									{(property.capacity?.guests ||
-										property.capacity?.maxGuests) && (
-										<span className="max-guests-note">
-											Maximum{" "}
-											{property.capacity?.guests ||
-												property.capacity?.maxGuests}{" "}
-											guests allowed
-										</span>
-									)}
-								</div>
-								{checkInDate && checkOutDate ? (
-									<>
-										<div className="downpayment-info">
-											<p>
-												<strong>Full Payment Required:</strong>
-											</p>
-											<p className="downpayment-amount">
-												₱{calculatePrices().total.toLocaleString()}
-											</p>
-											<p className="downpayment-note">
-												Complete payment to secure your booking
-											</p>
-										</div>
-
-										{/* Promo Code Section */}
-										{!appliedPromo ? (
-											<div className="promo-code-section">
-												<label className="promo-label-main">
-													Have a promo code?
-												</label>
-												<div className="promo-input-group">
-													<input
-														type="text"
-														placeholder="Enter promo code"
-														value={promoCode}
-														onChange={(e) =>
-															setPromoCode(e.target.value.toUpperCase())
-														}
-														className="promo-input"
-														maxLength={20}
-													/>
-													<button
-														onClick={validateAndApplyPromo}
-														className="apply-promo-btn"
-														disabled={isValidatingPromo || !promoCode.trim()}
-													>
-														{isValidatingPromo ? "Validating..." : "Apply"}
-													</button>
-												</div>
-											</div>
-										) : (
-											<div className="applied-promo-section">
-												<div className="applied-promo-info">
-													<span className="promo-label">
-														🎁 Promo: {appliedPromo.code}
-													</span>
-													<span className="discount-amount">
-														-₱{calculatePrices().promoDiscount.toLocaleString()}
-													</span>
-												</div>
-												<button
-													onClick={removePromo}
-													className="remove-promo-btn"
-												>
-													Remove Promo
-												</button>
-											</div>
-										)}
-
-										{/* Payment Method Selection */}
-										<div className="payment-method-selection">
-											<label className="payment-label">
-												Choose Payment Method:
-											</label>
-											<div className="payment-methods">
-												<button
-													className={`payment-method-btn ${
-														paymentMethod === "paypal" ? "active" : ""
-													}`}
-													onClick={() => setPaymentMethod("paypal")}
-												>
-													<span className="method-icon">💳</span>
-													<span>PayPal</span>
-												</button>
-												<button
-													className={`payment-method-btn ${
-														paymentMethod === "wallet" ? "active" : ""
-													}`}
-													onClick={() => setPaymentMethod("wallet")}
-												>
-													<span className="method-icon">💰</span>
-													<span>E-Wallet</span>
-													<span className="wallet-balance-hint">
-														₱{walletBalance.toLocaleString()}
-													</span>
-												</button>
-											</div>
-										</div>
-
-										{/* PayPal Payment */}
-										{paymentMethod === "paypal" ? (
-											<>
-												<button
-													className="book-now-btn paypal-btn"
-													onClick={handlePayPalPayment}
-													disabled={isProcessingPayment || !isPayPalLoaded}
-												>
-													{!isPayPalLoaded
-														? "Loading PayPal..."
-														: isProcessingPayment
-														? "Processing..."
-														: "Pay with PayPal"}
-												</button>
-												<div
-													ref={paypalRef}
-													className="paypal-button-container"
-												></div>
-											</>
-										) : (
-											/* Wallet Payment */
-											<button
-												className="book-now-btn wallet-btn"
-												onClick={handleWalletPayment}
-												disabled={
-													isProcessingPayment ||
-													walletBalance < calculatePrices().total
-												}
-											>
-												{isProcessingPayment
-													? "Processing..."
-													: walletBalance < calculatePrices().total
-													? `Insufficient Balance (₱${(
-															calculatePrices().total - walletBalance
-													  ).toLocaleString()} short)`
-													: "Pay with E-Wallet"}
-											</button>
-										)}
-
-										<p className="nights-info">
-											{calculateNights()}{" "}
-											{calculateNights() === 1 ? "night" : "nights"}
-										</p>
-									</>
-								) : (
-									<>
-										<button className="book-now-btn" disabled>
-											Select Dates to Book
-										</button>
-										<p className="book-notice">
-											Choose check-in and check-out dates
-										</p>
-									</>
-								)}
+				{/* View All Bookings Modal */}
+				{showAllBookingsModal && (
+					<div
+						className="modal-overlay"
+						onClick={() => setShowAllBookingsModal(false)}
+					>
+						<div
+							className="modal-content large-modal"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<div className="modal-header">
+								<h2>
+									<FaHistory /> All Bookings for {property?.title}
+								</h2>
+								<button
+									className="close-modal-btn"
+									onClick={() => setShowAllBookingsModal(false)}
+								>
+									<FaTimes />
+								</button>
 							</div>
-
-							<div className="price-breakdown">
+							<div
+								className="modal-body"
+								style={{ maxHeight: "70vh", overflowY: "auto" }}
+							>
 								{(() => {
-									const prices = calculatePrices()
+									const today = new Date()
+									today.setHours(0, 0, 0, 0)
+
+									const upcomingBookings = propertyBookings
+										.filter((booking) => {
+											if (booking.status === "cancelled") return false
+											const checkInDate = new Date(booking.checkInDate)
+											checkInDate.setHours(0, 0, 0, 0)
+											return checkInDate >= today
+										})
+										.sort((a, b) => {
+											const dateA = new Date(a.checkInDate)
+											const dateB = new Date(b.checkInDate)
+											return dateA - dateB
+										})
+
+									const pastBookings = propertyBookings
+										.filter((booking) => {
+											if (booking.status === "cancelled") return false
+											const checkInDate = new Date(booking.checkInDate)
+											checkInDate.setHours(0, 0, 0, 0)
+											return checkInDate < today
+										})
+										.sort((a, b) => {
+											const dateA = new Date(a.checkInDate)
+											const dateB = new Date(b.checkInDate)
+											return dateB - dateA
+										})
+
 									return (
 										<>
-											{prices.nights > 0 && (
-												<div className="breakdown-item">
-													<span>
-														{formatCurrencyFull(prices.basePrice)} x{" "}
-														{prices.nights}{" "}
-														{prices.nights === 1 ? "night" : "nights"}
-													</span>
-													<span>{formatCurrencyFull(prices.subtotal)}</span>
-												</div>
-											)}
-											<div className="breakdown-item">
-												<span>Cleaning fee</span>
-												<span>₱{prices.cleaningFee.toLocaleString()}</span>
-											</div>
-											<div className="breakdown-item">
-												<span>Service fee</span>
-												<span>₱{prices.serviceFee.toLocaleString()}</span>
-											</div>
-											<div className="breakdown-item">
-												<span>
-													Guest fee ({prices.numberOfGuests}{" "}
-													{prices.numberOfGuests === 1 ? "guest" : "guests"})
-												</span>
-												<span>₱{prices.guestFee.toLocaleString()}</span>
+											{/* Upcoming Bookings Section */}
+											<div
+												className="bookings-category-section"
+												style={{ marginBottom: "2rem" }}
+											>
+												<h3
+													style={{
+														display: "flex",
+														alignItems: "center",
+														gap: "0.5rem",
+														marginBottom: "1rem",
+														color: "var(--primary)",
+													}}
+												>
+													<FaCalendarCheck /> Upcoming Bookings (
+													{upcomingBookings.length})
+												</h3>
+												{upcomingBookings.length > 0 ? (
+													<div className="bookings-list">
+														{upcomingBookings.map((booking) => (
+															<div
+																key={booking.id}
+																className="booking-history-item"
+															>
+																<div className="booking-header">
+																	<span className="booking-id">
+																		#{booking.id.substring(0, 8)}
+																	</span>
+																	<span
+																		className={`booking-status-badge ${booking.status}`}
+																	>
+																		{booking.status}
+																	</span>
+																</div>
+																<div className="booking-details">
+																	<div className="booking-info">
+																		<FaUser className="info-icon" />
+																		<span>{booking.guestName || "Guest"}</span>
+																	</div>
+																	<div className="booking-info">
+																		<FaCalendarAlt className="info-icon" />
+																		<span>
+																			{new Date(
+																				booking.checkInDate
+																			).toLocaleDateString()}{" "}
+																			-{" "}
+																			{new Date(
+																				booking.checkOutDate
+																			).toLocaleDateString()}
+																		</span>
+																	</div>
+																	<div className="booking-info">
+																		<FaUsers className="info-icon" />
+																		<span>
+																			{booking.numberOfGuests ||
+																				booking.guests ||
+																				1}{" "}
+																			{booking.numberOfGuests === 1
+																				? "guest"
+																				: "guests"}
+																		</span>
+																	</div>
+																	<div className="booking-amount">
+																		₱
+																		{(
+																			booking.pricing?.total ||
+																			booking.totalAmount ||
+																			0
+																		).toLocaleString()}
+																	</div>
+																</div>
+															</div>
+														))}
+													</div>
+												) : (
+													<p className="no-data">
+														No upcoming bookings for this property.
+													</p>
+												)}
 											</div>
 
-											{/* Show discount in breakdown if promo or auto-voucher is applied */}
-											{(appliedPromo || autoAppliedVoucher) && prices.promoDiscount > 0 && (
-												<div className="breakdown-item promo-discount">
-													<span className="promo-label">
-														🎁 {appliedPromo ? "Promo" : autoAppliedVoucher?.type.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())} Discount
-													</span>
-													<span className="discount-amount">
-														-₱{prices.promoDiscount.toLocaleString()}
-													</span>
-												</div>
-											)}
-
-											<div className="breakdown-total">
-												<span>Total</span>
-												<span>
-													₱
-													{prices.nights > 0
-														? prices.total.toLocaleString()
-														: (
-																prices.cleaningFee +
-																prices.serviceFee +
-																prices.guestFee
-														  ).toLocaleString()}
-												</span>
+											{/* Booking History Section */}
+											<div className="bookings-category-section">
+												<h3
+													style={{
+														display: "flex",
+														alignItems: "center",
+														gap: "0.5rem",
+														marginBottom: "1rem",
+														color: "var(--primary)",
+													}}
+												>
+													<FaHistory /> Booking History ({pastBookings.length})
+												</h3>
+												{pastBookings.length > 0 ? (
+													<div className="bookings-list">
+														{pastBookings.map((booking) => (
+															<div
+																key={booking.id}
+																className="booking-history-item"
+															>
+																<div className="booking-header">
+																	<span className="booking-id">
+																		#{booking.id.substring(0, 8)}
+																	</span>
+																	<span
+																		className={`booking-status-badge ${booking.status}`}
+																	>
+																		{booking.status}
+																	</span>
+																</div>
+																<div className="booking-details">
+																	<div className="booking-info">
+																		<FaUser className="info-icon" />
+																		<span>{booking.guestName || "Guest"}</span>
+																	</div>
+																	<div className="booking-info">
+																		<FaCalendarAlt className="info-icon" />
+																		<span>
+																			{new Date(
+																				booking.checkInDate
+																			).toLocaleDateString()}{" "}
+																			-{" "}
+																			{new Date(
+																				booking.checkOutDate
+																			).toLocaleDateString()}
+																		</span>
+																	</div>
+																	<div className="booking-info">
+																		<FaUsers className="info-icon" />
+																		<span>
+																			{booking.numberOfGuests ||
+																				booking.guests ||
+																				1}{" "}
+																			{booking.numberOfGuests === 1
+																				? "guest"
+																				: "guests"}
+																		</span>
+																	</div>
+																	<div className="booking-amount">
+																		₱
+																		{(
+																			booking.pricing?.total ||
+																			booking.totalAmount ||
+																			0
+																		).toLocaleString()}
+																	</div>
+																</div>
+															</div>
+														))}
+													</div>
+												) : (
+													<p className="no-data">
+														No booking history for this property.
+													</p>
+												)}
 											</div>
 										</>
 									)
 								})()}
 							</div>
-						</div>
-					)}
-				</div>
-			</div>
-
-			{/* Report Modal */}
-			{showReportModal && (
-				<div
-					className="share-modal-overlay"
-					onClick={() => setShowReportModal(false)}
-				>
-					<div
-						className="share-modal-content"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<div className="share-modal-header">
-							<h3>Report Property</h3>
-							<button
-								className="close-share-modal"
-								onClick={() => setShowReportModal(false)}
-							>
-								<FaTimes />
-							</button>
-						</div>
-						<div className="report-form">
-							<p className="report-description">
-								Help us keep AuraStays safe by reporting any issues with this property.
-							</p>
-							<div className="form-group">
-								<label>Reason for Reporting</label>
-								<select
-									value={reportReason}
-									onChange={(e) => setReportReason(e.target.value)}
-									className="report-select"
-								>
-									<option value="">Select a reason</option>
-									<option value="inaccurate">Inaccurate Information</option>
-									<option value="misleading">Misleading Photos</option>
-									<option value="safety">Safety Concerns</option>
-									<option value="fraud">Suspected Fraud</option>
-									<option value="inappropriate">Inappropriate Content</option>
-									<option value="spam">Spam or Scam</option>
-									<option value="other">Other</option>
-								</select>
-							</div>
-							<div className="form-group">
-								<label>Additional Details</label>
-								<textarea
-									value={reportDescription}
-									onChange={(e) => setReportDescription(e.target.value)}
-									placeholder="Please provide more details about the issue..."
-									className="report-textarea"
-									rows="5"
-								/>
-							</div>
-							<div className="report-actions">
+							<div className="modal-footer">
 								<button
-									className="cancel-btn"
-									onClick={() => {
-										setShowReportModal(false)
-										setReportReason("")
-										setReportDescription("")
-									}}
-									disabled={isSubmittingReport}
+									className="btn-primary"
+									onClick={() => setShowAllBookingsModal(false)}
+								>
+									Close
+								</button>
+							</div>
+						</div>
+					</div>
+				)}
+
+				{/* Wallet Payment Confirmation Modal */}
+				{showWalletPaymentModal && (
+					<div
+						className="wallet-payment-modal-overlay"
+						onClick={() => setShowWalletPaymentModal(false)}
+					>
+						<div
+							className="wallet-payment-modal-content"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<div className="wallet-payment-modal-header">
+								<div className="wallet-icon-wrapper">
+									<FaWallet />
+								</div>
+								<h3>Confirm E-Wallet Payment</h3>
+								<button
+									className="close-wallet-modal"
+									onClick={() => setShowWalletPaymentModal(false)}
+								>
+									<FaTimes />
+								</button>
+							</div>
+
+							<div className="wallet-payment-modal-body">
+								<div className="wallet-payment-info">
+									<p className="wallet-payment-message">
+										You are about to pay for this booking using your E-Wallet
+										balance.
+									</p>
+									<div className="wallet-payment-summary">
+										<div className="summary-row">
+											<span className="summary-label">Property:</span>
+											<span className="summary-value">{property?.title}</span>
+										</div>
+										<div className="summary-row">
+											<span className="summary-label">Check-in:</span>
+											<span className="summary-value">
+												{checkInDate
+													? new Date(checkInDate).toLocaleDateString("en-US", {
+															month: "short",
+															day: "numeric",
+															year: "numeric",
+													  })
+													: "Not selected"}
+											</span>
+										</div>
+										<div className="summary-row">
+											<span className="summary-label">Check-out:</span>
+											<span className="summary-value">
+												{checkOutDate
+													? new Date(checkOutDate).toLocaleDateString("en-US", {
+															month: "short",
+															day: "numeric",
+															year: "numeric",
+													  })
+													: "Not selected"}
+											</span>
+										</div>
+										<div className="summary-row">
+											<span className="summary-label">Guests:</span>
+											<span className="summary-value">{numberOfGuests}</span>
+										</div>
+										<div className="summary-row total-row">
+											<span className="summary-label">Total Amount:</span>
+											<span className="summary-value total-amount">
+												₱{calculatePrices().total.toLocaleString()}
+											</span>
+										</div>
+										<div className="summary-row balance-row">
+											<span className="summary-label">Current Balance:</span>
+											<span className="summary-value balance-amount">
+												₱{walletBalance.toLocaleString()}
+											</span>
+										</div>
+										<div className="summary-row balance-after-row">
+											<span className="summary-label">Balance After:</span>
+											<span className="summary-value balance-after-amount">
+												₱
+												{(
+													walletBalance - calculatePrices().total
+												).toLocaleString()}
+											</span>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							<div className="wallet-payment-modal-footer">
+								<button
+									className="wallet-modal-cancel-btn"
+									onClick={() => setShowWalletPaymentModal(false)}
 								>
 									Cancel
 								</button>
 								<button
-									className="submit-report-btn"
-									onClick={handleSubmitReport}
-									disabled={!reportReason || isSubmittingReport}
+									className="wallet-modal-confirm-btn"
+									onClick={handleConfirmWalletPayment}
 								>
-									{isSubmittingReport ? "Submitting..." : "Submit Report"}
+									<FaWallet /> Confirm Payment
 								</button>
 							</div>
 						</div>
 					</div>
-				</div>
-			)}
+				)}
 
-			{/* Share Modal */}
-			{showShareModal && (
-				<div
-					className="share-modal-overlay"
-					onClick={() => setShowShareModal(false)}
-				>
+				{/* Contact Host Modal */}
+				<ContactHostModal
+					isOpen={showContactHostModal}
+					onClose={() => setShowContactHostModal(false)}
+					property={property}
+					hostId={property?.hostId || property?.host?.hostId}
+				/>
+
+				{/* Wishlist View Modal */}
+				{showWishlistModal && selectedWishlist && (
 					<div
-						className="share-modal-content"
-						onClick={(e) => e.stopPropagation()}
+						className="wishlist-view-modal-overlay"
+						onClick={() => setShowWishlistModal(false)}
 					>
-						<div className="share-modal-header">
-							<h3>Share this property</h3>
-							<button
-								className="close-share-modal"
-								onClick={() => setShowShareModal(false)}
-							>
-								<FaTimes />
-							</button>
-						</div>
-						<div className="share-link-section">
-							<input type="text" value={shareableUrl} readOnly />
-							<button onClick={copyToClipboard} className="copy-link-btn">
-								<FaCopy /> Copy
-							</button>
-						</div>
-						<div className="share-options">
-							<button
-								className="share-option facebook"
-								onClick={() => handleShare("Facebook")}
-							>
-								<FaFacebook />
-								<span>Facebook</span>
-							</button>
-							<button
-								className="share-option twitter"
-								onClick={() => handleShare("Twitter")}
-							>
-								<FaTwitter />
-								<span>Twitter</span>
-							</button>
-							<button
-								className="share-option instagram"
-								onClick={() => handleShare("Instagram")}
-							>
-								<FaInstagram />
-								<span>Instagram</span>
-							</button>
-							<button
-								className="share-option linkedin"
-								onClick={() => handleShare("LinkedIn")}
-							>
-								<FaLinkedin />
-								<span>LinkedIn</span>
-							</button>
-							<button
-								className="share-option whatsapp"
-								onClick={() => handleShare("WhatsApp")}
-							>
-								<FaWhatsapp />
-								<span>WhatsApp</span>
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
-
-			{/* All Photos Modal */}
-			{showAllPhotos && (
-				<div
-					className="all-photos-modal-overlay"
-					onClick={() => setShowAllPhotos(false)}
-				>
-					<div
-						className="all-photos-modal-content"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<button
-							className="close-photos-modal"
-							onClick={() => setShowAllPhotos(false)}
-						>
-							<FaTimes />
-						</button>
-						<h2>All Photos</h2>
-						<div className="all-photos-grid">
-							{images.map((img, index) => (
-								<img 
-									key={index} 
-									src={img} 
-									alt={`Property view ${index + 1}`}
-									style={{ cursor: "pointer" }}
-									onClick={() => {
-										setFullSizeImageIndex(index)
-										setShowAllPhotos(false)
-										setShowFullSizeImage(true)
-									}}
-								/>
-							))}
-						</div>
-					</div>
-				</div>
-			)}
-
-			{/* Manage Promos Modal */}
-			{showManagePromosModal && (
-				<div
-					className="manage-promos-modal-overlay"
-					onClick={() => setShowManagePromosModal(false)}
-				>
-					<div
-						className="manage-promos-modal-content"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<div className="manage-promos-modal-header">
-							<h2>
-								<FaGift /> Manage Promos for {property.title}
-							</h2>
-							<button
-								className="close-promos-modal"
-								onClick={() => setShowManagePromosModal(false)}
-							>
-								<FaTimes />
-							</button>
-						</div>
-
-						<div className="manage-promos-body">
-							{/* Create New Promo Section */}
-							<div className="create-promo-section" style={{ marginBottom: "2rem" }}>
-								{!showCreatePromoForm ? (
-									<button
-										className="create-promo-btn"
-										onClick={() => setShowCreatePromoForm(true)}
-										style={{
-											display: "flex",
-											alignItems: "center",
-											gap: "0.5rem",
-											padding: "0.75rem 1.5rem",
-											background: "var(--primary)",
-											color: "white",
-											border: "none",
-											borderRadius: "8px",
-											fontSize: "1rem",
-											fontWeight: 600,
-											cursor: "pointer",
-											transition: "all 0.2s ease",
-										}}
-										onMouseEnter={(e) => {
-											e.target.style.background = "#5fa887"
-											e.target.style.transform = "translateY(-2px)"
-										}}
-										onMouseLeave={(e) => {
-											e.target.style.background = "var(--primary)"
-											e.target.style.transform = "translateY(0)"
-										}}
-									>
-										<FaPlus /> Create New Promo
-									</button>
-								) : (
-									<div className="create-promo-form" style={{
-										padding: "1.5rem",
-										background: "#f9f9f9",
-										borderRadius: "12px",
-										border: "2px solid var(--primary)",
-									}}>
-										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-											<h3 style={{ margin: 0 }}>Create New Promo</h3>
-											<button
-												type="button"
-												onClick={() => {
-													setShowCreatePromoForm(false)
-													setNewCoupon({
-														code: "",
-														description: "",
-														discountType: "percentage",
-														discountValue: 0,
-														minPurchase: 0,
-														maxDiscount: 0,
-														usageLimit: 0,
-														usagePerUser: 1,
-														validFrom: "",
-														validUntil: "",
-														isActive: true,
-													})
-												}}
-												style={{
-													background: "transparent",
-													border: "none",
-													cursor: "pointer",
-													fontSize: "1.25rem",
-													color: "#666",
-												}}
-											>
-												<FaTimes />
-											</button>
-										</div>
-										
-										<div className="form-group" style={{ marginBottom: "1rem" }}>
-											<label>Coupon Code *</label>
-											<input
-												type="text"
-												placeholder="e.g., SUMMER2024"
-												value={newCoupon.code}
-												onChange={(e) =>
-													setNewCoupon({
-														...newCoupon,
-														code: e.target.value.toUpperCase(),
-													})
-												}
-												maxLength={20}
-												style={{ textTransform: "uppercase" }}
-											/>
-										</div>
-										
-										<div className="form-group" style={{ marginBottom: "1rem" }}>
-											<label>Description *</label>
-											<textarea
-												placeholder="Describe what this coupon offers..."
-												value={newCoupon.description}
-												onChange={(e) =>
-													setNewCoupon({
-														...newCoupon,
-														description: e.target.value,
-													})
-												}
-												rows={3}
-											/>
-										</div>
-										
-										<div className="form-group" style={{ marginBottom: "1rem" }}>
-											<label>Discount Type</label>
-											<div className="radio-group" style={{ display: "flex", gap: "1rem" }}>
-												<label className="radio-label" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-													<input
-														type="radio"
-														name="newDiscountType"
-														value="percentage"
-														checked={newCoupon.discountType === "percentage"}
-														onChange={(e) =>
-															setNewCoupon({
-																...newCoupon,
-																discountType: e.target.value,
-															})
-														}
-													/>
-													Percentage (%)
-												</label>
-												<label className="radio-label" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-													<input
-														type="radio"
-														name="newDiscountType"
-														value="fixed"
-														checked={newCoupon.discountType === "fixed"}
-														onChange={(e) =>
-															setNewCoupon({
-																...newCoupon,
-																discountType: e.target.value,
-															})
-														}
-													/>
-													Fixed Amount (₱)
-												</label>
-											</div>
-										</div>
-										
-										<div className="form-group" style={{ marginBottom: "1rem" }}>
-											<label>
-												Discount Value {newCoupon.discountType === "percentage" ? "(%)" : "(₱)"} *
-											</label>
-											<NumberStepper
-												value={newCoupon.discountValue}
-												onChange={(e) =>
-													setNewCoupon({
-														...newCoupon,
-														discountValue: e.target.value,
-													})
-												}
-												min={0}
-												max={newCoupon.discountType === "percentage" ? 100 : undefined}
-												step={newCoupon.discountType === "percentage" ? 1 : 10}
-												placeholder={newCoupon.discountType === "percentage" ? "e.g., 20" : "e.g., 500"}
-											/>
-										</div>
-										
-										<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-											<div className="form-group">
-												<label>Minimum Purchase (₱)</label>
-												<NumberStepper
-													value={newCoupon.minPurchase}
-													onChange={(e) =>
-														setNewCoupon({
-															...newCoupon,
-															minPurchase: e.target.value,
-														})
-													}
-													min={0}
-													step={100}
-													placeholder="0"
-												/>
-												<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
-													Minimum booking amount required
-												</small>
-											</div>
-											<div className="form-group">
-												<label>Maximum Discount (₱)</label>
-												<NumberStepper
-													value={newCoupon.maxDiscount}
-													onChange={(e) =>
-														setNewCoupon({
-															...newCoupon,
-															maxDiscount: e.target.value,
-														})
-													}
-													min={0}
-													step={100}
-													placeholder="0"
-												/>
-												<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
-													Max discount cap (0 = no limit)
-												</small>
-											</div>
-										</div>
-										
-										<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-											<div className="form-group">
-												<label>Usage Limit</label>
-												<NumberStepper
-													value={newCoupon.usageLimit}
-													onChange={(e) =>
-														setNewCoupon({
-															...newCoupon,
-															usageLimit: e.target.value,
-														})
-													}
-													min={0}
-													placeholder="0"
-												/>
-												<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
-													Total times this coupon can be used
-												</small>
-												<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#999", fontStyle: "italic" }}>
-													(0 for unlimited)
-												</small>
-											</div>
-											<div className="form-group">
-												<label>Usage Per User</label>
-												<NumberStepper
-													value={newCoupon.usagePerUser}
-													onChange={(e) =>
-														setNewCoupon({
-															...newCoupon,
-															usagePerUser: e.target.value || 1,
-														})
-													}
-													min={1}
-													placeholder="1"
-												/>
-												<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#666" }}>
-													How many times each user can use it
-												</small>
-												<small style={{ display: "block", marginTop: "0.25rem", fontSize: "0.75rem", color: "#999", fontStyle: "italic" }}>
-													(0 for unlimited)
-												</small>
-											</div>
-										</div>
-										
-										<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-											<div className="form-group">
-												<label>Valid From</label>
-												<button
-													type="button"
-													onClick={() => openCouponDatePicker(true)}
-													style={{
-														width: "100%",
-														padding: "0.75rem",
-														border: "1px solid #b0b0b0",
-														borderRadius: "6px",
-														fontSize: "0.9rem",
-														background: "white",
-														cursor: "pointer",
-														display: "flex",
-														alignItems: "center",
-														justifyContent: "center",
-														gap: "0.5rem",
-														transition: "all 0.2s ease",
-													}}
-													onMouseEnter={(e) => {
-														e.target.style.borderColor = "var(--primary)"
-														e.target.style.background = "rgba(97, 191, 156, 0.05)"
-													}}
-													onMouseLeave={(e) => {
-														e.target.style.borderColor = "#b0b0b0"
-														e.target.style.background = "white"
-													}}
-												>
-													<FaCalendarAlt />
-													<span>
-														{newCoupon.validFrom
-															? new Date(newCoupon.validFrom).toLocaleDateString("en-US", {
-																	month: "short",
-																	day: "numeric",
-																	year: "numeric",
-															  })
-															: "Select date"}
-													</span>
-												</button>
-											</div>
-											<div className="form-group">
-												<label>Valid Until</label>
-												<button
-													type="button"
-													onClick={() => openCouponDatePicker(false)}
-													style={{
-														width: "100%",
-														padding: "0.75rem",
-														border: "1px solid #b0b0b0",
-														borderRadius: "6px",
-														fontSize: "0.9rem",
-														background: "white",
-														cursor: "pointer",
-														display: "flex",
-														alignItems: "center",
-														justifyContent: "center",
-														gap: "0.5rem",
-														transition: "all 0.2s ease",
-													}}
-													onMouseEnter={(e) => {
-														e.target.style.borderColor = "var(--primary)"
-														e.target.style.background = "rgba(97, 191, 156, 0.05)"
-													}}
-													onMouseLeave={(e) => {
-														e.target.style.borderColor = "#b0b0b0"
-														e.target.style.background = "white"
-													}}
-												>
-													<FaCalendarAlt />
-													<span>
-														{newCoupon.validUntil
-															? new Date(newCoupon.validUntil).toLocaleDateString("en-US", {
-																	month: "short",
-																	day: "numeric",
-																	year: "numeric",
-															  })
-															: "Select date"}
-													</span>
-												</button>
-											</div>
-										</div>
-										
-										<div className="form-group" style={{ marginBottom: "1rem" }}>
-											<label style={{ 
-												display: "flex", 
-												alignItems: "center", 
-												gap: "0.5rem",
-												cursor: "pointer",
-												userSelect: "none"
-											}}>
-												<input
-													type="checkbox"
-													checked={newCoupon.isActive}
-													onChange={(e) =>
-														setNewCoupon({
-															...newCoupon,
-															isActive: e.target.checked,
-														})
-													}
-													style={{
-														width: "18px",
-														height: "18px",
-														cursor: "pointer",
-														margin: 0,
-														flexShrink: 0,
-													}}
-												/>
-												<span style={{ lineHeight: "1.5" }}>Active (Coupon will be available for use)</span>
-											</label>
-										</div>
-										
-										<div style={{ display: "flex", gap: "1rem" }}>
-											<button
-												type="button"
-												onClick={handleCreatePromo}
-												disabled={isCreatingPromo || !newCoupon.code.trim() || !newCoupon.description.trim() || !newCoupon.discountValue}
-												style={{
-													padding: "0.75rem 2rem",
-													background: isCreatingPromo || !newCoupon.code.trim() || !newCoupon.description.trim() || !newCoupon.discountValue ? "#ccc" : "var(--primary)",
-													color: "white",
-													border: "none",
-													borderRadius: "8px",
-													fontSize: "1rem",
-													fontWeight: 600,
-													cursor: isCreatingPromo || !newCoupon.code.trim() || !newCoupon.description.trim() || !newCoupon.discountValue ? "not-allowed" : "pointer",
-												}}
-											>
-												{isCreatingPromo ? "Creating..." : "Create Promo"}
-											</button>
-											<button
-												type="button"
-												onClick={() => {
-													setShowCreatePromoForm(false)
-													setNewCoupon({
-														code: "",
-														description: "",
-														discountType: "percentage",
-														discountValue: 0,
-														minPurchase: 0,
-														maxDiscount: 0,
-														usageLimit: 0,
-														usagePerUser: 1,
-														validFrom: "",
-														validUntil: "",
-														isActive: true,
-													})
-												}}
-												style={{
-													padding: "0.75rem 2rem",
-													background: "transparent",
-													color: "#666",
-													border: "1px solid #ccc",
-													borderRadius: "8px",
-													fontSize: "1rem",
-													cursor: "pointer",
-												}}
-											>
-												Cancel
-											</button>
-										</div>
-									</div>
-								)}
-							</div>
-							
-							{/* Existing Promos List */}
-							<div className="existing-promos-section">
-								<h3>Existing Promos ({propertyPromos.length})</h3>
-								{propertyPromos.length > 0 ? (
-									<div className="promos-management-list">
-										{propertyPromos.map((promo) => (
-											<div key={promo.id} className="promo-management-item">
-												{editingPromo?.id === promo.id &&
-												promo.source === "property_vouchers" ? (
-													/* Edit Mode */
-													<div className="edit-voucher-form">
-														<div className="edit-voucher-header">
-															<h4>Edit {promo.description}</h4>
-															<button
-																className="cancel-edit-btn"
-																onClick={handleCancelEdit}
-															>
-																<FaTimes />
-															</button>
-														</div>
-														<div className="voucher-edit-form">
-															<div className="form-row">
-																<div className="form-group">
-																	<label>Discount Type</label>
-																	<select
-																		value={editPromoDiscountType}
-																		onChange={(e) =>
-																			setEditPromoDiscountType(e.target.value)
-																		}
-																	>
-																		<option value="percentage">
-																			Percentage (%)
-																		</option>
-																		<option value="fixed">
-																			Fixed Amount (₱)
-																		</option>
-																	</select>
-																</div>
-																<div className="form-group">
-																	<label>Discount Value *</label>
-																	<input
-																		type="number"
-																		placeholder={
-																			editPromoDiscountType === "percentage"
-																				? "20"
-																				: "500"
-																		}
-																		value={editPromoDiscount}
-																		onChange={(e) =>
-																			setEditPromoDiscount(e.target.value)
-																		}
-																		min="0"
-																		max={
-																			editPromoDiscountType === "percentage"
-																				? "100"
-																				: undefined
-																		}
-																	/>
-																</div>
-															</div>
-															{(() => {
-																// Get voucher type - either from promo.voucherType or extract from id
-																const voucherType =
-																	promo.voucherType ||
-																	promo.id.split("_").slice(2).join("_")
-																const isFixed = isFixedDateVoucher(voucherType)
-
-																// For long_stay, show minimum days field
-																if (voucherType === "long_stay") {
-																	return (
-																		<div className="form-row">
-																			<div className="form-group">
-																				<label>
-																					Minimum Days to Make a Discount *
-																				</label>
-																				<input
-																					type="number"
-																					placeholder="e.g., 7"
-																					value={editPromoMinDays}
-																					onChange={(e) =>
-																						setEditPromoMinDays(e.target.value)
-																					}
-																					min="1"
-																					required
-																				/>
-																				<small>
-																					Minimum number of days required to
-																					apply this discount
-																				</small>
-																			</div>
-																		</div>
-																	)
-																}
-
-																// For other non-fixed vouchers, show date fields
-																if (!isFixed) {
-																	return (
-																		<div className="form-row">
-																			<div className="form-group">
-																				<label>Valid From (Optional)</label>
-																				<input
-																					type="date"
-																					value={editPromoValidFrom}
-																					onChange={(e) =>
-																						setEditPromoValidFrom(
-																							e.target.value
-																						)
-																					}
-																					min={
-																						new Date()
-																							.toISOString()
-																							.split("T")[0]
-																					}
-																				/>
-																			</div>
-																			<div className="form-group">
-																				<label>Valid Until (Optional)</label>
-																				<input
-																					type="date"
-																					value={editPromoValidUntil}
-																					onChange={(e) =>
-																						setEditPromoValidUntil(
-																							e.target.value
-																						)
-																					}
-																					min={
-																						editPromoValidFrom ||
-																						new Date()
-																							.toISOString()
-																							.split("T")[0]
-																					}
-																				/>
-																			</div>
-																		</div>
-																	)
-																}
-
-																return null
-															})()}
-															<div className="form-row">
-																<div className="form-group">
-																	<label>Status</label>
-																	<div className="toggle-switch-container">
-																		<label className="toggle-switch-label">
-																			<input
-																				type="checkbox"
-																				checked={editPromoIsActive}
-																				onChange={(e) =>
-																					setEditPromoIsActive(e.target.checked)
-																				}
-																				className="toggle-switch-input"
-																			/>
-																			<span className="toggle-switch-slider"></span>
-																			<span className="toggle-switch-text">
-																				{editPromoIsActive
-																					? "Active"
-																					: "Inactive"}
-																			</span>
-																		</label>
-																	</div>
-																</div>
-															</div>
-															<div className="edit-form-actions">
-																<button
-																	className="cancel-edit-form-btn"
-																	onClick={handleCancelEdit}
-																>
-																	Cancel
-																</button>
-																<button
-																	className="save-edit-btn"
-																	onClick={handleUpdateVoucher}
-																	disabled={
-																		isUpdatingPromo ||
-																		!editPromoDiscount ||
-																		// Only require minimum days for long_stay if voucher is active
-																		(editPromoIsActive &&
-																			(promo.voucherType === "long_stay" ||
-																				(promo.id &&
-																					promo.id.includes("long_stay"))) &&
-																			!editPromoMinDays)
-																	}
-																>
-																	{isUpdatingPromo
-																		? "Saving..."
-																		: "Save Changes"}
-																</button>
-															</div>
-														</div>
-													</div>
-												) : (
-													/* View Mode */
-													<>
-														<div className="promo-mgmt-header">
-															<div
-																className="promo-mgmt-info"
-																style={{
-																	cursor:
-																		promo.source === "property_vouchers"
-																			? "pointer"
-																			: "default",
-																}}
-																onClick={() =>
-																	promo.source === "property_vouchers" &&
-																	handleStartEditVoucher(promo)
-																}
-															>
-																<FaTag className="promo-mgmt-icon" />
-																<div>
-																	<span className="promo-mgmt-code">
-																		{promo.code}
-																	</span>
-																	<span className="promo-mgmt-desc">
-																		{promo.description}
-																	</span>
-																</div>
-															</div>
-															<div className="promo-mgmt-actions">
-																{promo.source !== "property_vouchers" && (
-																	<>
-																		<button
-																			className={`toggle-promo-btn ${
-																				promo.isActive ? "active" : "inactive"
-																			}`}
-																			onClick={() =>
-																				handleTogglePromoStatus(
-																					promo.id,
-																					promo.isActive
-																				)
-																			}
-																		>
-																			{promo.isActive
-																				? "Deactivate"
-																				: "Activate"}
-																		</button>
-																		<button
-																			className="delete-promo-btn"
-																			onClick={() =>
-																				handleDeletePromo(promo.id)
-																			}
-																		>
-																			<FaTimes /> Delete
-																		</button>
-																	</>
-																)}
-																{promo.source === "property_vouchers" && (
-																	<span className="voucher-badge">
-																		Property Voucher - Click to Edit
-																	</span>
-																)}
-															</div>
-														</div>
-														<div className="promo-mgmt-details">
-															<div className="promo-mgmt-detail-item">
-																<span className="detail-label">Discount:</span>
-																<span className="detail-value">
-																	{promo.discountType === "percent" ||
-																	promo.discountType === "percentage"
-																		? `${
-																				promo.discount || promo.discountValue
-																		  }%`
-																		: `₱${
-																				promo.discount || promo.discountValue
-																		  }`}
-																</span>
-															</div>
-															{promo.validFrom && promo.validUntil && (
-																<div className="promo-mgmt-detail-item">
-																	<span className="detail-label">Valid:</span>
-																	<span className="detail-value">
-																		{new Date(
-																			promo.validFrom
-																		).toLocaleDateString()}{" "}
-																		-{" "}
-																		{new Date(
-																			promo.validUntil
-																		).toLocaleDateString()}
-																	</span>
-																</div>
-															)}
-															{promo.source !== "property_vouchers" && (
-																<div className="promo-mgmt-detail-item">
-																	<span className="detail-label">Status:</span>
-																	<span
-																		className={`detail-value status-${
-																			promo.isActive ? "active" : "inactive"
-																		}`}
-																	>
-																		{promo.isActive ? "Active" : "Inactive"}
-																	</span>
-																</div>
-															)}
-															{promo.source !== "property_vouchers" && (
-																<div className="promo-mgmt-detail-item">
-																	<span className="detail-label">Used:</span>
-																	<span className="detail-value">
-																		{promo.usageCount || 0} times
-																	</span>
-																</div>
-															)}
-														</div>
-													</>
-												)}
-											</div>
-										))}
-									</div>
-								) : (
-									<p className="no-promos-message">
-										No promos created yet. Create one above!
-									</p>
-								)}
-							</div>
-						</div>
-					</div>
-				</div>
-			)}
-
-			{/* Coupon Date Picker Modal */}
-			{showCouponDateModal && (
-				<div
-					className="date-picker-modal-overlay"
-					onClick={() => setShowCouponDateModal(false)}
-				>
-					<div
-						className="date-picker-modal-content"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<button
-							className="close-date-modal"
-							onClick={() => setShowCouponDateModal(false)}
-						>
-							<FaTimes />
-						</button>
-						<h2>
-							<FaCalendarAlt /> Select Coupon Validity Dates
-						</h2>
-						<div className="modal-date-info">
-							<div className="selected-dates-display">
-								{newCoupon.validFrom && (
-									<div className="selected-date-item check-in">
-										<span className="date-type">Valid From:</span>
-										<span className="date-text">
-											{new Date(newCoupon.validFrom).toLocaleDateString("en-US", {
-												weekday: "short",
-												month: "short",
-												day: "numeric",
-												year: "numeric",
-											})}
-										</span>
-									</div>
-								)}
-								{newCoupon.validUntil && (
-									<div className="selected-date-item check-out">
-										<span className="date-type">Valid Until:</span>
-										<span className="date-text">
-											{new Date(newCoupon.validUntil).toLocaleDateString("en-US", {
-												weekday: "short",
-												month: "short",
-												day: "numeric",
-												year: "numeric",
-											})}
-										</span>
-									</div>
-								)}
-								{!newCoupon.validFrom && !newCoupon.validUntil && (
-									<p className="instruction-text">
-										{selectingValidFrom
-											? "Click on a date to select Valid From"
-											: "Click on a date to select Valid Until"}
-									</p>
-								)}
-							</div>
-						</div>
-
-						<div className="modal-calendar">
-							<div className="month-view">
-								<div className="month-header">
-									<button onClick={previousCouponMonth} className="month-nav-btn">
-										◀
-									</button>
-									<h3>
-										{couponCurrentMonth.toLocaleString("default", {
-											month: "long",
-											year: "numeric",
-										})}
-									</h3>
-									<button onClick={nextCouponMonth} className="month-nav-btn">
-										▶
-									</button>
-								</div>
-								<div className="calendar-days">
-									{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-										(day) => (
-											<div key={day} className="day-label">
-												{day}
-											</div>
-										)
-									)}
-									{generateCouponCalendarDays().map((dayData, index) =>
-										dayData ? (
-											<div
-												key={index}
-												className={`calendar-day ${
-													dayData.isPast ? "past" : "available"
-												} ${
-													dayData.dateString === newCoupon.validFrom
-														? "selected-check-in"
-														: ""
-												} ${
-													dayData.dateString === newCoupon.validUntil
-														? "selected-check-out"
-														: ""
-												}`}
-												onClick={() => {
-													if (!dayData.isPast) {
-														handleCouponCalendarDayClick(dayData.dateString)
-													}
-												}}
-												title={dayData.isPast ? "Past date" : "Available"}
-											>
-												{dayData.day}
-											</div>
-										) : (
-											<div key={index} className="calendar-day empty"></div>
-										)
-									)}
-								</div>
-							</div>
-							<div className="calendar-legend">
-								<div className="legend-item">
-									<span className="legend-color available"></span>
-									Available
-								</div>
-								<div className="legend-item">
-									<span className="legend-color past"></span>
-									Past Date
-								</div>
-								<div className="legend-item">
-									<span className="legend-color selected-check-in"></span>
-									Valid From
-								</div>
-								<div className="legend-item">
-									<span className="legend-color selected-check-out"></span>
-									Valid Until
-								</div>
-							</div>
-						</div>
-					</div>
-				</div>
-			)}
-
-			{/* Date Picker Modal */}
-			{showDatePickerModal && (
-				<div
-					className="date-picker-modal-overlay"
-					onClick={() => setShowDatePickerModal(false)}
-				>
-					<div
-						className="date-picker-modal-content"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<button
-							className="close-date-modal"
-							onClick={() => setShowDatePickerModal(false)}
-						>
-							<FaTimes />
-						</button>
-						<h2>
-							<FaCalendarAlt /> Select Your Dates
-						</h2>
-						<div className="modal-date-info">
-							<div className="selected-dates-display">
-								{checkInDate && (
-									<div className="selected-date-item check-in">
-										<span className="date-type">Check-in:</span>
-										<span className="date-text">
-											{new Date(checkInDate).toLocaleDateString("en-US", {
-												weekday: "short",
-												month: "short",
-												day: "numeric",
-												year: "numeric",
-											})}
-										</span>
-									</div>
-								)}
-								{checkOutDate && (
-									<div className="selected-date-item check-out">
-										<span className="date-type">Check-out:</span>
-										<span className="date-text">
-											{new Date(checkOutDate).toLocaleDateString("en-US", {
-												weekday: "short",
-												month: "short",
-												day: "numeric",
-												year: "numeric",
-											})}
-										</span>
-									</div>
-								)}
-								{!checkInDate && !checkOutDate && (
-									<p className="instruction-text">
-										{selectingCheckIn
-											? "Click on a date to select check-in"
-											: "Click on a date to select check-out"}
-									</p>
-								)}
-							</div>
-						</div>
-
-						<div className="modal-calendar">
-							<div className="month-view">
-								<div className="month-header">
-									<button onClick={previousMonth} className="month-nav-btn">
-										◀
-									</button>
-									<h3>
-										{currentMonth.toLocaleString("default", {
-											month: "long",
-											year: "numeric",
-										})}
-									</h3>
-									<button onClick={nextMonth} className="month-nav-btn">
-										▶
-									</button>
-								</div>
-								<div className="calendar-days">
-									{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-										(day) => (
-											<div key={day} className="day-label">
-												{day}
-											</div>
-										)
-									)}
-									{generateCalendarDays().map((dayData, index) =>
-										dayData ? (
-											<div
-												key={index}
-												className={`calendar-day ${
-													dayData.isBlocked
-														? "blocked"
-														: dayData.isBooked
-														? "booked"
-														: dayData.isPast
-														? "past"
-														: "available"
-												} ${
-													dayData.dateString === checkInDate
-														? "selected-check-in"
-														: ""
-												} ${
-													dayData.dateString === checkOutDate
-														? "selected-check-out"
-														: ""
-												}`}
-												onClick={() => {
-													if (isHost && !dayData.isPast) {
-														handleToggleBlockDate(dayData.dateString)
-													} else {
-														handleCalendarDayClick(
-															dayData.dateString,
-															dayData.isBooked || dayData.isBlocked
-														)
-													}
-												}}
-												title={
-													dayData.isBlocked
-														? "Blocked by host"
-														: dayData.isBooked
-														? "Already booked"
-														: dayData.isPast
-														? "Past date (bookable)"
-														: "Available"
-												}
-											>
-												{dayData.day}
-											</div>
-										) : (
-											<div key={index} className="calendar-day empty"></div>
-										)
-									)}
-								</div>
-							</div>
-							<div className="calendar-legend">
-								<div className="legend-item">
-									<span className="legend-color available"></span>
-									Available
-								</div>
-								<div className="legend-item">
-									<span className="legend-color past"></span>
-									Past Date (Bookable)
-								</div>
-								<div className="legend-item">
-									<span className="legend-color booked"></span>
-									Booked/Unavailable
-								</div>
-							</div>
-						</div>
-					</div>
-				</div>
-			)}
-
-			{/* Review Modal */}
-			{showReviewModal && (
-				<div
-					className="review-modal-overlay"
-					onClick={() => setShowReviewModal(false)}
-				>
-					<div
-						className="review-modal-content"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<div className="review-modal-header">
-							<h3>✍️ Write a Review</h3>
-							<button
-								className="close-review-modal"
-								onClick={() => setShowReviewModal(false)}
-							>
-								<FaTimes />
-							</button>
-						</div>
-
-						<div className="review-modal-body">
-							<p className="review-intro">
-								Share your experience with others! Rate your stay and help
-								future guests make informed decisions.
-							</p>
-
-							<div className="rating-categories">
-								<div className="rating-category">
-									<label>Cleanliness</label>
-									<div className="star-rating-input">
-										{[1, 2, 3, 4, 5].map((star) => (
-											<FaStar
-												key={star}
-												className={
-													star <= reviewFormData.cleanliness ? "active" : ""
-												}
-												onClick={() =>
-													setReviewFormData({
-														...reviewFormData,
-														cleanliness: star,
-													})
-												}
-											/>
-										))}
-										<span className="rating-value">
-											{reviewFormData.cleanliness}
-										</span>
-									</div>
-								</div>
-
-								<div className="rating-category">
-									<label>Accuracy</label>
-									<div className="star-rating-input">
-										{[1, 2, 3, 4, 5].map((star) => (
-											<FaStar
-												key={star}
-												className={
-													star <= reviewFormData.accuracy ? "active" : ""
-												}
-												onClick={() =>
-													setReviewFormData({
-														...reviewFormData,
-														accuracy: star,
-													})
-												}
-											/>
-										))}
-										<span className="rating-value">
-											{reviewFormData.accuracy}
-										</span>
-									</div>
-								</div>
-
-								<div className="rating-category">
-									<label>Communication</label>
-									<div className="star-rating-input">
-										{[1, 2, 3, 4, 5].map((star) => (
-											<FaStar
-												key={star}
-												className={
-													star <= reviewFormData.communication ? "active" : ""
-												}
-												onClick={() =>
-													setReviewFormData({
-														...reviewFormData,
-														communication: star,
-													})
-												}
-											/>
-										))}
-										<span className="rating-value">
-											{reviewFormData.communication}
-										</span>
-									</div>
-								</div>
-
-								<div className="rating-category">
-									<label>Location</label>
-									<div className="star-rating-input">
-										{[1, 2, 3, 4, 5].map((star) => (
-											<FaStar
-												key={star}
-												className={
-													star <= reviewFormData.location ? "active" : ""
-												}
-												onClick={() =>
-													setReviewFormData({
-														...reviewFormData,
-														location: star,
-													})
-												}
-											/>
-										))}
-										<span className="rating-value">
-											{reviewFormData.location}
-										</span>
-									</div>
-								</div>
-
-								<div className="rating-category">
-									<label>Check-in Experience</label>
-									<div className="star-rating-input">
-										{[1, 2, 3, 4, 5].map((star) => (
-											<FaStar
-												key={star}
-												className={
-													star <= reviewFormData.checkIn ? "active" : ""
-												}
-												onClick={() =>
-													setReviewFormData({
-														...reviewFormData,
-														checkIn: star,
-													})
-												}
-											/>
-										))}
-										<span className="rating-value">
-											{reviewFormData.checkIn}
-										</span>
-									</div>
-								</div>
-
-								<div className="rating-category">
-									<label>Value for Money</label>
-									<div className="star-rating-input">
-										{[1, 2, 3, 4, 5].map((star) => (
-											<FaStar
-												key={star}
-												className={star <= reviewFormData.value ? "active" : ""}
-												onClick={() =>
-													setReviewFormData({
-														...reviewFormData,
-														value: star,
-													})
-												}
-											/>
-										))}
-										<span className="rating-value">{reviewFormData.value}</span>
-									</div>
-								</div>
-							</div>
-
-							<div className="review-comment-section">
-								<label>Your Review</label>
-								<textarea
-									placeholder="Share your experience... (minimum 20 characters)"
-									value={reviewFormData.comment}
-									onChange={(e) =>
-										setReviewFormData({
-											...reviewFormData,
-											comment: e.target.value,
-										})
-									}
-									rows={5}
-									minLength={20}
-								/>
-								<small className="character-count">
-									{reviewFormData.comment.length} characters (minimum 20)
-								</small>
-							</div>
-						</div>
-
-						<div className="review-modal-footer">
-							<button
-								className="cancel-review-btn"
-								onClick={() => setShowReviewModal(false)}
-								disabled={isSubmittingReview}
-							>
-								Cancel
-							</button>
-							<button
-								className="submit-review-btn"
-								onClick={handleSubmitReview}
-								disabled={
-									isSubmittingReview ||
-									reviewFormData.comment.trim().length < 20
-								}
-							>
-								{isSubmittingReview ? "Submitting..." : "Submit Review"}
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
-
-			{/* View All Bookings Modal */}
-			{showAllBookingsModal && (
-				<div
-					className="modal-overlay"
-					onClick={() => setShowAllBookingsModal(false)}
-				>
-					<div
-						className="modal-content large-modal"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<div className="modal-header">
-							<h2>
-								<FaHistory /> All Bookings for {property?.title}
-							</h2>
-							<button
-								className="close-modal-btn"
-								onClick={() => setShowAllBookingsModal(false)}
-							>
-								<FaTimes />
-							</button>
-						</div>
 						<div
-							className="modal-body"
-							style={{ maxHeight: "70vh", overflowY: "auto" }}
+							className="wishlist-view-modal-content"
+							onClick={(e) => e.stopPropagation()}
 						>
-							{(() => {
-								const today = new Date()
-								today.setHours(0, 0, 0, 0)
-
-								const upcomingBookings = propertyBookings
-									.filter((booking) => {
-										if (booking.status === "cancelled") return false
-										const checkInDate = new Date(booking.checkInDate)
-										checkInDate.setHours(0, 0, 0, 0)
-										return checkInDate >= today
-									})
-									.sort((a, b) => {
-										const dateA = new Date(a.checkInDate)
-										const dateB = new Date(b.checkInDate)
-										return dateA - dateB
-									})
-
-								const pastBookings = propertyBookings
-									.filter((booking) => {
-										if (booking.status === "cancelled") return false
-										const checkInDate = new Date(booking.checkInDate)
-										checkInDate.setHours(0, 0, 0, 0)
-										return checkInDate < today
-									})
-									.sort((a, b) => {
-										const dateA = new Date(a.checkInDate)
-										const dateB = new Date(b.checkInDate)
-										return dateB - dateA
-									})
-
-								return (
-									<>
-										{/* Upcoming Bookings Section */}
-										<div
-											className="bookings-category-section"
-											style={{ marginBottom: "2rem" }}
-										>
-											<h3
-												style={{
-													display: "flex",
-													alignItems: "center",
-													gap: "0.5rem",
-													marginBottom: "1rem",
-													color: "var(--primary)",
-												}}
-											>
-												<FaCalendarCheck /> Upcoming Bookings (
-												{upcomingBookings.length})
-											</h3>
-											{upcomingBookings.length > 0 ? (
-												<div className="bookings-list">
-													{upcomingBookings.map((booking) => (
-														<div
-															key={booking.id}
-															className="booking-history-item"
-														>
-															<div className="booking-header">
-																<span className="booking-id">
-																	#{booking.id.substring(0, 8)}
-																</span>
-																<span
-																	className={`booking-status-badge ${booking.status}`}
-																>
-																	{booking.status}
-																</span>
-															</div>
-															<div className="booking-details">
-																<div className="booking-info">
-																	<FaUser className="info-icon" />
-																	<span>{booking.guestName || "Guest"}</span>
-																</div>
-																<div className="booking-info">
-																	<FaCalendarAlt className="info-icon" />
-																	<span>
-																		{new Date(
-																			booking.checkInDate
-																		).toLocaleDateString()}{" "}
-																		-{" "}
-																		{new Date(
-																			booking.checkOutDate
-																		).toLocaleDateString()}
-																	</span>
-																</div>
-																<div className="booking-info">
-																	<FaUsers className="info-icon" />
-																	<span>
-																		{booking.numberOfGuests ||
-																			booking.guests ||
-																			1}{" "}
-																		{booking.numberOfGuests === 1
-																			? "guest"
-																			: "guests"}
-																	</span>
-																</div>
-																<div className="booking-amount">
-																	₱
-																	{(
-																		booking.pricing?.total ||
-																		booking.totalAmount ||
-																		0
-																	).toLocaleString()}
-																</div>
-															</div>
-														</div>
-													))}
-												</div>
-											) : (
-												<p className="no-data">
-													No upcoming bookings for this property.
-												</p>
-											)}
-										</div>
-
-										{/* Booking History Section */}
-										<div className="bookings-category-section">
-											<h3
-												style={{
-													display: "flex",
-													alignItems: "center",
-													gap: "0.5rem",
-													marginBottom: "1rem",
-													color: "var(--primary)",
-												}}
-											>
-												<FaHistory /> Booking History ({pastBookings.length})
-											</h3>
-											{pastBookings.length > 0 ? (
-												<div className="bookings-list">
-													{pastBookings.map((booking) => (
-														<div
-															key={booking.id}
-															className="booking-history-item"
-														>
-															<div className="booking-header">
-																<span className="booking-id">
-																	#{booking.id.substring(0, 8)}
-																</span>
-																<span
-																	className={`booking-status-badge ${booking.status}`}
-																>
-																	{booking.status}
-																</span>
-															</div>
-															<div className="booking-details">
-																<div className="booking-info">
-																	<FaUser className="info-icon" />
-																	<span>{booking.guestName || "Guest"}</span>
-																</div>
-																<div className="booking-info">
-																	<FaCalendarAlt className="info-icon" />
-																	<span>
-																		{new Date(
-																			booking.checkInDate
-																		).toLocaleDateString()}{" "}
-																		-{" "}
-																		{new Date(
-																			booking.checkOutDate
-																		).toLocaleDateString()}
-																	</span>
-																</div>
-																<div className="booking-info">
-																	<FaUsers className="info-icon" />
-																	<span>
-																		{booking.numberOfGuests ||
-																			booking.guests ||
-																			1}{" "}
-																		{booking.numberOfGuests === 1
-																			? "guest"
-																			: "guests"}
-																	</span>
-																</div>
-																<div className="booking-amount">
-																	₱
-																	{(
-																		booking.pricing?.total ||
-																		booking.totalAmount ||
-																		0
-																	).toLocaleString()}
-																</div>
-															</div>
-														</div>
-													))}
-												</div>
-											) : (
-												<p className="no-data">
-													No booking history for this property.
-												</p>
-											)}
-										</div>
-									</>
-								)
-							})()}
-						</div>
-						<div className="modal-footer">
-							<button
-								className="btn-primary"
-								onClick={() => setShowAllBookingsModal(false)}
-							>
-								Close
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
-
-			{/* Wallet Payment Confirmation Modal */}
-			{showWalletPaymentModal && (
-				<div
-					className="wallet-payment-modal-overlay"
-					onClick={() => setShowWalletPaymentModal(false)}
-				>
-					<div
-						className="wallet-payment-modal-content"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<div className="wallet-payment-modal-header">
-							<div className="wallet-icon-wrapper">
-								<FaWallet />
+							<div className="wishlist-modal-header">
+								<h2>
+									<FaBookmark style={{ color: "var(--primary)" }} /> Wishlist by{" "}
+									{selectedWishlist.guestName}
+								</h2>
+								<button
+									className="close-modal-btn"
+									onClick={() => setShowWishlistModal(false)}
+								>
+									×
+								</button>
 							</div>
-							<h3>Confirm E-Wallet Payment</h3>
-							<button
-								className="close-wallet-modal"
-								onClick={() => setShowWalletPaymentModal(false)}
-							>
-								<FaTimes />
-							</button>
-						</div>
 
-						<div className="wallet-payment-modal-body">
-							<div className="wallet-payment-info">
-								<p className="wallet-payment-message">
-									You are about to pay for this booking using your E-Wallet
-									balance.
-								</p>
-								<div className="wallet-payment-summary">
-									<div className="summary-row">
-										<span className="summary-label">Property:</span>
-										<span className="summary-value">{property?.title}</span>
-									</div>
-									<div className="summary-row">
-										<span className="summary-label">Check-in:</span>
-										<span className="summary-value">
-											{checkInDate
-												? new Date(checkInDate).toLocaleDateString("en-US", {
-														month: "short",
-														day: "numeric",
-														year: "numeric",
-												  })
-												: "Not selected"}
-										</span>
-									</div>
-									<div className="summary-row">
-										<span className="summary-label">Check-out:</span>
-										<span className="summary-value">
-											{checkOutDate
-												? new Date(checkOutDate).toLocaleDateString("en-US", {
-														month: "short",
-														day: "numeric",
-														year: "numeric",
-												  })
-												: "Not selected"}
-										</span>
-									</div>
-									<div className="summary-row">
-										<span className="summary-label">Guests:</span>
-										<span className="summary-value">{numberOfGuests}</span>
-									</div>
-									<div className="summary-row total-row">
-										<span className="summary-label">Total Amount:</span>
-										<span className="summary-value total-amount">
-											₱{calculatePrices().total.toLocaleString()}
-										</span>
-									</div>
-									<div className="summary-row balance-row">
-										<span className="summary-label">Current Balance:</span>
-										<span className="summary-value balance-amount">
-											₱{walletBalance.toLocaleString()}
-										</span>
-									</div>
-									<div className="summary-row balance-after-row">
-										<span className="summary-label">Balance After:</span>
-										<span className="summary-value balance-after-amount">
-											₱
-											{(
-												walletBalance - calculatePrices().total
-											).toLocaleString()}
-										</span>
+							<div className="wishlist-view-body">
+								{/* Property Info */}
+								<div className="wishlist-property-header">
+									<img
+										src={property?.images?.[0] || housePlaceholder}
+										alt={property?.title}
+										className="wishlist-property-image"
+									/>
+									<div className="wishlist-property-info">
+										<h3>{property?.title}</h3>
+										{property?.location && (
+											<div className="wishlist-location">
+												<FaMapMarkerAlt />
+												<span>
+													{property.location.city}, {property.location.province}
+												</span>
+											</div>
+										)}
 									</div>
 								</div>
-							</div>
-						</div>
 
-						<div className="wallet-payment-modal-footer">
-							<button
-								className="wallet-modal-cancel-btn"
-								onClick={() => setShowWalletPaymentModal(false)}
-							>
-								Cancel
-							</button>
-							<button
-								className="wallet-modal-confirm-btn"
-								onClick={handleConfirmWalletPayment}
-							>
-								<FaWallet /> Confirm Payment
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
+								{/* Wishlist Details */}
+								<div className="wishlist-details-section">
+									<h4>Wishes</h4>
+									<div className="wishlist-details-grid">
+										{selectedWishlist.beds !== undefined &&
+											selectedWishlist.beds !== null &&
+											selectedWishlist.beds > 0 && (
+												<div className="wishlist-detail-item">
+													<FaBed className="wishlist-detail-icon" />
+													<div>
+														<span className="detail-label">Beds</span>
+														<span className="detail-value">
+															{selectedWishlist.beds}
+														</span>
+													</div>
+												</div>
+											)}
+										{selectedWishlist.bathrooms !== undefined &&
+											selectedWishlist.bathrooms !== null &&
+											selectedWishlist.bathrooms > 0 && (
+												<div className="wishlist-detail-item">
+													<FaBath className="wishlist-detail-icon" />
+													<div>
+														<span className="detail-label">Bathrooms</span>
+														<span className="detail-value">
+															{selectedWishlist.bathrooms}
+														</span>
+													</div>
+												</div>
+											)}
+										{selectedWishlist.bedrooms !== undefined &&
+											selectedWishlist.bedrooms !== null &&
+											selectedWishlist.bedrooms > 0 && (
+												<div className="wishlist-detail-item">
+													<FaHome className="wishlist-detail-icon" />
+													<div>
+														<span className="detail-label">Bedrooms</span>
+														<span className="detail-value">
+															{selectedWishlist.bedrooms}
+														</span>
+													</div>
+												</div>
+											)}
+										{selectedWishlist.guests !== undefined &&
+											selectedWishlist.guests !== null &&
+											selectedWishlist.guests > 0 && (
+												<div className="wishlist-detail-item">
+													<FaUsers className="wishlist-detail-icon" />
+													<div>
+														<span className="detail-label">Guests</span>
+														<span className="detail-value">
+															{selectedWishlist.guests}
+														</span>
+													</div>
+												</div>
+											)}
+										{selectedWishlist.parkingSpaces !== undefined &&
+											selectedWishlist.parkingSpaces !== null &&
+											selectedWishlist.parkingSpaces > 0 && (
+												<div className="wishlist-detail-item">
+													<FaParking className="wishlist-detail-icon" />
+													<div>
+														<span className="detail-label">Parking Spaces</span>
+														<span className="detail-value">
+															{selectedWishlist.parkingSpaces}
+														</span>
+													</div>
+												</div>
+											)}
+										{selectedWishlist.wifiSpeed !== undefined &&
+											selectedWishlist.wifiSpeed !== null &&
+											selectedWishlist.wifiSpeed > 0 && (
+												<div className="wishlist-detail-item">
+													<FaWifi className="wishlist-detail-icon" />
+													<div>
+														<span className="detail-label">Wi-Fi Speed</span>
+														<span className="detail-value">
+															{selectedWishlist.wifiSpeed} Mbps
+														</span>
+													</div>
+												</div>
+											)}
+									</div>
 
-			{/* Contact Host Modal */}
-			<ContactHostModal
-				isOpen={showContactHostModal}
-				onClose={() => setShowContactHostModal(false)}
-				property={property}
-				hostId={property?.hostId || property?.host?.hostId}
-			/>
+									{selectedWishlist.breakfastIncluded && (
+										<div className="wishlist-offer-item">
+											<FaUtensils className="offer-icon" />
+											<span>Breakfast Included</span>
+										</div>
+									)}
 
-			{/* Wishlist View Modal */}
-			{showWishlistModal && selectedWishlist && (
-				<div
-					className="wishlist-view-modal-overlay"
-					onClick={() => setShowWishlistModal(false)}
-				>
-					<div
-						className="wishlist-view-modal-content"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<div className="wishlist-modal-header">
-							<h2>
-								<FaBookmark style={{ color: "var(--primary)" }} /> Wishlist by {selectedWishlist.guestName}
-							</h2>
-							<button
-								className="close-modal-btn"
-								onClick={() => setShowWishlistModal(false)}
-							>
-								×
-							</button>
-						</div>
+									{selectedWishlist.notes && (
+										<div className="wishlist-notes">
+											<h5>
+												<FaStickyNote /> Additional Notes
+											</h5>
+											<p>{selectedWishlist.notes}</p>
+										</div>
+									)}
 
-						<div className="wishlist-view-body">
-							{/* Property Info */}
-							<div className="wishlist-property-header">
-								<img
-									src={property?.images?.[0] || housePlaceholder}
-									alt={property?.title}
-									className="wishlist-property-image"
-								/>
-								<div className="wishlist-property-info">
-									<h3>{property?.title}</h3>
-									{property?.location && (
-										<div className="wishlist-location">
-											<FaMapMarkerAlt />
+									{selectedWishlist.createdAt && (
+										<div className="wishlist-date">
 											<span>
-												{property.location.city}, {property.location.province}
+												Created:{" "}
+												{new Date(
+													selectedWishlist.createdAt
+												).toLocaleDateString()}
 											</span>
 										</div>
 									)}
 								</div>
 							</div>
+						</div>
+					</div>
+				)}
 
-							{/* Wishlist Details */}
-							<div className="wishlist-details-section">
-								<h4>Wishes</h4>
-								<div className="wishlist-details-grid">
-									{selectedWishlist.beds !== undefined && selectedWishlist.beds !== null && selectedWishlist.beds > 0 && (
-										<div className="wishlist-detail-item">
-											<FaBed className="wishlist-detail-icon" />
-											<div>
-												<span className="detail-label">Beds</span>
-												<span className="detail-value">{selectedWishlist.beds}</span>
-											</div>
-										</div>
-									)}
-									{selectedWishlist.bathrooms !== undefined && selectedWishlist.bathrooms !== null && selectedWishlist.bathrooms > 0 && (
-										<div className="wishlist-detail-item">
-											<FaBath className="wishlist-detail-icon" />
-											<div>
-												<span className="detail-label">Bathrooms</span>
-												<span className="detail-value">{selectedWishlist.bathrooms}</span>
-											</div>
-										</div>
-									)}
-									{selectedWishlist.bedrooms !== undefined && selectedWishlist.bedrooms !== null && selectedWishlist.bedrooms > 0 && (
-										<div className="wishlist-detail-item">
-											<FaHome className="wishlist-detail-icon" />
-											<div>
-												<span className="detail-label">Bedrooms</span>
-												<span className="detail-value">{selectedWishlist.bedrooms}</span>
-											</div>
-										</div>
-									)}
-									{selectedWishlist.guests !== undefined && selectedWishlist.guests !== null && selectedWishlist.guests > 0 && (
-										<div className="wishlist-detail-item">
-											<FaUsers className="wishlist-detail-icon" />
-											<div>
-												<span className="detail-label">Guests</span>
-												<span className="detail-value">{selectedWishlist.guests}</span>
-											</div>
-										</div>
-									)}
-									{selectedWishlist.parkingSpaces !== undefined && selectedWishlist.parkingSpaces !== null && selectedWishlist.parkingSpaces > 0 && (
-										<div className="wishlist-detail-item">
-											<FaParking className="wishlist-detail-icon" />
-											<div>
-												<span className="detail-label">Parking Spaces</span>
-												<span className="detail-value">{selectedWishlist.parkingSpaces}</span>
-											</div>
-										</div>
-									)}
-									{selectedWishlist.wifiSpeed !== undefined && selectedWishlist.wifiSpeed !== null && selectedWishlist.wifiSpeed > 0 && (
-										<div className="wishlist-detail-item">
-											<FaWifi className="wishlist-detail-icon" />
-											<div>
-												<span className="detail-label">Wi-Fi Speed</span>
-												<span className="detail-value">{selectedWishlist.wifiSpeed} Mbps</span>
-											</div>
-										</div>
-									)}
-								</div>
-
-								{selectedWishlist.breakfastIncluded && (
-									<div className="wishlist-offer-item">
-										<FaUtensils className="offer-icon" />
-										<span>Breakfast Included</span>
-									</div>
-								)}
-
-								{selectedWishlist.notes && (
-									<div className="wishlist-notes">
-										<h5>
-											<FaStickyNote /> Additional Notes
-										</h5>
-										<p>{selectedWishlist.notes}</p>
-									</div>
-								)}
-
-								{selectedWishlist.createdAt && (
-									<div className="wishlist-date">
-										<span>
-											Created: {new Date(selectedWishlist.createdAt).toLocaleDateString()}
-										</span>
-									</div>
-								)}
+				{/* Full Size Image Modal */}
+				{showFullSizeImage && (
+					<div
+						className="full-size-image-modal-overlay"
+						onClick={() => setShowFullSizeImage(false)}
+					>
+						<button
+							className="full-size-image-close"
+							onClick={() => setShowFullSizeImage(false)}
+							title="Close (ESC)"
+						>
+							<FaTimes />
+						</button>
+						{images.length > 1 && (
+							<button
+								className="full-size-image-nav full-size-image-prev"
+								onClick={(e) => {
+									e.stopPropagation()
+									setFullSizeImageIndex((prev) =>
+										prev === 0 ? images.length - 1 : prev - 1
+									)
+								}}
+								title="Previous (←)"
+							>
+								<FaChevronLeft />
+							</button>
+						)}
+						<div
+							className="full-size-image-container"
+							onClick={(e) => e.stopPropagation()}
+						>
+							<img
+								src={images[fullSizeImageIndex] || housePlaceholder}
+								alt={`Property view ${fullSizeImageIndex + 1}`}
+								className="full-size-image"
+							/>
+							<div className="full-size-image-info">
+								<span className="full-size-image-counter">
+									{fullSizeImageIndex + 1} / {images.length}
+								</span>
 							</div>
 						</div>
+						{images.length > 1 && (
+							<button
+								className="full-size-image-nav full-size-image-next"
+								onClick={(e) => {
+									e.stopPropagation()
+									setFullSizeImageIndex((prev) =>
+										prev === images.length - 1 ? 0 : prev + 1
+									)
+								}}
+								title="Next (→)"
+							>
+								<FaChevronRight />
+							</button>
+						)}
 					</div>
-				</div>
-			)}
-
-			{/* Full Size Image Modal */}
-			{showFullSizeImage && (
-				<div
-					className="full-size-image-modal-overlay"
-					onClick={() => setShowFullSizeImage(false)}
-				>
-					<button
-						className="full-size-image-close"
-						onClick={() => setShowFullSizeImage(false)}
-						title="Close (ESC)"
-					>
-						<FaTimes />
-					</button>
-					{images.length > 1 && (
-						<button
-							className="full-size-image-nav full-size-image-prev"
-							onClick={(e) => {
-								e.stopPropagation()
-								setFullSizeImageIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1))
-							}}
-							title="Previous (←)"
-						>
-							<FaChevronLeft />
-						</button>
-					)}
-					<div
-						className="full-size-image-container"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<img
-							src={images[fullSizeImageIndex] || housePlaceholder}
-							alt={`Property view ${fullSizeImageIndex + 1}`}
-							className="full-size-image"
-						/>
-						<div className="full-size-image-info">
-							<span className="full-size-image-counter">
-								{fullSizeImageIndex + 1} / {images.length}
-							</span>
-						</div>
-					</div>
-					{images.length > 1 && (
-						<button
-							className="full-size-image-nav full-size-image-next"
-							onClick={(e) => {
-								e.stopPropagation()
-								setFullSizeImageIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1))
-							}}
-							title="Next (→)"
-						>
-							<FaChevronRight />
-						</button>
-					)}
-				</div>
-			)}
+				)}
 			</div>
 		</div>
 	)

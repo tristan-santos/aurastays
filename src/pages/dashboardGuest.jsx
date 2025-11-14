@@ -61,7 +61,7 @@ export default function DashboardGuest() {
 	const [activeCategory, setActiveCategory] = useState("home")
 	const [properties, setProperties] = useState([])
 	const [filteredProperties, setFilteredProperties] = useState([])
-	const [popularProperties, setPopularProperties] = useState([])
+	const [recommendedProperties, setRecommendedProperties] = useState([])
 	const [isLoading, setIsLoading] = useState(true)
 	const [userStats, setUserStats] = useState({
 		totalBookings: 0,
@@ -144,6 +144,14 @@ export default function DashboardGuest() {
 		fetchData()
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [currentUser])
+
+	// Fetch recommended properties when properties are loaded
+	useEffect(() => {
+		if (properties.length > 0 && currentUser?.uid) {
+			fetchRecommendedProperties()
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [properties, currentUser])
 
 	// Fetch unread notifications count
 	useEffect(() => {
@@ -270,18 +278,6 @@ export default function DashboardGuest() {
 
 			setProperties(propertiesWithReviews)
 
-			// Get popular properties (high ratings and reviews)
-			const popular = propertiesWithReviews
-				.filter((p) => p.rating >= 4.8)
-				.sort((a, b) => {
-					// Boosted first in popular too
-					if (a.boosted && !b.boosted) return -1
-					if (!a.boosted && b.boosted) return 1
-					return b.reviewsCount - a.reviewsCount
-				})
-				.slice(0, 8)
-			setPopularProperties(popular)
-
 			// Set initial filtered properties (homes) - already sorted by boost/featured/rating
 			const homes = propertiesWithReviews.filter((p) => p.category === "home")
 			setFilteredProperties(homes)
@@ -292,6 +288,90 @@ export default function DashboardGuest() {
 			toast.error("Failed to load properties")
 		} finally {
 			setIsLoading(false)
+		}
+	}
+
+	const fetchRecommendedProperties = async () => {
+		if (!currentUser?.uid || properties.length === 0) return
+
+		try {
+			// Fetch previous bookings for the guest
+			const bookingsQuery = query(
+				collection(db, "bookings"),
+				where("guestId", "==", currentUser.uid)
+			)
+
+			const bookingsSnapshot = await getDocs(bookingsQuery)
+			const today = new Date()
+			today.setHours(0, 0, 0, 0)
+
+			// Filter previous bookings (completed, not cancelled)
+			const previousBookings = bookingsSnapshot.docs
+				.map((doc) => ({
+					id: doc.id,
+					...doc.data(),
+				}))
+				.filter((booking) => {
+					const checkOutDate = new Date(booking.checkOutDate)
+					checkOutDate.setHours(0, 0, 0, 0)
+					const status = booking.status || "pending"
+					return (
+						checkOutDate < today &&
+						status !== "cancelled" &&
+						status !== "cancellation_requested"
+					)
+				})
+				.sort((a, b) => {
+					// Sort by checkOutDate, most recent first
+					const dateA = new Date(a.checkOutDate)
+					const dateB = new Date(b.checkOutDate)
+					return dateB - dateA
+				})
+
+			// Get unique property IDs from previous bookings (most recent first)
+			const bookedPropertyIds = []
+			const seenPropertyIds = new Set()
+			for (const booking of previousBookings) {
+				if (booking.propertyId && !seenPropertyIds.has(booking.propertyId)) {
+					bookedPropertyIds.push(booking.propertyId)
+					seenPropertyIds.add(booking.propertyId)
+				}
+			}
+
+			// Get properties from previous bookings
+			const bookedProperties = properties
+				.filter((p) => bookedPropertyIds.includes(p.id))
+				.sort((a, b) => {
+					// Maintain order of most recent booking
+					const indexA = bookedPropertyIds.indexOf(a.id)
+					const indexB = bookedPropertyIds.indexOf(b.id)
+					return indexA - indexB
+				})
+
+			// If we have less than 8 properties from bookings, fill with random properties
+			let recommended = [...bookedProperties]
+			if (recommended.length < 8) {
+				const remainingSlots = 8 - recommended.length
+				const bookedPropertyIdSet = new Set(bookedPropertyIds)
+				
+				// Get random properties that haven't been booked
+				const availableProperties = properties
+					.filter((p) => !bookedPropertyIdSet.has(p.id))
+					.sort(() => Math.random() - 0.5) // Shuffle
+					.slice(0, remainingSlots)
+				
+				recommended = [...recommended, ...availableProperties]
+			} else {
+				// Limit to 8 if we have more
+				recommended = recommended.slice(0, 8)
+			}
+
+			setRecommendedProperties(recommended)
+		} catch (error) {
+			console.error("Error fetching recommended properties:", error)
+			// Fallback: show random properties if there's an error
+			const shuffled = [...properties].sort(() => Math.random() - 0.5)
+			setRecommendedProperties(shuffled.slice(0, 8))
 		}
 	}
 
@@ -1511,17 +1591,21 @@ const fetchUserWishes = async () => {
 					</div>
 				</section>
 
-				{/* Popular This Week */}
+				{/* Recommendation */}
 				<section className="popular-section">
 					<div className="section-header">
-						<h3>🔥 Popular This Week</h3>
+						<h3>✨ Recommendation</h3>
 						<button className="view-all-btn">View All</button>
 					</div>
 					<div className="popular-scroll">
 						{isLoading ? (
 							<p>Loading...</p>
+						) : recommendedProperties.length === 0 ? (
+							<div className="no-results" style={{ padding: "2rem", textAlign: "center", width: "100%" }}>
+								<p>No recommendations available at the moment</p>
+							</div>
 						) : (
-							popularProperties.map((property) => (
+							recommendedProperties.map((property) => (
 								<div key={property.id} className="popular-card">
 									<div
 										className="popular-image"
@@ -1541,8 +1625,8 @@ const fetchUserWishes = async () => {
 										<h4 className="popular-title">{property.title}</h4>
 										<div className="popular-rating">
 											<span>⭐</span>
-											<span className="rating">{property.rating}</span>
-											<span className="reviews">({property.reviewsCount})</span>
+											<span className="rating">{property.rating || 0}</span>
+											<span className="reviews">({property.reviewsCount || 0})</span>
 										</div>
 										<div className="popular-price">
 											{formatPrice(

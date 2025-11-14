@@ -255,8 +255,12 @@ const AdminDashboard = () => {
 				...doc.data(),
 			}))
 			const totalBookings = allBookings.length || 0
+			// Calculate revenue only from completed bookings
+			const completedBookings = allBookings.filter(
+				(booking) => booking.status === "completed"
+			)
 			const totalRevenue =
-				allBookings.reduce(
+				completedBookings.reduce(
 					(sum, booking) => sum + (booking.totalPrice || 0),
 					0
 				) || 0
