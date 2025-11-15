@@ -1315,7 +1315,14 @@ const fetchUserWishes = async () => {
 
 				{/* Search Bar */}
 				<form className="navbar-search" onSubmit={handleSearch}>
-					<FaSearch className="search-icon" />
+					<FaSearch 
+						className="search-icon" 
+						onClick={(e) => {
+							e.preventDefault()
+							handleSearch(e)
+						}}
+						style={{ cursor: 'pointer' }}
+					/>
 					<input
 						type="text"
 						placeholder="Search destinations, hotels, experiences..."
