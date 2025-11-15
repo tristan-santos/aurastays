@@ -559,6 +559,8 @@ export default function Bookings() {
 						placeholder="Search destinations, hotels, experiences..."
 						value={whereQuery}
 						onChange={(e) => setWhereQuery(e.target.value)}
+						onClick={() => navigate("/search")}
+						style={{ cursor: 'pointer' }}
 					/>
 				</form>
 
