@@ -198,9 +198,9 @@ export default function Signup() {
 				"Verification email sent! Please check your inbox and click the link to verify."
 			)
 
-			// Redirect to login page
+			// Redirect to verify-email page
 			setTimeout(() => {
-				navigate("/login")
+				navigate("/verify-email")
 			}, 100)
 		} catch (error) {
 			toast.error(getFirebaseErrorMessage(error))
@@ -269,7 +269,7 @@ export default function Signup() {
 				toast.success(
 					"Verification email sent! Please check your inbox and click the link to verify."
 				)
-				navigate("/login")
+				navigate("/verify-email")
 			} else {
 				console.log("✅ Branch: Creating new email/password account")
 				// Regular email/password signup
@@ -322,9 +322,9 @@ export default function Signup() {
 					"Verification email sent! Please check your inbox and click the link to verify."
 				)
 
-				// Redirect to login page
+				// Redirect to verify-email page
 				setTimeout(() => {
-					navigate("/login")
+					navigate("/verify-email")
 				}, 100)
 			}
 		} catch (error) {
