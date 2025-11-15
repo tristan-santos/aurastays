@@ -82,15 +82,12 @@ export default function VerifyEmail() {
 		try {
 			setIsLoading(true)
 
-			// Ensure userType is not admin - default to guest if invalid
-			const finalUserType = userData.userType === "host" ? "host" : "guest"
-			
 			// Move user data from pendingUsers to users collection
 			await setDoc(doc(db, "users", userData.uid), {
 				displayName: userData.displayName,
 				email: userData.email,
 				uid: userData.uid,
-				userType: finalUserType, // Ensure it's either "host" or "guest", never "admin"
+				userType: userData.userType,
 				firstName: userData.firstName,
 				lastName: userData.lastName,
 				signInMethod: userData.signInMethod,
@@ -102,7 +99,6 @@ export default function VerifyEmail() {
 				reviewsWritten: userData.reviewsWritten || 0,
 				wishlistItems: userData.wishlistItems || 0,
 				totalSpent: userData.totalSpent || 0,
-				walletBalance: 100000, // Initial wallet balance
 			})
 
 			// Delete from pendingUsers collection

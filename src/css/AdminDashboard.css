@@ -302,11 +302,51 @@
 
 .chart-card canvas {
 	height: 260px !important;
+	transition: transform 0.3s ease;
+}
+
+.chart-card:hover canvas {
+	transform: scale(1.02);
 }
 
 .donut-card {
 	grid-column: span 4;
 	height: 350px;
+}
+
+.donut-card canvas {
+	transition: transform 0.3s ease;
+}
+
+.donut-card:hover canvas {
+	transform: scale(1.05);
+}
+
+/* Chart.js Tooltip Styling */
+.chartjs-tooltip {
+	background: rgba(65, 95, 148, 0.95) !important;
+	border: 2px solid #415F94 !important;
+	border-radius: 12px !important;
+	padding: 12px !important;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2) !important;
+	backdrop-filter: blur(10px) !important;
+	transition: all 0.2s ease !important;
+}
+
+.chartjs-tooltip-title {
+	color: #ffffff !important;
+	font-weight: bold !important;
+	font-size: 14px !important;
+	margin-bottom: 6px !important;
+}
+
+.chartjs-tooltip-body {
+	color: #ffffff !important;
+	font-size: 13px !important;
+}
+
+.chartjs-tooltip-body-item {
+	margin: 4px 0 !important;
 }
 
 .reviews-card {
@@ -1650,9 +1690,121 @@
 	color: #666;
 }
 
+/* Policy Header with Export Button */
+.policy-header {
+	margin-bottom: 2rem;
+}
+
+.policy-header-content {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 3rem;
+	flex-wrap: wrap;
+}
+
+.policy-header-text {
+	flex: 1;
+	min-width: 300px;
+}
+
+.policy-header-text h2 {
+	margin-bottom: 0.5rem;
+}
+
+.export-policy-btn {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0.875rem 1.75rem;
+	background: linear-gradient(135deg, var(--primary), var(--secondary));
+	color: white;
+	border: none;
+	border-radius: 8px;
+	font-size: 1rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	box-shadow: 0 4px 12px rgba(65, 95, 148, 0.3);
+	white-space: nowrap;
+}
+
+.export-policy-btn:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 20px rgba(65, 95, 148, 0.4);
+	background: linear-gradient(135deg, var(--secondary), var(--primary));
+}
+
+.export-policy-btn:active {
+	transform: translateY(0);
+	box-shadow: 0 2px 8px rgba(65, 95, 148, 0.3);
+}
+
+.export-icon {
+	font-size: 1.25rem;
+	display: flex;
+	align-items: center;
+}
+
+.export-text {
+	font-weight: 600;
+}
+
 /* ========================= */
 /* Policies Section Styles   */
 /* ========================= */
+
+/* Policy Sub-Tabs */
+.policy-subtabs {
+	display: flex;
+	gap: 1rem;
+	margin-bottom: 2rem;
+	border-bottom: 2px solid #e0e0e0;
+	padding-bottom: 0;
+}
+
+.policy-subtab {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 1rem 1.5rem;
+	background: transparent;
+	border: none;
+	border-bottom: 3px solid transparent;
+	color: #666;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	font-size: 1rem;
+	position: relative;
+	top: 2px;
+}
+
+.policy-subtab:hover {
+	color: var(--primary);
+	background: rgba(65, 95, 148, 0.05);
+}
+
+.policy-subtab.active {
+	color: var(--primary);
+	border-bottom-color: var(--primary);
+	font-weight: 600;
+	background: rgba(65, 95, 148, 0.08);
+}
+
+.subtab-icon {
+	font-size: 1.25rem;
+}
+
+.subtab-text {
+	flex: 1;
+}
+
+.policies-subsection,
+.terms-subsection,
+.privacy-subsection {
+	animation: fadeIn 0.3s ease;
+}
 
 .policy-card {
 	background: white;
@@ -1734,6 +1886,7 @@
 	display: flex;
 	flex-direction: column;
 	gap: 0.25rem;
+	padding-left: 1rem;
 }
 
 .fee-item strong {
@@ -2116,6 +2269,45 @@
 
 	.section-header p {
 		font-size: 0.95rem;
+	}
+
+	.policy-header-content {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 1.5rem;
+	}
+
+	.policy-header-text {
+		min-width: 100%;
+	}
+
+	.export-policy-btn {
+		width: 100%;
+		justify-content: center;
+		padding: 0.75rem 1.5rem;
+		font-size: 0.95rem;
+	}
+
+	.policy-subtabs {
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.policy-subtab {
+		padding: 0.75rem 1rem;
+		font-size: 0.9rem;
+		flex: 1;
+		min-width: calc(33.333% - 0.5rem);
+		justify-content: center;
+	}
+
+	.subtab-icon {
+		font-size: 1rem;
+	}
+
+	.subtab-text {
+		font-size: 0.85rem;
 	}
 
 	.policy-card {

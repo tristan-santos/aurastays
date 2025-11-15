@@ -287,21 +287,7 @@ export default function HostList() {
 						onClick={() => navigate("/admin")}
 					>
 						<span className="sidebar-icon">📋</span>
-						<span className="sidebar-text">Policies & Compliance</span>
-					</button>
-					<button
-						className="sidebar-item"
-						onClick={() => navigate("/admin")}
-					>
-						<span className="sidebar-icon">📜</span>
-						<span className="sidebar-text">Terms & Conditions</span>
-					</button>
-					<button
-						className="sidebar-item"
-						onClick={() => navigate("/admin")}
-					>
-						<span className="sidebar-icon">🔒</span>
-						<span className="sidebar-text">Privacy Policy</span>
+						<span className="sidebar-text">Policy</span>
 					</button>
 					<button
 						className="sidebar-item"

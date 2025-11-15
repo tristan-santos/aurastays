@@ -32,6 +32,7 @@ import {
 	Legend,
 } from "chart.js"
 import { Line, Bar, Doughnut } from "react-chartjs-2"
+import jsPDF from "jspdf"
 import "../css/AdminDashboard.css"
 
 // Register ChartJS components
@@ -107,6 +108,7 @@ const AdminDashboard = () => {
 		propertyTypes: null,
 	})
 	const [activeTab, setActiveTab] = useState("dashboard")
+	const [activePolicySubTab, setActivePolicySubTab] = useState("policies")
 	const [policies, setPolicies] = useState({
 		serviceFeeHost: 15, // percentage
 		serviceFeeGuest: 800, // fixed amount in pesos
@@ -636,6 +638,430 @@ const AdminDashboard = () => {
 		} catch (err) {
 			console.error("Error updating policies:", err)
 			toast.error("❌ Failed to update policies: " + err.message)
+		}
+	}
+
+	const handleExportAllPolicies = () => {
+		try {
+			const pdfDoc = new jsPDF()
+			let yPosition = 20
+			const pageWidth = pdfDoc.internal.pageSize.getWidth()
+			const pageHeight = pdfDoc.internal.pageSize.getHeight()
+			const margin = 20
+			const maxWidth = pageWidth - 2 * margin
+
+			// Helper function to clean text - remove emojis and special characters that cause issues
+			const cleanText = (text) => {
+				if (!text) return ""
+				// Remove emojis and replace currency symbol with PHP
+				return text
+					.replace(/[\u{1F300}-\u{1F9FF}]/gu, "") // Remove emojis
+					.replace(/[\u{1F600}-\u{1F64F}]/gu, "") // Remove emoticons
+					.replace(/[\u{1F680}-\u{1F6FF}]/gu, "") // Remove transport symbols
+					.replace(/[\u{2600}-\u{26FF}]/gu, "") // Remove misc symbols
+					.replace(/[\u{2700}-\u{27BF}]/gu, "") // Remove dingbats
+					.replace(/₱/g, "PHP ") // Replace peso sign with PHP
+					.replace(/\s+/g, " ") // Replace multiple spaces with single space
+					.trim()
+			}
+
+			// Helper function to add a new page if needed
+			const checkPageBreak = (requiredSpace = 20) => {
+				if (yPosition + requiredSpace > pageHeight - margin) {
+					pdfDoc.addPage()
+					yPosition = 20
+					return true
+				}
+				return false
+			}
+
+			// Helper function to add text with word wrap
+			const addText = (text, fontSize, isBold = false, color = [0, 0, 0]) => {
+				const cleanedText = cleanText(text)
+				pdfDoc.setFontSize(fontSize)
+				pdfDoc.setTextColor(color[0], color[1], color[2])
+				if (isBold) {
+					pdfDoc.setFont(undefined, "bold")
+				} else {
+					pdfDoc.setFont(undefined, "normal")
+				}
+				const lines = pdfDoc.splitTextToSize(cleanedText, maxWidth)
+				lines.forEach((line) => {
+					checkPageBreak(10)
+					pdfDoc.text(line, margin, yPosition)
+					yPosition += 7
+				})
+			}
+
+			// Helper function to add a section header
+			const addSectionHeader = (text, emoji = "") => {
+				checkPageBreak(25)
+				yPosition += 5
+				const headerText = emoji ? `${text}` : text
+				addText(headerText, 18, true, [65, 95, 148])
+				yPosition += 3
+			}
+
+			// Helper function to add a subsection
+			const addSubsection = (title, emoji = "") => {
+				checkPageBreak(15)
+				yPosition += 3
+				const subsectionText = emoji ? `${title}` : title
+				addText(subsectionText, 14, true, [102, 102, 102])
+				yPosition += 2
+			}
+
+			// Helper function to add a list
+			const addList = (items, isOrdered = false) => {
+				items.forEach((item, index) => {
+					checkPageBreak(10)
+					const prefix = isOrdered ? `${index + 1}. ` : "- "
+					addText(`${prefix}${item}`, 10, false, [68, 68, 68])
+				})
+			}
+
+			// Title Page
+			pdfDoc.setFillColor(65, 95, 148)
+			pdfDoc.rect(0, 0, pageWidth, 50, "F")
+			pdfDoc.setTextColor(255, 255, 255)
+			pdfDoc.setFontSize(24)
+			pdfDoc.setFont(undefined, "bold")
+			pdfDoc.text("AuraStays Policy Management", pageWidth / 2, 25, {
+				align: "center",
+			})
+			pdfDoc.setFontSize(12)
+			pdfDoc.setFont(undefined, "normal")
+			pdfDoc.text(
+				`Generated on ${new Date().toLocaleDateString("en-US", {
+					year: "numeric",
+					month: "long",
+					day: "numeric",
+				})}`,
+				pageWidth / 2,
+				35,
+				{ align: "center" }
+			)
+			yPosition = 60
+
+			// ========== POLICIES & COMPLIANCE SECTION ==========
+			addSectionHeader("Policies & Compliance")
+			addText(
+				"Manage platform policies, service fees, and compliance rules",
+				10,
+				false,
+				[102, 102, 102]
+			)
+			yPosition += 5
+
+			// Service Fee Structure
+			addSubsection("Service Fee Structure")
+			addText(`Guest Service Fee: PHP ${policies.serviceFeeGuest}`, 10, true)
+			addText("Fixed fee charged to guests on each booking", 9, false, [102, 102, 102])
+			yPosition += 2
+			addText(
+				`Guest Fee (Per Person): PHP ${policies.guestFeePerPerson}`,
+				10,
+				true
+			)
+			addText("Additional charge per guest for bookings", 9, false, [102, 102, 102])
+			yPosition += 5
+
+			// Property Listing Rules
+			addSubsection("Property Listing Rules")
+			addText("Listing Requirements", 11, true, [102, 102, 102])
+			addList([
+				"All properties must have at least 1 high-quality photo",
+				"Accurate description with minimum 100 characters",
+				"Complete amenities list and house rules",
+				"Valid address and location coordinates",
+				"Clear pricing structure (base price, cleaning fee, additional fees)",
+				"Calendar availability must be updated regularly",
+			])
+			yPosition += 3
+			addText("Property Standards", 11, true, [102, 102, 102])
+			addList([
+				"Properties must meet basic safety standards",
+				"Accurate representation of space and amenities",
+				"Must comply with local regulations and laws",
+				"No misleading or false information",
+			])
+			yPosition += 5
+
+			// Subscription Removal Policy
+			addSubsection("Subscription Removal Policy")
+			addText("Subscription Removal", 11, true, [102, 102, 102])
+			addList([
+				`Low Rating: Hosts with average rating below ${policies.minPropertyRating} stars for 3 consecutive months`,
+				"Violation of Terms: Any breach of community standards or terms of service",
+				"Inactive Listings: No calendar updates for 90+ days",
+				"Fraudulent Activity: Detected scams, fake listings, or payment fraud",
+			])
+			yPosition += 3
+			addText("Removal Process", 11, true, [102, 102, 102])
+			addList(
+				[
+					"Warning notification sent to host",
+					"30-day period to resolve issues",
+					"If unresolved, listing is suspended",
+					"Host can appeal within 14 days",
+					"Final decision made by admin review",
+				],
+				true
+			)
+			yPosition += 5
+
+			// Cancellation Rules
+			addSubsection("Cancellation Rules")
+			addText("Guest Cancellation Policy", 11, true, [102, 102, 102])
+			addList([
+				`Flexible: Full refund if cancelled ${policies.cancellationWindowHours} hours before check-in`,
+				"Strict: No cancellation after book confirming",
+				"Service fees are non-refundable in all cases",
+			])
+			yPosition += 3
+			addText("Host Cancellation Policy", 11, true, [102, 102, 102])
+			addList([
+				"Host cancellations are strongly discouraged",
+				"Guest receives full refund including all fees",
+			])
+			yPosition += 5
+
+			// Platform Rules & Regulations
+			addSubsection("Platform Rules & Regulations")
+			addText("Host Obligations", 11, true, [102, 102, 102])
+			addList([
+				"Respond to booking inquiries within 24 hours",
+				"Maintain property as described in listing",
+				"Provide check-in instructions before arrival",
+				"Be available for guest support during stay",
+				"Report any property damage or issues immediately",
+				"Keep calendar updated and accurate",
+			])
+			yPosition += 3
+			addText("Guest Obligations", 11, true, [102, 102, 102])
+			addList([
+				"Treat property with respect and care",
+				"Follow house rules set by host",
+				"Report any issues or damages immediately",
+				"Complete booking checkout procedures",
+				"Leave honest and constructive reviews",
+				"Number of guests must not exceed listing capacity",
+			])
+			yPosition += 3
+			addText("Prohibited Activities", 11, true, [102, 102, 102])
+			addList([
+				"Off-platform transactions or payments",
+				"Discrimination based on race, religion, gender, etc.",
+				"Fraudulent listings or misrepresentation",
+				"Hosting commercial events without permission",
+				"Subletting or unauthorized property use",
+				"Harassment or inappropriate behavior",
+			])
+			yPosition += 5
+
+			// Community Standards
+			addSubsection("Community Standards")
+			addText("Safety & Security", 11, true, [102, 102, 102])
+			addList([
+				"All properties must have working smoke detectors",
+				"Fire extinguishers required for all listings",
+				"Emergency contact information must be provided",
+				"Secure entry systems recommended",
+				"Report suspicious activity immediately",
+			])
+			yPosition += 3
+			addText("Trust & Verification", 11, true, [102, 102, 102])
+			addList([
+				"Email verification required for all users",
+				"Phone verification recommended",
+				"Government ID verification for hosts",
+				"Professional photography encouraged",
+				"Accurate property descriptions mandatory",
+			])
+			yPosition += 10
+
+			// ========== TERMS & CONDITIONS SECTION ==========
+			addSectionHeader("Terms & Conditions")
+			addText("Legal terms governing the use of AuraStays platform", 10, false, [
+				102, 102, 102,
+			])
+			yPosition += 5
+
+			// Terms content (abbreviated for PDF - key points)
+			const termsSections = [
+				{
+					title: "1. Acceptance of Terms",
+					content:
+						"By accessing and using AuraStays (\"the Platform\"), you accept and agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our services.",
+				},
+				{
+					title: "2. User Accounts",
+					content:
+						"Users must provide accurate and complete registration information. Users must be at least 18 years of age. One account per user; multiple accounts are prohibited. Account credentials must be kept confidential.",
+				},
+				{
+					title: "3. Host Terms",
+					content:
+						"Hosts must have legal right to list and rent the property. All listing information must be accurate and up-to-date. Hosts must comply with local laws and regulations. Hosts agree to pay a service fee per booking.",
+				},
+				{
+					title: "4. Guest Terms",
+					content:
+						"Guests must book properties for personal, non-commercial use. Number of guests cannot exceed listing capacity. Guests must follow house rules set by hosts. Guests agree to pay service fees and guest fees per person.",
+				},
+				{
+					title: "5. Cancellations & Refunds",
+					content:
+						"Cancellation policies vary by listing (Flexible, Moderate, Strict). Refund amount depends on cancellation policy and timing. Service fees are non-refundable except in special circumstances.",
+				},
+				{
+					title: "6. Prohibited Activities",
+					content:
+						"No fraudulent, illegal, or harmful activities. No discrimination or harassment. No unauthorized commercial use of properties. No circumventing platform for direct bookings.",
+				},
+				{
+					title: "7. Liability & Disclaimers",
+					content:
+						"AuraStays acts as an intermediary between hosts and guests. We do not own, manage, or control listed properties. We are not responsible for host or guest conduct. Use of platform is at user's own risk.",
+				},
+				{
+					title: "8. Intellectual Property",
+					content:
+						"All platform content is property of AuraStays. Users retain ownership of their uploaded content. Users grant us license to use content for platform operations.",
+				},
+				{
+					title: "9. Dispute Resolution",
+					content:
+						"Users agree to attempt good-faith resolution of disputes. Platform may mediate disputes between hosts and guests. Unresolved disputes subject to binding arbitration.",
+				},
+				{
+					title: "10. Modifications to Terms",
+					content:
+						"We reserve the right to modify these terms at any time. Users will be notified of significant changes. Continued use after changes constitutes acceptance.",
+				},
+				{
+					title: "11. Termination",
+					content:
+						"We may terminate or suspend accounts for violations. Users may close their accounts at any time. Obligations survive account termination.",
+				},
+				{
+					title: "12. Contact Information",
+					content:
+						"For questions about these terms, contact us at: Email: legal@aurastays.com, Phone: +63 123 456 7890, Address: Manila, Philippines",
+				},
+			]
+
+			termsSections.forEach((section) => {
+				checkPageBreak(20)
+				addText(section.title, 12, true, [65, 95, 148])
+				yPosition += 2
+				addText(section.content, 10, false, [68, 68, 68])
+				yPosition += 5
+			})
+			yPosition += 5
+
+			// ========== PRIVACY POLICY SECTION ==========
+			addSectionHeader("Privacy Policy")
+			addText(
+				"How we collect, use, and protect your personal information",
+				10,
+				false,
+				[102, 102, 102]
+			)
+			yPosition += 5
+
+			const privacySections = [
+				{
+					title: "1. Introduction",
+					content:
+						"AuraStays (\"we,\" \"our,\" or \"us\") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our platform.",
+				},
+				{
+					title: "2. Information We Collect",
+					content:
+						"We collect account information (name, email, phone), profile information, payment information (processed securely), identity verification data, communications, device information, usage data, location data, and cookies.",
+				},
+				{
+					title: "3. How We Use Your Information",
+					content:
+						"We use information for platform operations (creating accounts, processing bookings), improvement & personalization, communications (confirmations, updates), and legal & safety compliance.",
+				},
+				{
+					title: "4. Information Sharing",
+					content:
+						"We share information with other users (public profiles, booking details), service providers (payment processors, cloud hosting), legal requirements (law enforcement when required), and business transfers (mergers, acquisitions).",
+				},
+				{
+					title: "5. Data Security",
+					content:
+						"We implement industry-standard encryption (SSL/TLS), secure password hashing, regular security audits, access controls, and PCI-compliant payment processing.",
+				},
+				{
+					title: "6. Your Privacy Rights",
+					content:
+						"You have the right to access, correct, delete, export, and opt-out of your personal data. Contact privacy@aurastays.com for requests. Response provided within 30 days.",
+				},
+				{
+					title: "7. Cookies & Tracking",
+					content:
+						"We use essential cookies (required for functionality), analytics cookies (track usage), marketing cookies (personalize ads), and preference cookies (remember settings).",
+				},
+				{
+					title: "8. Data Retention",
+					content:
+						"Account data retained while account is active. Booking records kept for 7 years (tax/legal requirements). Communication logs retained for 3 years.",
+				},
+				{
+					title: "9. Children's Privacy",
+					content:
+						"Platform not intended for users under 18. We do not knowingly collect data from children. Parents should monitor children's internet use.",
+				},
+				{
+					title: "10. International Data Transfers",
+					content:
+						"Data may be transferred and processed internationally. We ensure adequate protection for transferred data. Standard contractual clauses used where required.",
+				},
+				{
+					title: "11. Changes to Privacy Policy",
+					content:
+						"We may update this policy periodically. Users notified of significant changes. Continued use implies acceptance of changes.",
+				},
+				{
+					title: "12. Contact Us",
+					content:
+						"For privacy-related questions or requests: Email: privacy@aurastays.com, Phone: +63 123 456 7890, Address: Data Protection Officer, AuraStays, Manila, Philippines",
+				},
+			]
+
+			privacySections.forEach((section) => {
+				checkPageBreak(20)
+				addText(section.title, 12, true, [65, 95, 148])
+				yPosition += 2
+				addText(section.content, 10, false, [68, 68, 68])
+				yPosition += 5
+			})
+
+			// Footer on last page
+			checkPageBreak(15)
+			yPosition += 5
+			pdfDoc.setDrawColor(200, 200, 200)
+			pdfDoc.line(margin, yPosition, pageWidth - margin, yPosition)
+			yPosition += 5
+			pdfDoc.setFontSize(8)
+			pdfDoc.setTextColor(150, 150, 150)
+			pdfDoc.text(
+				`This document was generated on ${new Date().toLocaleString()}. For the most up-to-date policies, please visit the AuraStays platform.`,
+				pageWidth / 2,
+				yPosition,
+				{ align: "center" }
+			)
+
+			// Save the PDF
+			pdfDoc.save(`AuraStays-Policy-Management-${new Date().toISOString().split("T")[0]}.pdf`)
+			toast.success("📄 Policy document exported successfully!")
+		} catch (err) {
+			console.error("Error exporting policies:", err)
+			toast.error("❌ Failed to export policies: " + err.message)
 		}
 	}
 
@@ -2159,28 +2585,12 @@ const AdminDashboard = () => {
 					</button>
 					<button
 						className={`sidebar-item ${
-							activeTab === "policies" ? "active" : ""
+							activeTab === "policy" ? "active" : ""
 						}`}
-						onClick={() => handleTabChange("policies")}
+						onClick={() => handleTabChange("policy")}
 					>
 						<span className="sidebar-icon">📋</span>
-						<span className="sidebar-text">Policies & Compliance</span>
-					</button>
-					<button
-						className={`sidebar-item ${activeTab === "terms" ? "active" : ""}`}
-						onClick={() => handleTabChange("terms")}
-					>
-						<span className="sidebar-icon">📜</span>
-						<span className="sidebar-text">Terms & Conditions</span>
-					</button>
-					<button
-						className={`sidebar-item ${
-							activeTab === "privacy" ? "active" : ""
-						}`}
-						onClick={() => handleTabChange("privacy")}
-					>
-						<span className="sidebar-icon">🔒</span>
-						<span className="sidebar-text">Privacy Policy</span>
+						<span className="sidebar-text">Policy</span>
 					</button>
 					<button
 						className={`sidebar-item ${
@@ -2268,9 +2678,49 @@ const AdminDashboard = () => {
 										options={{
 											responsive: true,
 											maintainAspectRatio: false,
+											animation: {
+												duration: 1000,
+												easing: "easeInOutQuart",
+											},
+											interaction: {
+												intersect: false,
+												mode: "index",
+											},
 											plugins: {
 												legend: {
 													display: false,
+												},
+												tooltip: {
+													enabled: true,
+													backgroundColor: "rgba(65, 95, 148, 0.95)",
+													titleColor: "#ffffff",
+													bodyColor: "#ffffff",
+													borderColor: "#415F94",
+													borderWidth: 2,
+													cornerRadius: 12,
+													padding: 12,
+													displayColors: true,
+													titleFont: {
+														size: 14,
+														weight: "bold",
+													},
+													bodyFont: {
+														size: 13,
+														weight: "normal",
+													},
+													boxPadding: 8,
+													usePointStyle: true,
+													callbacks: {
+														title: (context) => {
+															return context[0].label || "Data Point"
+														},
+														label: (context) => {
+															return `Bookings: ${context.parsed.y}`
+														},
+													},
+													animation: {
+														duration: 200,
+													},
 												},
 											},
 											scales: {
@@ -2279,6 +2729,19 @@ const AdminDashboard = () => {
 													ticks: {
 														stepSize: 1,
 													},
+												},
+											},
+											elements: {
+												point: {
+													radius: 4,
+													hoverRadius: 8,
+													hoverBorderWidth: 3,
+													hoverBorderColor: "#415F94",
+												},
+												line: {
+													tension: 0.4,
+													borderWidth: 3,
+													hoverBorderWidth: 4,
 												},
 											},
 										}}
@@ -2295,15 +2758,68 @@ const AdminDashboard = () => {
 										options={{
 											responsive: true,
 											maintainAspectRatio: false,
+											animation: {
+												duration: 1000,
+												easing: "easeInOutQuart",
+											},
+											interaction: {
+												intersect: false,
+												mode: "index",
+											},
 											plugins: {
 												legend: {
 													display: false,
+												},
+												tooltip: {
+													enabled: true,
+													backgroundColor: "rgba(65, 95, 148, 0.95)",
+													titleColor: "#ffffff",
+													bodyColor: "#ffffff",
+													borderColor: "#415F94",
+													borderWidth: 2,
+													cornerRadius: 12,
+													padding: 12,
+													displayColors: true,
+													titleFont: {
+														size: 14,
+														weight: "bold",
+													},
+													bodyFont: {
+														size: 13,
+														weight: "normal",
+													},
+													boxPadding: 8,
+													usePointStyle: true,
+													callbacks: {
+														title: (context) => {
+															return context[0].label || "Data Point"
+														},
+														label: (context) => {
+															return `Revenue: PHP ${context.parsed.y.toLocaleString()}`
+														},
+													},
+													animation: {
+														duration: 200,
+													},
 												},
 											},
 											scales: {
 												y: {
 													beginAtZero: true,
 												},
+											},
+											elements: {
+												bar: {
+													borderRadius: 6,
+													borderSkipped: false,
+													hoverBorderWidth: 2,
+													hoverBorderColor: "#415F94",
+												},
+											},
+											onHover: (event, activeElements) => {
+												event.native.target.style.cursor = activeElements.length
+													? "pointer"
+													: "default"
 											},
 										}}
 									/>
@@ -2319,10 +2835,77 @@ const AdminDashboard = () => {
 										options={{
 											responsive: true,
 											maintainAspectRatio: false,
+											animation: {
+												duration: 1000,
+												easing: "easeInOutQuart",
+												animateRotate: true,
+												animateScale: true,
+											},
+											interaction: {
+												intersect: true,
+											},
 											plugins: {
 												legend: {
 													position: "bottom",
+													labels: {
+														usePointStyle: true,
+														padding: 15,
+														font: {
+															size: 12,
+														},
+													},
 												},
+												tooltip: {
+													enabled: true,
+													backgroundColor: "rgba(65, 95, 148, 0.95)",
+													titleColor: "#ffffff",
+													bodyColor: "#ffffff",
+													borderColor: "#415F94",
+													borderWidth: 2,
+													cornerRadius: 12,
+													padding: 12,
+													displayColors: true,
+													titleFont: {
+														size: 14,
+														weight: "bold",
+													},
+													bodyFont: {
+														size: 13,
+														weight: "normal",
+													},
+													boxPadding: 8,
+													usePointStyle: true,
+													callbacks: {
+														title: (context) => {
+															return context[0].label || "Category"
+														},
+														label: (context) => {
+															const label = context.label || ""
+															const value = context.parsed || 0
+															const total = context.dataset.data.reduce(
+																(a, b) => a + b,
+																0
+															)
+															const percentage = ((value / total) * 100).toFixed(1)
+															return `${label}: ${value} (${percentage}%)`
+														},
+													},
+													animation: {
+														duration: 200,
+													},
+												},
+											},
+											elements: {
+												arc: {
+													borderWidth: 2,
+													hoverBorderWidth: 4,
+													hoverOffset: 8,
+												},
+											},
+											onHover: (event, activeElements) => {
+												event.native.target.style.cursor = activeElements.length
+													? "pointer"
+													: "default"
 											},
 										}}
 									/>
@@ -2403,7 +2986,6 @@ const AdminDashboard = () => {
 												<tr>
 													<th>Guest</th>
 													<th>Property</th>
-													<th>Check-in</th>
 													<th>Status</th>
 													<th>Amount</th>
 												</tr>
@@ -2413,11 +2995,6 @@ const AdminDashboard = () => {
 													<tr key={booking.id}>
 														<td>{booking.guestName || "N/A"}</td>
 														<td>{booking.propertyTitle || "N/A"}</td>
-														<td>
-															{booking.checkIn
-																? new Date(booking.checkIn).toLocaleDateString()
-																: "N/A"}
-														</td>
 														<td>
 															<span
 																className={`booking-status ${
@@ -2443,15 +3020,60 @@ const AdminDashboard = () => {
 					</>
 				)}
 
-				{/* Policies & Compliance Tab */}
-				{activeTab === "policies" && (
-					<div className="content-section policies-section">
-						<div className="section-header">
-							<h2>📋 Policies & Compliance</h2>
-							<p>
-								Manage platform policies, service fees, and compliance rules
-							</p>
+				{/* Policy Tab - Combined Policies, Terms & Conditions, and Privacy Policy */}
+				{activeTab === "policy" && (
+					<div className="content-section policy-section">
+						<div className="section-header policy-header">
+							<div className="policy-header-content">
+								<div className="policy-header-text">
+									<h2>📋 Policy Management</h2>
+									<p>Manage platform policies, terms, and privacy settings</p>
+								</div>
+								<button
+									className="export-policy-btn"
+									onClick={handleExportAllPolicies}
+									title="Export all policies to PDF"
+								>
+									<span className="export-icon">📄</span>
+									<span className="export-text">Export All Policy</span>
+								</button>
+							</div>
 						</div>
+
+						{/* Internal Navigation Tabs */}
+						<div className="policy-subtabs">
+							<button
+								className={`policy-subtab ${
+									activePolicySubTab === "policies" ? "active" : ""
+								}`}
+								onClick={() => setActivePolicySubTab("policies")}
+							>
+								<span className="subtab-icon">📋</span>
+								<span className="subtab-text">Policies & Compliance</span>
+							</button>
+							<button
+								className={`policy-subtab ${
+									activePolicySubTab === "terms" ? "active" : ""
+								}`}
+								onClick={() => setActivePolicySubTab("terms")}
+							>
+								<span className="subtab-icon">📜</span>
+								<span className="subtab-text">Terms & Conditions</span>
+							</button>
+							<button
+								className={`policy-subtab ${
+									activePolicySubTab === "privacy" ? "active" : ""
+								}`}
+								onClick={() => setActivePolicySubTab("privacy")}
+							>
+								<span className="subtab-icon">🔒</span>
+								<span className="subtab-text">Privacy Policy</span>
+							</button>
+						</div>
+
+						{/* Policies & Compliance Sub-Tab */}
+						{activePolicySubTab === "policies" && (
+							<div className="policies-subsection">
 
 						{/* Service Fees Configuration */}
 						<div className="policy-card">
@@ -2520,7 +3142,7 @@ const AdminDashboard = () => {
 									<h4>Listing Requirements</h4>
 									<ul>
 										<li>
-											All properties must have at least 5 high-quality photos
+											All properties must have at least 1 high-quality photo
 										</li>
 										<li>Accurate description with minimum 100 characters</li>
 										<li>Complete amenities list and house rules</li>
@@ -2706,24 +3328,19 @@ const AdminDashboard = () => {
 							</div>
 						</div>
 
-						<button
-							className="save-policies-btn primary"
-							onClick={handleUpdatePolicies}
-						>
-							💾 Save All Policy Changes
-						</button>
-					</div>
-				)}
+								<button
+									className="save-policies-btn primary"
+									onClick={handleUpdatePolicies}
+								>
+									💾 Save All Policy Changes
+								</button>
+							</div>
+						)}
 
-				{/* Terms & Conditions Tab */}
-				{activeTab === "terms" && (
-					<div className="content-section terms-section">
-						<div className="section-header">
-							<h2>📜 Terms & Conditions</h2>
-							<p>Legal terms governing the use of AuraStays platform</p>
-						</div>
-
-						<div className="legal-document">
+						{/* Terms & Conditions Sub-Tab */}
+						{activePolicySubTab === "terms" && (
+							<div className="terms-subsection">
+								<div className="legal-document">
 							<div className="legal-section">
 								<h3>1. Acceptance of Terms</h3>
 								<p>
@@ -2954,30 +3571,25 @@ const AdminDashboard = () => {
 								</ul>
 							</div>
 
-							<div className="legal-footer">
-								<p>
-									<strong>Last Updated:</strong>{" "}
-									{new Date().toLocaleDateString()}
-								</p>
-								<p>
-									<em>
-										By using AuraStays, you agree to these Terms & Conditions
-									</em>
-								</p>
+									<div className="legal-footer">
+										<p>
+											<strong>Last Updated:</strong>{" "}
+											{new Date().toLocaleDateString()}
+										</p>
+										<p>
+											<em>
+												By using AuraStays, you agree to these Terms & Conditions
+											</em>
+										</p>
+									</div>
+								</div>
 							</div>
-						</div>
-					</div>
-				)}
+						)}
 
-				{/* Privacy Policy Tab */}
-				{activeTab === "privacy" && (
-					<div className="content-section privacy-section">
-						<div className="section-header">
-							<h2>🔒 Privacy Policy</h2>
-							<p>How we collect, use, and protect your personal information</p>
-						</div>
-
-						<div className="legal-document">
+						{/* Privacy Policy Sub-Tab */}
+						{activePolicySubTab === "privacy" && (
+							<div className="privacy-subsection">
+								<div className="legal-document">
 							<div className="legal-section">
 								<h3>1. Introduction</h3>
 								<p>
@@ -3235,19 +3847,21 @@ const AdminDashboard = () => {
 								</ul>
 							</div>
 
-							<div className="legal-footer">
-								<p>
-									<strong>Last Updated:</strong>{" "}
-									{new Date().toLocaleDateString()}
-								</p>
-								<p>
-									<em>
-										Your privacy is important to us. We are committed to
-										protecting your personal information.
-									</em>
-								</p>
+									<div className="legal-footer">
+										<p>
+											<strong>Last Updated:</strong>{" "}
+											{new Date().toLocaleDateString()}
+										</p>
+										<p>
+											<em>
+												Your privacy is important to us. We are committed to
+												protecting your personal information.
+											</em>
+										</p>
+									</div>
+								</div>
 							</div>
-						</div>
+						)}
 					</div>
 				)}
 
@@ -4124,7 +4738,6 @@ const AdminDashboard = () => {
 														<tr>
 															<th>Guest</th>
 															<th>Property</th>
-															<th>Check-in</th>
 															<th>Status</th>
 															<th>Amount</th>
 														</tr>
@@ -4135,7 +4748,6 @@ const AdminDashboard = () => {
 																<tr key={idx}>
 																	<td>{booking.guest}</td>
 																	<td>{booking.property}</td>
-																	<td>{booking.checkIn}</td>
 																	<td>
 																		<span
 																			className={`status-badge ${booking.status}`}

@@ -80,41 +80,14 @@ export const sendVerificationEmail = async ({
 		throw new Error(errorMessage)
 	}
 
-	// Validate and clean email address
-	if (!to_email || typeof to_email !== "string") {
-		throw new Error("Email address is required and must be a string")
-	}
-
-	// Trim the email to prevent corruption issues
-	// For debugging: Guest emails accept any format (no strict validation)
-	const cleanedEmail = to_email.trim()
-	
-	// For debugging purposes: Skip strict email validation for guest users
-	// Accept any non-empty string as email
-	if (cleanedEmail.length === 0) {
-		throw new Error("Email address cannot be empty")
-	}
-	
-	console.log("[EmailJS Debug] Accepting any email format for guest:", cleanedEmail)
-
-	// Clean name (trim whitespace)
-	const cleanedName = to_name ? to_name.trim() : ""
-
 	try {
 		const templateParams = {
-			name: cleanedName, // Matches {{name}} in your EmailJS template
-			email: cleanedEmail, // Matches {{email}} in your EmailJS template - cleaned and validated
-			to_email: cleanedEmail, // Also include as to_email in case template uses this
-			verification_link: verification_link || "",
+			name: to_name, // Matches {{name}} in your EmailJS template
+			email: to_email, // Matches {{email}} in your EmailJS template
+			verification_link: verification_link,
 			from_name: "AuraStays",
 			message: `Welcome to AuraStays! We're excited to have you join our community.`,
 		}
-
-		console.log("[EmailJS] Sending email with params:", {
-			email: cleanedEmail,
-			name: cleanedName,
-			hasLink: !!verification_link,
-		})
 
 		const response = await emailjs.send(
 			EMAILJS_SERVICE_ID,
