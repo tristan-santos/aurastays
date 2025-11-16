@@ -445,9 +445,9 @@
 	font-size: 0.95rem;
 	color: #2c3e50;
 	font-weight: 600;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	word-wrap: break-word;
+	overflow-wrap: break-word;
+	word-break: break-word;
 }
 
 .review-rating {
@@ -2194,6 +2194,294 @@
 	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
 }
 
+/* Report Tabs */
+.report-tabs {
+	display: flex;
+	gap: 1rem;
+	margin-bottom: 2rem;
+	border-bottom: 2px solid #e0e0e0;
+	overflow-x: auto;
+}
+
+.report-tab {
+	padding: 1rem 2rem;
+	background: transparent;
+	border: none;
+	border-bottom: 3px solid transparent;
+	font-size: 1rem;
+	font-weight: 600;
+	color: #666;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	white-space: nowrap;
+	position: relative;
+}
+
+.report-tab:hover {
+	color: var(--primary);
+	background: #f8f9fa;
+}
+
+.report-tab.active {
+	color: var(--primary);
+	border-bottom-color: var(--primary);
+	background: #f8f9fa;
+}
+
+/* Report Tab Content */
+.report-tab-content {
+	background: white;
+	border-radius: 12px;
+	padding: 2rem;
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+	margin-bottom: 2rem;
+}
+
+.report-tab-header {
+	margin-bottom: 2rem;
+}
+
+.report-tab-header h3 {
+	font-size: 1.5rem;
+	color: var(--primary);
+	font-weight: 700;
+	margin-bottom: 0.5rem;
+}
+
+.report-tab-header p {
+	color: #666;
+	margin-bottom: 1.5rem;
+}
+
+.report-stats-summary {
+	display: flex;
+	gap: 1.5rem;
+	margin-bottom: 1.5rem;
+	flex-wrap: wrap;
+	padding: 1.5rem;
+	background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+	border-radius: 12px;
+	border: 1px solid #e9ecef;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.stat-summary {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	padding: 1rem 1.5rem;
+	background: white;
+	border-radius: 10px;
+	border-left: 4px solid var(--primary);
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+	transition: all 0.3s ease;
+	flex: 1;
+	min-width: 150px;
+}
+
+.stat-summary:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.stat-summary .stat-value {
+	font-size: 2rem;
+	font-weight: 700;
+	color: var(--primary);
+	line-height: 1.2;
+	letter-spacing: -0.5px;
+}
+
+.stat-summary .stat-label {
+	font-size: 0.85rem;
+	color: #6c757d;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.report-table-wrapper {
+	overflow-x: auto;
+	border-radius: 8px;
+	border: 1px solid #e0e0e0;
+	margin-top: 1.5rem;
+}
+
+.report-table {
+	width: 100%;
+	border-collapse: collapse;
+	min-width: 800px;
+}
+
+.report-table thead {
+	background: linear-gradient(135deg, var(--primary), var(--secondary));
+	color: white;
+}
+
+.report-table th {
+	padding: 1rem;
+	text-align: left;
+	font-weight: 600;
+	font-size: 0.95rem;
+}
+
+.report-table tbody tr {
+	border-bottom: 1px solid #f0f0f0;
+	transition: background 0.2s ease;
+}
+
+.report-table tbody tr:hover {
+	background: #f8f9fa;
+}
+
+.report-table tbody tr:last-child {
+	border-bottom: none;
+}
+
+.report-table td {
+	padding: 1rem;
+	color: #333;
+	font-size: 0.9rem;
+}
+
+.report-table .empty-state {
+	text-align: center;
+	padding: 3rem;
+	color: #999;
+	font-style: italic;
+}
+
+/* User Type Badge */
+.user-type-badge {
+	padding: 0.25rem 0.75rem;
+	border-radius: 20px;
+	font-size: 0.85rem;
+	font-weight: 600;
+	display: inline-block;
+	text-transform: capitalize;
+}
+
+.user-type-badge.host {
+	background: #e3f2fd;
+	color: #1976d2;
+}
+
+.user-type-badge.guest {
+	background: #f3e5f5;
+	color: #7b1fa2;
+}
+
+.user-type-badge.admin {
+	background: #fff3cd;
+	color: #856404;
+}
+
+/* Rating Badge */
+.rating-badge {
+	padding: 0.25rem 0.75rem;
+	border-radius: 20px;
+	font-size: 0.85rem;
+	font-weight: 600;
+	display: inline-block;
+	background: #fff3cd;
+	color: #856404;
+}
+
+/* Booking Status Badge */
+.booking-status {
+	padding: 0.25rem 0.75rem;
+	border-radius: 20px;
+	font-size: 0.85rem;
+	font-weight: 600;
+	display: inline-block;
+	text-transform: capitalize;
+}
+
+.booking-status.confirmed,
+.booking-status.completed {
+	background: #e8f5e9;
+	color: #388e3c;
+}
+
+.booking-status.pending {
+	background: #fff3e0;
+	color: #f57c00;
+}
+
+.booking-status.cancelled {
+	background: #ffebee;
+	color: #d32f2f;
+}
+
+/* Report Filters */
+.report-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1rem;
+	padding: 1.5rem;
+	background: #f8f9fa;
+	border-radius: 8px;
+	margin-bottom: 1.5rem;
+	align-items: flex-end;
+}
+
+.filter-group {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	flex: 1;
+	min-width: 150px;
+}
+
+.filter-group label {
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: #333;
+}
+
+.filter-input,
+.filter-select {
+	padding: 0.75rem;
+	border: 2px solid #e0e0e0;
+	border-radius: 8px;
+	font-size: 0.95rem;
+	font-family: inherit;
+	transition: border-color 0.3s ease;
+	background: white;
+}
+
+.filter-input::placeholder {
+	font-size: 0.85rem;
+	color: #999;
+	opacity: 1;
+}
+
+.filter-input:focus,
+.filter-select:focus {
+	outline: none;
+	border-color: var(--primary);
+}
+
+.clear-filters-btn {
+	padding: 0.75rem 1.5rem;
+	background: #6c757d;
+	color: white;
+	border: none;
+	border-radius: 8px;
+	font-weight: 600;
+	font-size: 0.95rem;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	white-space: nowrap;
+	height: fit-content;
+}
+
+.clear-filters-btn:hover {
+	background: #5a6268;
+	transform: translateY(-2px);
+	box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
+}
+
 .reports-info {
 	background: white;
 	border-radius: 12px;
@@ -2300,6 +2588,80 @@
 		flex: 1;
 		min-width: calc(33.333% - 0.5rem);
 		justify-content: center;
+	}
+
+	/* Report Tabs Responsive */
+	.report-tabs {
+		gap: 0.5rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.report-tab {
+		padding: 0.75rem 1rem;
+		font-size: 0.9rem;
+		flex: 1;
+		min-width: calc(25% - 0.5rem);
+	}
+
+	.report-tab-content {
+		padding: 1.5rem;
+	}
+
+	.report-tab-header h3 {
+		font-size: 1.3rem;
+	}
+
+	.report-stats-summary {
+		gap: 1rem;
+		padding: 1rem;
+	}
+
+	.stat-summary {
+		min-width: 100%;
+		padding: 0.75rem 1rem;
+	}
+
+	.stat-summary .stat-value {
+		font-size: 1.5rem;
+	}
+
+	.stat-summary .stat-label {
+		font-size: 0.8rem;
+	}
+
+	.report-table-wrapper {
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.report-table {
+		min-width: 600px;
+		font-size: 0.85rem;
+	}
+
+	.report-table th,
+	.report-table td {
+		padding: 0.75rem 0.5rem;
+	}
+
+	.generate-report-btn {
+		width: 100%;
+		margin-top: 1rem;
+	}
+
+	/* Report Filters Responsive */
+	.report-filters {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.filter-group {
+		min-width: 100%;
+	}
+
+	.clear-filters-btn {
+		width: 100%;
+		margin-top: 0.5rem;
 	}
 
 	.subtab-icon {

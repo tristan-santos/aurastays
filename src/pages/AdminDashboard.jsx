@@ -1,5 +1,5 @@
 import { useAuth } from "../contexts/AuthContext"
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import { auth, db } from "../components/firebaseConfig"
 import {
@@ -109,6 +109,34 @@ const AdminDashboard = () => {
 	})
 	const [activeTab, setActiveTab] = useState("dashboard")
 	const [activePolicySubTab, setActivePolicySubTab] = useState("policies")
+	const [activeReportTab, setActiveReportTab] = useState("users")
+	const [allUsersData, setAllUsersData] = useState([])
+	const [allPropertiesData, setAllPropertiesData] = useState([])
+	const [allBookingsData, setAllBookingsData] = useState([])
+	
+	// Filter states for each report tab
+	const [userFilters, setUserFilters] = useState({
+		search: "",
+		userType: "all", // all, host, guest, admin
+	})
+	const [propertyFilters, setPropertyFilters] = useState({
+		search: "",
+		category: "all",
+		minRating: "",
+		maxRating: "",
+	})
+	const [bookingFilters, setBookingFilters] = useState({
+		search: "",
+		status: "all", // all, pending, confirmed, completed, cancelled
+		minAmount: "",
+		maxAmount: "",
+	})
+	const [revenueFilters, setRevenueFilters] = useState({
+		search: "",
+		status: "all",
+		minAmount: "",
+		maxAmount: "",
+	})
 	const [policies, setPolicies] = useState({
 		serviceFeeHost: 15, // percentage
 		serviceFeeGuest: 800, // fixed amount in pesos
@@ -253,6 +281,8 @@ const AdminDashboard = () => {
 				return dateB - dateA
 			})
 			setRecentUsers(sortedUsers.slice(0, 10))
+			// Store all users data for reports table
+			setAllUsersData(allUsers)
 
 			// Process properties with defaults
 			const allProperties = propertiesSnapshot.docs.map((doc) => ({
@@ -272,6 +302,8 @@ const AdminDashboard = () => {
 				setBestReviews([])
 				setLowestReviews([])
 			}
+			// Store all properties data for reports table
+			setAllPropertiesData(allProperties)
 
 			// Process bookings with defaults
 			const allBookings = bookingsSnapshot.docs.map((doc) => ({
@@ -343,6 +375,8 @@ const AdminDashboard = () => {
 			
 			console.log("💰 Total Revenue Calculated:", totalRevenue)
 			setRecentBookings(allBookings.slice(0, 10))
+			// Store all bookings data for reports table
+			setAllBookingsData(allBookings)
 
 			// Process promos
 			const allPromos = promosSnapshot.docs.map((doc) => ({
@@ -1836,6 +1870,133 @@ const AdminDashboard = () => {
 		}
 	}
 
+	// Get unique categories for property filter
+	const uniqueCategories = useMemo(() => {
+		const categories = new Set()
+		allPropertiesData.forEach((property) => {
+			const cat = property.category || property.type
+			if (cat) categories.add(cat)
+		})
+		return Array.from(categories).sort()
+	}, [allPropertiesData])
+
+	// Filtered data using useMemo
+	const filteredUsersData = useMemo(() => {
+		let filtered = [...allUsersData]
+		
+		// Search filter
+		if (userFilters.search.trim()) {
+			const search = userFilters.search.toLowerCase()
+			filtered = filtered.filter(
+				(user) =>
+					(user.displayName || "").toLowerCase().includes(search) ||
+					(user.email || "").toLowerCase().includes(search)
+			)
+		}
+		
+		// User type filter
+		if (userFilters.userType !== "all") {
+			filtered = filtered.filter((user) => (user.userType || "guest") === userFilters.userType)
+		}
+		
+		return filtered
+	}, [allUsersData, userFilters])
+
+	const filteredPropertiesData = useMemo(() => {
+		let filtered = [...allPropertiesData]
+		
+		// Search filter
+		if (propertyFilters.search.trim()) {
+			const search = propertyFilters.search.toLowerCase()
+			filtered = filtered.filter(
+				(property) =>
+					(property.title || property.name || "").toLowerCase().includes(search) ||
+					(property.category || property.type || "").toLowerCase().includes(search)
+			)
+		}
+		
+		// Category filter
+		if (propertyFilters.category !== "all") {
+			filtered = filtered.filter(
+				(property) => (property.category || property.type || "") === propertyFilters.category
+			)
+		}
+		
+		// Rating filters
+		if (propertyFilters.minRating) {
+			const minRating = parseFloat(propertyFilters.minRating)
+			filtered = filtered.filter((property) => (property.rating || 0) >= minRating)
+		}
+		if (propertyFilters.maxRating) {
+			const maxRating = parseFloat(propertyFilters.maxRating)
+			filtered = filtered.filter((property) => (property.rating || 0) <= maxRating)
+		}
+		
+		return filtered
+	}, [allPropertiesData, propertyFilters])
+
+	const filteredBookingsData = useMemo(() => {
+		let filtered = [...allBookingsData]
+		
+		// Search filter
+		if (bookingFilters.search.trim()) {
+			const search = bookingFilters.search.toLowerCase()
+			filtered = filtered.filter(
+				(booking) =>
+					(booking.guestName || "").toLowerCase().includes(search) ||
+					(booking.propertyTitle || "").toLowerCase().includes(search)
+			)
+		}
+		
+		// Status filter
+		if (bookingFilters.status !== "all") {
+			filtered = filtered.filter((booking) => (booking.status || "pending") === bookingFilters.status)
+		}
+		
+		// Amount filters
+		if (bookingFilters.minAmount) {
+			const minAmount = parseFloat(bookingFilters.minAmount)
+			filtered = filtered.filter((booking) => (booking.pricing?.total || 0) >= minAmount)
+		}
+		if (bookingFilters.maxAmount) {
+			const maxAmount = parseFloat(bookingFilters.maxAmount)
+			filtered = filtered.filter((booking) => (booking.pricing?.total || 0) <= maxAmount)
+		}
+		
+		return filtered
+	}, [allBookingsData, bookingFilters])
+
+	const filteredRevenueData = useMemo(() => {
+		let filtered = allBookingsData.filter(b => b.status !== "cancelled" && b.status !== "pending")
+		
+		// Search filter
+		if (revenueFilters.search.trim()) {
+			const search = revenueFilters.search.toLowerCase()
+			filtered = filtered.filter(
+				(booking) =>
+					(booking.guestName || "").toLowerCase().includes(search) ||
+					(booking.propertyTitle || "").toLowerCase().includes(search)
+			)
+		}
+		
+		// Status filter
+		if (revenueFilters.status !== "all") {
+			filtered = filtered.filter((booking) => (booking.status || "pending") === revenueFilters.status)
+		}
+		
+		// Amount filters
+		if (revenueFilters.minAmount) {
+			const minAmount = parseFloat(revenueFilters.minAmount)
+			filtered = filtered.filter((booking) => (booking.pricing?.total || 0) >= minAmount)
+		}
+		if (revenueFilters.maxAmount) {
+			const maxAmount = parseFloat(revenueFilters.maxAmount)
+			filtered = filtered.filter((booking) => (booking.pricing?.total || 0) <= maxAmount)
+		}
+		
+		return filtered
+	}, [allBookingsData, revenueFilters])
+
 	const openReportModal = async (reportType) => {
 		let reportData = {}
 		let reportTitle = ""
@@ -1844,14 +2005,18 @@ const AdminDashboard = () => {
 			switch (reportType) {
 				case "users":
 					reportTitle = "Users_Report"
+					// Use filtered data if filters are applied, otherwise use all data
+					const usersToExport = userFilters.search || userFilters.userType !== "all" 
+						? filteredUsersData 
+						: allUsersData
 					reportData = {
 						generatedAt: new Date().toISOString(),
 						summary: {
-							totalUsers: stats.totalUsers,
-							totalHosts: stats.totalHosts,
-							totalGuests: stats.totalGuests,
+							totalUsers: usersToExport.length,
+							totalHosts: usersToExport.filter(u => u.userType === "host").length,
+							totalGuests: usersToExport.filter(u => u.userType === "guest").length,
 						},
-						recentUsers: recentUsers.map((u) => ({
+						recentUsers: usersToExport.map((u) => ({
 							name: u.displayName || "N/A",
 							email: u.email || "N/A",
 							userType: u.userType || "N/A",
@@ -1861,54 +2026,14 @@ const AdminDashboard = () => {
 					break
 
 				case "properties": {
-					// Fetch fresh data from Firebase
-					const propertiesSnapshot = await getDocs(collection(db, "properties"))
-					let allPropertiesData = propertiesSnapshot.docs.map((doc) => ({
-						id: doc.id,
-						...doc.data(),
-					}))
-
-					// Dynamically calculate reviews count and rating for each property
-					allPropertiesData = await Promise.all(
-						allPropertiesData.map(async (property) => {
-							try {
-								const reviewsQuery = query(
-									collection(db, "reviews"),
-									where("propertyId", "==", property.id),
-									where("status", "==", "approved")
-								)
-								const reviewsSnapshot = await getDocs(reviewsQuery)
-								const reviews = reviewsSnapshot.docs.map((doc) => doc.data())
-								
-								if (reviews.length > 0) {
-									const totalRating = reviews.reduce(
-										(sum, review) => sum + (review.rating || 0),
-										0
-									)
-									const averageRating = totalRating / reviews.length
-									return {
-										...property,
-										rating: Math.round(averageRating * 10) / 10,
-										reviewsCount: reviews.length,
-									}
-								} else {
-									return {
-										...property,
-										rating: 0,
-										reviewsCount: 0,
-									}
-								}
-							} catch (error) {
-								console.error(`Error fetching reviews for property ${property.id}:`, error)
-								return property
-							}
-						})
-					)
-
-					console.log("All Properties Fresh Data:", allPropertiesData)
+					// Use filtered data if filters are applied, otherwise use all data
+					const propertiesToExport = propertyFilters.search || propertyFilters.category !== "all" || propertyFilters.minRating || propertyFilters.maxRating
+						? filteredPropertiesData 
+						: allPropertiesData
+					
 					reportTitle = "Properties_Report"
 
-					const allPropertiesMapped = allPropertiesData.map((p) => ({
+					const allPropertiesMapped = propertiesToExport.map((p) => ({
 						title: p.title || p.name || "Untitled",
 						rating: p.rating || 0,
 						reviews: p.reviewsCount || p.reviews || 0,
@@ -1918,24 +2043,23 @@ const AdminDashboard = () => {
 							(typeof p.host === "object" ? p.host?.hostName : p.host) ||
 							"N/A",
 					}))
-					console.log("Mapped All Properties:", allPropertiesMapped)
 
 					// Sort by rating for bestReviews and lowestReviews
-					const sortedByRating = [...allPropertiesData].sort((a, b) => (b.rating || 0) - (a.rating || 0))
+					const sortedByRating = [...propertiesToExport].sort((a, b) => (b.rating || 0) - (a.rating || 0))
 					const bestReviews = sortedByRating.filter(p => (p.rating || 0) > 0)
 					const lowestReviews = [...sortedByRating].reverse().filter(p => (p.rating || 0) > 0)
 
 					reportData = {
 						generatedAt: new Date().toISOString(),
 						summary: {
-							totalProperties: allPropertiesData.length,
+							totalProperties: propertiesToExport.length,
 							avgRating:
-								allPropertiesData.length > 0
+								propertiesToExport.length > 0
 									? (
-											allPropertiesData.reduce(
+											propertiesToExport.reduce(
 												(sum, p) => sum + (p.rating || 0),
 												0
-											) / allPropertiesData.length
+											) / propertiesToExport.length
 									  ).toFixed(2)
 									: 0,
 						},
@@ -1953,47 +2077,88 @@ const AdminDashboard = () => {
 						})),
 						allProperties: allPropertiesMapped,
 					}
-					console.log("Properties Report Data:", reportData)
 					break
 				}
 
 				case "bookings":
 					reportTitle = "Bookings_Report"
+					// Use filtered data if filters are applied, otherwise use all data
+					const bookingsToExport = bookingFilters.search || bookingFilters.status !== "all" || bookingFilters.minAmount || bookingFilters.maxAmount
+						? filteredBookingsData 
+						: allBookingsData
+					
+					const bookingsTotalRevenue = bookingsToExport.reduce((sum, b) => sum + (b.pricing?.total || 0), 0)
+					
 					reportData = {
 						generatedAt: new Date().toISOString(),
 						summary: {
-							totalBookings: stats.totalBookings,
-							totalRevenue: stats.totalRevenue,
+							totalBookings: bookingsToExport.length,
+							totalRevenue: bookingsTotalRevenue,
 							avgBookingValue:
-								stats.totalBookings > 0
-									? (stats.totalRevenue / stats.totalBookings).toFixed(2)
+								bookingsToExport.length > 0
+									? (bookingsTotalRevenue / bookingsToExport.length).toFixed(2)
 									: 0,
 						},
-						recentBookings: recentBookings.map((b) => ({
-							guest: b.guestName || "N/A",
-							property: b.propertyTitle || "N/A",
-							checkIn: b.checkIn || "N/A",
-							status: b.status || "pending",
-							amount: b.pricing?.total || 0,
-						})),
+						recentBookings: bookingsToExport.map((b) => {
+							// Helper function to format date
+							const formatDate = (dateField) => {
+								if (!dateField) return "N/A"
+								if (dateField.toDate && typeof dateField.toDate === "function") {
+									return dateField.toDate().toLocaleDateString()
+								}
+								if (typeof dateField === "string") {
+									return dateField
+								}
+								if (dateField instanceof Date) {
+									return dateField.toLocaleDateString()
+								}
+								try {
+									const date = new Date(dateField)
+									if (!isNaN(date.getTime())) {
+										return date.toLocaleDateString()
+									}
+								} catch (e) {
+									// Ignore
+								}
+								return "N/A"
+							}
+							
+							const checkIn = b.checkInDate || b.checkIn
+							const checkOut = b.checkOutDate || b.checkOut
+							
+							return {
+								guest: b.guestName || "N/A",
+								property: b.propertyTitle || "N/A",
+								checkIn: formatDate(checkIn),
+								checkOut: formatDate(checkOut),
+								status: b.status || "pending",
+								amount: b.pricing?.total || 0,
+							}
+						}),
 					}
 					break
 
 				case "revenue": {
 					reportTitle = "Revenue_Report"
-					const hostFees = stats.totalRevenue * (policies.serviceFeeHost / 100)
-					const guestFees =
-						stats.totalRevenue * (policies.serviceFeeGuest / 100)
+					// Use filtered data if filters are applied, otherwise use all data
+					const revenueToExport = revenueFilters.search || revenueFilters.status !== "all" || revenueFilters.minAmount || revenueFilters.maxAmount
+						? filteredRevenueData 
+						: allBookingsData.filter(b => b.status !== "cancelled" && b.status !== "pending")
+					
+					const revenueTotal = revenueToExport.reduce((sum, b) => sum + (b.pricing?.total || 0), 0)
+					const hostFees = revenueTotal * (policies.serviceFeeHost / 100)
+					const guestFees = revenueToExport.length * policies.serviceFeeGuest // Fixed fee per booking
+					const totalServiceFees = hostFees + guestFees
+					const netRevenue = revenueTotal - totalServiceFees
+					
 					reportData = {
 						generatedAt: new Date().toISOString(),
 						summary: {
-							totalRevenue: stats.totalRevenue,
+							totalRevenue: revenueTotal,
 							hostServiceFees: hostFees.toFixed(2),
 							guestServiceFees: guestFees.toFixed(2),
-							totalServiceFees: (hostFees + guestFees).toFixed(2),
-							netRevenue: (stats.totalRevenue - hostFees - guestFees).toFixed(
-								2
-							),
+							totalServiceFees: totalServiceFees.toFixed(2),
+							netRevenue: netRevenue.toFixed(2),
 						},
 						chartData: chartData.revenue,
 					}
@@ -3873,164 +4038,568 @@ const AdminDashboard = () => {
 							<p>Export comprehensive reports in JSON and CSV formats</p>
 						</div>
 
-						<div className="reports-grid">
-							{/* Users Report */}
-							<div className="report-card">
-								<div className="report-icon">👥</div>
-								<h3>Users Report</h3>
-								<p>
-									Complete user data including registration dates, user types,
-									and activity
-								</p>
-								<div className="report-stats">
-									<div className="stat">
-										<span className="stat-value">{stats.totalUsers}</span>
-										<span className="stat-label">Total Users</span>
-									</div>
-									<div className="stat">
-										<span className="stat-value">{stats.totalHosts}</span>
-										<span className="stat-label">Hosts</span>
-									</div>
-									<div className="stat">
-										<span className="stat-value">{stats.totalGuests}</span>
-										<span className="stat-label">Guests</span>
-									</div>
-								</div>
-								<button
-									className="generate-report-btn"
-									onClick={() => openReportModal("users")}
-								>
-									📊 Generate Users Report
-								</button>
-							</div>
-
-							{/* Properties Report */}
-							<div className="report-card">
-								<div className="report-icon">🏠</div>
-								<h3>Properties Report</h3>
-								<p>
-									Detailed property listings with ratings, reviews, and
-									performance metrics
-								</p>
-								<div className="report-stats">
-									<div className="stat">
-										<span className="stat-value">{stats.totalProperties}</span>
-										<span className="stat-label">Total Properties</span>
-									</div>
-									<div className="stat">
-										<span className="stat-value">
-											{bestReviews.length > 0
-												? (
-														bestReviews.reduce(
-															(sum, p) => sum + (p.rating || 0),
-															0
-														) / bestReviews.length
-												  ).toFixed(1)
-												: "0.0"}
-										</span>
-										<span className="stat-label">Avg Rating</span>
-									</div>
-								</div>
-								<button
-									className="generate-report-btn"
-									onClick={() => openReportModal("properties")}
-								>
-									📊 Generate Properties Report
-								</button>
-							</div>
-
-							{/* Bookings Report */}
-							<div className="report-card">
-								<div className="report-icon">📅</div>
-								<h3>Bookings Report</h3>
-								<p>
-									Complete booking history with guest info, dates, status, and
-									amounts
-								</p>
-								<div className="report-stats">
-									<div className="stat">
-										<span className="stat-value">{stats.totalBookings}</span>
-										<span className="stat-label">Total Bookings</span>
-									</div>
-									<div className="stat">
-										<span className="stat-value">
-											₱
-											{stats.totalBookings > 0
-												? Math.round(
-														stats.totalRevenue / stats.totalBookings
-												  ).toLocaleString()
-												: "0"}
-										</span>
-										<span className="stat-label">Avg Value</span>
-									</div>
-								</div>
-								<button
-									className="generate-report-btn"
-									onClick={() => openReportModal("bookings")}
-								>
-									📊 Generate Bookings Report
-								</button>
-							</div>
-
-							{/* Revenue Report */}
-							<div className="report-card">
-								<div className="report-icon">💰</div>
-								<h3>Revenue Report</h3>
-								<p>
-									Financial overview with revenue trends, service fees, and
-									earnings breakdown
-								</p>
-								<div className="report-stats">
-									<div className="stat">
-										<span className="stat-value">
-											₱{stats.totalRevenue.toLocaleString()}
-										</span>
-										<span className="stat-label">Total Revenue</span>
-									</div>
-									<div className="stat">
-										<span className="stat-value">
-											₱
-											{(
-												stats.totalRevenue *
-												((policies.serviceFeeHost + policies.serviceFeeGuest) /
-													100)
-											)
-												.toFixed(0)
-												.toLocaleString()}
-										</span>
-										<span className="stat-label">Service Fees</span>
-									</div>
-								</div>
-								<button
-									className="generate-report-btn"
-									onClick={() => openReportModal("revenue")}
-								>
-									📊 Generate Revenue Report
-								</button>
-							</div>
-
-
-							{/* All Reports Combined */}
-							<div className="report-card featured">
-								<div className="report-icon">📑</div>
-								<h3>Complete System Report</h3>
-								<p>
-									Generate all reports at once for comprehensive platform
-									overview
-								</p>
-								<div className="report-stats full-width">
-									<p className="export-format-description">
-										Includes users, properties, bookings, and revenue data in both JSON and CSV formats
-									</p>
-								</div>
-								<button
-									className="generate-report-btn primary"
-									onClick={() => openReportModal("complete")}
-								>
-									📊 Generate Complete System Report
-								</button>
-							</div>
+						{/* Report Tabs */}
+						<div className="report-tabs">
+							<button
+								className={`report-tab ${activeReportTab === "users" ? "active" : ""}`}
+								onClick={() => setActiveReportTab("users")}
+							>
+								👥 Users
+							</button>
+							<button
+								className={`report-tab ${activeReportTab === "properties" ? "active" : ""}`}
+								onClick={() => setActiveReportTab("properties")}
+							>
+								🏠 Properties
+							</button>
+							<button
+								className={`report-tab ${activeReportTab === "bookings" ? "active" : ""}`}
+								onClick={() => setActiveReportTab("bookings")}
+							>
+								📅 Bookings
+							</button>
+							<button
+								className={`report-tab ${activeReportTab === "revenue" ? "active" : ""}`}
+								onClick={() => setActiveReportTab("revenue")}
+							>
+								💰 Revenue
+							</button>
 						</div>
+
+						{/* Users Tab Content */}
+						{activeReportTab === "users" && (
+							<div className="report-tab-content">
+								<div className="report-tab-header">
+									<h3>👥 Users Report</h3>
+									<p>Complete user data including registration dates, user types, and activity</p>
+									<div className="report-stats-summary">
+										<div className="stat-summary">
+											<span className="stat-value">{filteredUsersData.length}</span>
+											<span className="stat-label">Filtered Users</span>
+										</div>
+										<div className="stat-summary">
+											<span className="stat-value">{filteredUsersData.filter(u => u.userType === "host").length}</span>
+											<span className="stat-label">Hosts</span>
+										</div>
+										<div className="stat-summary">
+											<span className="stat-value">{filteredUsersData.filter(u => u.userType === "guest").length}</span>
+											<span className="stat-label">Guests</span>
+										</div>
+									</div>
+									<button
+										className="generate-report-btn"
+										onClick={() => openReportModal("users")}
+									>
+										📊 Export Users Report
+									</button>
+								</div>
+								
+								{/* Users Filter */}
+								<div className="report-filters">
+									<div className="filter-group">
+										<label>Search</label>
+										<input
+											type="text"
+											placeholder="Search by name or email..."
+											value={userFilters.search}
+											onChange={(e) => setUserFilters({ ...userFilters, search: e.target.value })}
+											className="filter-input"
+										/>
+									</div>
+									<div className="filter-group">
+										<label>User Type</label>
+										<select
+											value={userFilters.userType}
+											onChange={(e) => setUserFilters({ ...userFilters, userType: e.target.value })}
+											className="filter-select"
+										>
+											<option value="all">All Types</option>
+											<option value="host">Host</option>
+											<option value="guest">Guest</option>
+											<option value="admin">Admin</option>
+										</select>
+									</div>
+									<button
+										className="clear-filters-btn"
+										onClick={() => setUserFilters({ search: "", userType: "all" })}
+									>
+										Clear Filters
+									</button>
+								</div>
+
+								<div className="report-table-wrapper">
+									<table className="report-table">
+										<thead>
+											<tr>
+												<th>Name</th>
+												<th>Email</th>
+												<th>User Type</th>
+												<th>Registration Date</th>
+											</tr>
+										</thead>
+										<tbody>
+											{filteredUsersData.length === 0 ? (
+												<tr>
+													<td colSpan="4" className="empty-state">No users found</td>
+												</tr>
+											) : (
+												filteredUsersData.map((user) => (
+													<tr key={user.id}>
+														<td>{user.displayName || "N/A"}</td>
+														<td>{user.email || "N/A"}</td>
+														<td>
+															<span className={`user-type-badge ${user.userType || "guest"}`}>
+																{user.userType || "guest"}
+															</span>
+														</td>
+														<td>
+															{user.createdAt?.toDate?.()?.toLocaleDateString() || "N/A"}
+														</td>
+													</tr>
+												))
+											)}
+										</tbody>
+									</table>
+								</div>
+							</div>
+						)}
+
+						{/* Properties Tab Content */}
+						{activeReportTab === "properties" && (
+							<div className="report-tab-content">
+								<div className="report-tab-header">
+									<h3>🏠 Properties Report</h3>
+									<p>Detailed property listings with ratings, reviews, and performance metrics</p>
+									<div className="report-stats-summary">
+										<div className="stat-summary">
+											<span className="stat-value">{filteredPropertiesData.length}</span>
+											<span className="stat-label">Filtered Properties</span>
+										</div>
+										<div className="stat-summary">
+											<span className="stat-value">
+												{filteredPropertiesData.length > 0
+													? (
+															filteredPropertiesData.reduce(
+																(sum, p) => sum + (p.rating || 0),
+																0
+															) / filteredPropertiesData.length
+													  ).toFixed(1)
+													: "0.0"}
+											</span>
+											<span className="stat-label">Avg Rating</span>
+										</div>
+									</div>
+									<button
+										className="generate-report-btn"
+										onClick={() => openReportModal("properties")}
+									>
+										📊 Export Properties Report
+									</button>
+								</div>
+								
+								{/* Properties Filter */}
+								<div className="report-filters">
+									<div className="filter-group">
+										<label>Search</label>
+										<input
+											type="text"
+											placeholder="Search by title or category..."
+											value={propertyFilters.search}
+											onChange={(e) => setPropertyFilters({ ...propertyFilters, search: e.target.value })}
+											className="filter-input"
+										/>
+									</div>
+									<div className="filter-group">
+										<label>Category</label>
+										<select
+											value={propertyFilters.category}
+											onChange={(e) => setPropertyFilters({ ...propertyFilters, category: e.target.value })}
+											className="filter-select"
+										>
+											<option value="all">All Categories</option>
+											{uniqueCategories.map((cat) => (
+												<option key={cat} value={cat}>
+													{cat.charAt(0).toUpperCase() + cat.slice(1)}
+												</option>
+											))}
+										</select>
+									</div>
+									<div className="filter-group">
+										<label>Min Rating</label>
+										<input
+											type="number"
+											placeholder="0.0"
+											min="0"
+											max="5"
+											step="0.1"
+											value={propertyFilters.minRating}
+											onChange={(e) => setPropertyFilters({ ...propertyFilters, minRating: e.target.value })}
+											className="filter-input"
+										/>
+									</div>
+									<div className="filter-group">
+										<label>Max Rating</label>
+										<input
+											type="number"
+											placeholder="5.0"
+											min="0"
+											max="5"
+											step="0.1"
+											value={propertyFilters.maxRating}
+											onChange={(e) => setPropertyFilters({ ...propertyFilters, maxRating: e.target.value })}
+											className="filter-input"
+										/>
+									</div>
+									<button
+										className="clear-filters-btn"
+										onClick={() => setPropertyFilters({ search: "", category: "all", minRating: "", maxRating: "" })}
+									>
+										Clear Filters
+									</button>
+								</div>
+
+								<div className="report-table-wrapper">
+									<table className="report-table">
+										<thead>
+											<tr>
+												<th>Title</th>
+												<th>Category</th>
+												<th>Rating</th>
+												<th>Reviews</th>
+												<th>Price</th>
+											</tr>
+										</thead>
+										<tbody>
+											{filteredPropertiesData.length === 0 ? (
+												<tr>
+													<td colSpan="5" className="empty-state">No properties found</td>
+												</tr>
+											) : (
+												filteredPropertiesData.map((property) => (
+													<tr key={property.id}>
+														<td>{property.title || property.name || "Untitled"}</td>
+														<td>{property.category || property.type || "N/A"}</td>
+														<td>
+															<span className="rating-badge">
+																⭐ {property.rating?.toFixed(1) || "0.0"}
+															</span>
+														</td>
+														<td>{property.reviewsCount || property.reviews || 0}</td>
+														<td>₱{(property.price || property.basePrice || 0).toLocaleString()}</td>
+													</tr>
+												))
+											)}
+										</tbody>
+									</table>
+								</div>
+							</div>
+						)}
+
+						{/* Bookings Tab Content */}
+						{activeReportTab === "bookings" && (
+							<div className="report-tab-content">
+								<div className="report-tab-header">
+									<h3>📅 Bookings Report</h3>
+									<p>Complete booking history with guest info, dates, status, and amounts</p>
+									<div className="report-stats-summary">
+										<div className="stat-summary">
+											<span className="stat-value">{filteredBookingsData.length}</span>
+											<span className="stat-label">Filtered Bookings</span>
+										</div>
+										<div className="stat-summary">
+											<span className="stat-value">
+												₱
+												{filteredBookingsData.length > 0
+													? Math.round(
+															filteredBookingsData.reduce((sum, b) => sum + (b.pricing?.total || 0), 0) / filteredBookingsData.length
+													  ).toLocaleString()
+													: "0"}
+											</span>
+											<span className="stat-label">Avg Value</span>
+										</div>
+									</div>
+									<button
+										className="generate-report-btn"
+										onClick={() => openReportModal("bookings")}
+									>
+										📊 Export Bookings Report
+									</button>
+								</div>
+								
+								{/* Bookings Filter */}
+								<div className="report-filters">
+									<div className="filter-group">
+										<label>Search</label>
+										<input
+											type="text"
+											placeholder="Search by guest or property..."
+											value={bookingFilters.search}
+											onChange={(e) => setBookingFilters({ ...bookingFilters, search: e.target.value })}
+											className="filter-input"
+										/>
+									</div>
+									<div className="filter-group">
+										<label>Status</label>
+										<select
+											value={bookingFilters.status}
+											onChange={(e) => setBookingFilters({ ...bookingFilters, status: e.target.value })}
+											className="filter-select"
+										>
+											<option value="all">All Status</option>
+											<option value="pending">Pending</option>
+											<option value="confirmed">Confirmed</option>
+											<option value="completed">Completed</option>
+											<option value="cancelled">Cancelled</option>
+										</select>
+									</div>
+									<div className="filter-group">
+										<label>Min Amount (₱)</label>
+										<input
+											type="number"
+											placeholder="0"
+											min="0"
+											value={bookingFilters.minAmount}
+											onChange={(e) => setBookingFilters({ ...bookingFilters, minAmount: e.target.value })}
+											className="filter-input"
+										/>
+									</div>
+									<div className="filter-group">
+										<label>Max Amount (₱)</label>
+										<input
+											type="number"
+											placeholder="No limit"
+											min="0"
+											value={bookingFilters.maxAmount}
+											onChange={(e) => setBookingFilters({ ...bookingFilters, maxAmount: e.target.value })}
+											className="filter-input"
+										/>
+									</div>
+									<button
+										className="clear-filters-btn"
+										onClick={() => setBookingFilters({ search: "", status: "all", minAmount: "", maxAmount: "" })}
+									>
+										Clear Filters
+									</button>
+								</div>
+
+								<div className="report-table-wrapper">
+									<table className="report-table">
+										<thead>
+											<tr>
+												<th>Guest</th>
+												<th>Property</th>
+												<th>Check In</th>
+												<th>Check Out</th>
+												<th>Status</th>
+												<th>Amount</th>
+											</tr>
+										</thead>
+										<tbody>
+											{filteredBookingsData.length === 0 ? (
+												<tr>
+													<td colSpan="6" className="empty-state">No bookings found</td>
+												</tr>
+											) : (
+												filteredBookingsData.map((booking) => {
+													// Helper function to format date - check multiple possible field names
+													const formatDate = (dateField) => {
+														if (!dateField) return "N/A"
+														
+														// If it's a Firestore timestamp
+														if (dateField.toDate && typeof dateField.toDate === "function") {
+															return dateField.toDate().toLocaleDateString()
+														}
+														
+														// If it's already a string
+														if (typeof dateField === "string") {
+															return dateField
+														}
+														
+														// If it's a Date object
+														if (dateField instanceof Date) {
+															return dateField.toLocaleDateString()
+														}
+														
+														// Try to parse as date
+														try {
+															const date = new Date(dateField)
+															if (!isNaN(date.getTime())) {
+																return date.toLocaleDateString()
+															}
+														} catch (e) {
+															// Ignore
+														}
+														
+														return "N/A"
+													}
+													
+													// Check for checkInDate or checkIn
+													const checkIn = booking.checkInDate || booking.checkIn
+													// Check for checkOutDate or checkOut
+													const checkOut = booking.checkOutDate || booking.checkOut
+													
+													return (
+														<tr key={booking.id}>
+															<td>{booking.guestName || "N/A"}</td>
+															<td>{booking.propertyTitle || "N/A"}</td>
+															<td>{formatDate(checkIn)}</td>
+															<td>{formatDate(checkOut)}</td>
+															<td>
+																<span className={`booking-status ${booking.status || "pending"}`}>
+																	{booking.status || "pending"}
+																</span>
+															</td>
+															<td>₱{(booking.pricing?.total || 0).toLocaleString()}</td>
+														</tr>
+													)
+												})
+											)}
+										</tbody>
+									</table>
+								</div>
+							</div>
+						)}
+
+						{/* Revenue Tab Content */}
+						{activeReportTab === "revenue" && (
+							<div className="report-tab-content">
+								<div className="report-tab-header">
+									<h3>💰 Revenue Report</h3>
+									<p>Financial overview with revenue trends, service fees, and earnings breakdown</p>
+									<div className="report-stats-summary">
+										<div className="stat-summary">
+											<span className="stat-value">
+												₱{filteredRevenueData.reduce((sum, b) => sum + (b.pricing?.total || 0), 0).toLocaleString()}
+											</span>
+											<span className="stat-label">Filtered Revenue</span>
+										</div>
+										<div className="stat-summary">
+											<span className="stat-value">
+												₱
+												{filteredRevenueData.length > 0
+													? (
+															filteredRevenueData.reduce((sum, b) => {
+																const amount = b.pricing?.total || 0
+																const hostFee = amount * (policies.serviceFeeHost / 100)
+																const guestFee = policies.serviceFeeGuest
+																return sum + hostFee + guestFee
+															}, 0)
+													  ).toFixed(0).toLocaleString()
+													: "0"}
+											</span>
+											<span className="stat-label">Service Fees</span>
+										</div>
+									</div>
+									<button
+										className="generate-report-btn"
+										onClick={() => openReportModal("revenue")}
+									>
+										📊 Export Revenue Report
+									</button>
+								</div>
+								
+								{/* Revenue Filter */}
+								<div className="report-filters">
+									<div className="filter-group">
+										<label>Search</label>
+										<input
+											type="text"
+											placeholder="Search by guest or property..."
+											value={revenueFilters.search}
+											onChange={(e) => setRevenueFilters({ ...revenueFilters, search: e.target.value })}
+											className="filter-input"
+										/>
+									</div>
+									<div className="filter-group">
+										<label>Status</label>
+										<select
+											value={revenueFilters.status}
+											onChange={(e) => setRevenueFilters({ ...revenueFilters, status: e.target.value })}
+											className="filter-select"
+										>
+											<option value="all">All Status</option>
+											<option value="confirmed">Confirmed</option>
+											<option value="completed">Completed</option>
+										</select>
+									</div>
+									<div className="filter-group">
+										<label>Min Amount (₱)</label>
+										<input
+											type="number"
+											placeholder="0"
+											min="0"
+											value={revenueFilters.minAmount}
+											onChange={(e) => setRevenueFilters({ ...revenueFilters, minAmount: e.target.value })}
+											className="filter-input"
+										/>
+									</div>
+									<div className="filter-group">
+										<label>Max Amount (₱)</label>
+										<input
+											type="number"
+											placeholder="No limit"
+											min="0"
+											value={revenueFilters.maxAmount}
+											onChange={(e) => setRevenueFilters({ ...revenueFilters, maxAmount: e.target.value })}
+											className="filter-input"
+										/>
+									</div>
+									<button
+										className="clear-filters-btn"
+										onClick={() => setRevenueFilters({ search: "", status: "all", minAmount: "", maxAmount: "" })}
+									>
+										Clear Filters
+									</button>
+								</div>
+
+								<div className="report-table-wrapper">
+									<table className="report-table">
+										<thead>
+											<tr>
+												<th>Booking ID</th>
+												<th>Guest</th>
+												<th>Property</th>
+												<th>Booking Amount</th>
+												<th>Service Fee</th>
+												<th>Net Revenue</th>
+												<th>Status</th>
+											</tr>
+										</thead>
+										<tbody>
+											{filteredRevenueData.length === 0 ? (
+												<tr>
+													<td colSpan="7" className="empty-state">No revenue data found</td>
+												</tr>
+											) : (
+												filteredRevenueData.map((booking) => {
+													const bookingAmount = booking.pricing?.total || 0
+													// serviceFeeHost is percentage, serviceFeeGuest is fixed amount
+													const hostServiceFee = bookingAmount * (policies.serviceFeeHost / 100)
+													const guestServiceFee = policies.serviceFeeGuest
+													const totalServiceFee = hostServiceFee + guestServiceFee
+													const netRevenue = bookingAmount - totalServiceFee
+													return (
+														<tr key={booking.id}>
+															<td>{booking.id.substring(0, 8)}...</td>
+															<td>{booking.guestName || "N/A"}</td>
+															<td>{booking.propertyTitle || "N/A"}</td>
+															<td>₱{bookingAmount.toLocaleString()}</td>
+															<td>₱{totalServiceFee.toFixed(2).toLocaleString()}</td>
+															<td>₱{netRevenue.toFixed(2).toLocaleString()}</td>
+															<td>
+																<span className={`booking-status ${booking.status || "pending"}`}>
+																	{booking.status || "pending"}
+																</span>
+															</td>
+														</tr>
+													)
+												})
+											)}
+										</tbody>
+									</table>
+								</div>
+							</div>
+						)}
 
 						<div className="reports-info">
 							<h3>ℹ️ Report Information</h3>
