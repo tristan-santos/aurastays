@@ -132,8 +132,10 @@ const AdminDashboard = () => {
 		maxAmount: "",
 	})
 	const [revenueFilters, setRevenueFilters] = useState({
-		search: "",
+		startDate: "",
+		endDate: "",
 		status: "all",
+		type: "all",
 		minAmount: "",
 		maxAmount: "",
 	})
@@ -194,6 +196,12 @@ const AdminDashboard = () => {
 	const [promoCalendarMonth, setPromoCalendarMonth] = useState(new Date())
 	const [selectingValidFrom, setSelectingValidFrom] = useState(true)
 	const [showPromoDatePicker, setShowPromoDatePicker] = useState(false)
+	
+	// Date range picker state for revenue filters
+	const [showRevenueDatePicker, setShowRevenueDatePicker] = useState(false)
+	const [tempDateRange, setTempDateRange] = useState({ startDate: "", endDate: "" })
+	const [revenueCalendarMonth, setRevenueCalendarMonth] = useState(new Date())
+	const [selectingStartDate, setSelectingStartDate] = useState(true)
 
 	useEffect(() => {
 		fetchAdminData()
@@ -228,7 +236,8 @@ const AdminDashboard = () => {
 			let usersSnapshot,
 				propertiesSnapshot,
 				bookingsSnapshot,
-				promosSnapshot
+				promosSnapshot,
+				subscriptionsSnapshot
 
 			try {
 				const results = await Promise.allSettled([
@@ -236,6 +245,7 @@ const AdminDashboard = () => {
 					getDocs(collection(db, "properties")),
 					getDocs(collection(db, "bookings")).catch(() => ({ docs: [] })),
 					getDocs(collection(db, "promos")).catch(() => ({ docs: [] })),
+					getDocs(collection(db, "subscriptions")).catch(() => ({ docs: [] })),
 				])
 
 				usersSnapshot =
@@ -246,6 +256,8 @@ const AdminDashboard = () => {
 					results[2].status === "fulfilled" ? results[2].value : { docs: [] }
 				promosSnapshot =
 					results[3].status === "fulfilled" ? results[3].value : { docs: [] }
+				subscriptionsSnapshot =
+					results[4].status === "fulfilled" ? results[4].value : { docs: [] }
 			} catch (err) {
 				console.error("Error fetching collections:", err)
 				// Set empty defaults
@@ -253,6 +265,7 @@ const AdminDashboard = () => {
 				propertiesSnapshot = { docs: [] }
 				bookingsSnapshot = { docs: [] }
 				promosSnapshot = { docs: [] }
+				subscriptionsSnapshot = { docs: [] }
 			}
 
 			// Process users with defaults
@@ -385,6 +398,22 @@ const AdminDashboard = () => {
 			}))
 			setPromos(allPromos)
 
+			// Process subscriptions
+			const allSubscriptions = subscriptionsSnapshot.docs.map((doc) => ({
+				id: doc.id,
+				...doc.data(),
+			}))
+			
+			// Filter active subscriptions for wallet tab
+			const activeSubscriptions = allSubscriptions.filter(
+				(sub) => sub.status === "active"
+			)
+			setSubscriptions(activeSubscriptions)
+			
+			// Calculate total subscription revenue from active subscriptions
+			const totalSubscriptionRevenue = activeSubscriptions.reduce((sum, sub) => sum + (sub.price || 0), 0)
+			setSubscriptionRevenue(totalSubscriptionRevenue)
+
 			setStats({
 				totalUsers: totalUsers || 0,
 				totalHosts: totalHosts || 0,
@@ -394,8 +423,8 @@ const AdminDashboard = () => {
 				totalRevenue: totalRevenue || 0,
 			})
 
-			// Prepare chart data
-			prepareChartData(allBookings, allProperties)
+			// Prepare chart data with all subscriptions (for revenue trend - includes all subscriptions regardless of status)
+			prepareChartData(allBookings, allProperties, allSubscriptions)
 		} catch (error) {
 			console.error("Error fetching admin data:", error)
 			toast.error("Some data failed to load, showing defaults")
@@ -420,7 +449,7 @@ const AdminDashboard = () => {
 		}
 	}
 
-	const prepareChartData = (bookings = [], properties = []) => {
+	const prepareChartData = (bookings = [], properties = [], subscriptionsData = []) => {
 		// Bookings trend (last 7 days)
 		const last7Days = [...Array(7)].map((_, i) => {
 			const date = new Date()
@@ -446,30 +475,57 @@ const AdminDashboard = () => {
 			)
 		})
 
-		// Revenue trend (last 7 days) - from completed and confirmed bookings (exclude cancelled/pending)
+		// Revenue trend (last 7 days) - includes bookings, service fees, guest fees, and subscriptions
 		const revenuePerDay = last7Days.map((day) => {
-			return (
-				bookings
-					.filter((booking) => {
-						// Exclude cancelled and pending
-						if (booking.status === "cancelled" || booking.status === "pending") {
-							return false
-						}
-						
-						const bookingDate = booking.createdAt?.toDate?.()
-						if (!bookingDate) return false
-						
-						// Include completed or confirmed bookings
-						return (
-							(booking.status === "completed" || booking.status === "confirmed") &&
-							bookingDate?.toLocaleDateString("en-US", {
-								month: "short",
-								day: "numeric",
-							}) === day
-						)
-					})
-					.reduce((sum, booking) => sum + (booking.pricing?.total || 0), 0) || 0
-			)
+			let dayRevenue = 0
+			
+			// Get bookings for this day
+			const dayBookings = bookings.filter((booking) => {
+				// Exclude cancelled and pending
+				if (booking.status === "cancelled" || booking.status === "pending") {
+					return false
+				}
+				
+				const bookingDate = booking.createdAt?.toDate?.()
+				if (!bookingDate) return false
+				
+				// Include completed or confirmed bookings
+				return (
+					(booking.status === "completed" || booking.status === "confirmed") &&
+					bookingDate?.toLocaleDateString("en-US", {
+						month: "short",
+						day: "numeric",
+					}) === day
+				)
+			})
+			
+			// Add booking revenue
+			dayRevenue += dayBookings.reduce((sum, booking) => sum + (booking.pricing?.total || 0), 0)
+			
+			// Add service fees (Guest Service Fee per booking)
+			dayRevenue += dayBookings.length * (policies.serviceFeeGuest || 0)
+			
+			// Add guest fees (Guest Fee Per Person × number of guests)
+			dayRevenue += dayBookings.reduce((sum, booking) => {
+				const numberOfGuests = booking.numberOfGuests || booking.guests || 1
+				return sum + ((policies.guestFeePerPerson || 0) * numberOfGuests)
+			}, 0)
+			
+			// Add subscription revenue for this day (include all subscriptions, not just active)
+			// A subscription payment counts as revenue on the date it was created/started
+			const daySubscriptions = subscriptionsData.filter((subscription) => {
+				const subDate = subscription.createdAt?.toDate?.() || subscription.createdAt || subscription.startDate?.toDate?.() || subscription.startDate || subscription.lastPaymentDate?.toDate?.() || subscription.lastPaymentDate
+				if (!subDate) return false
+				const subDateObj = subDate instanceof Date ? subDate : new Date(subDate)
+				const subDateString = subDateObj.toLocaleDateString("en-US", {
+					month: "short",
+					day: "numeric",
+				})
+				return subDateString === day
+			})
+			dayRevenue += daySubscriptions.reduce((sum, sub) => sum + (sub.price || 0), 0)
+			
+			return dayRevenue
 		})
 
 		// Property types distribution
@@ -1305,6 +1361,11 @@ const AdminDashboard = () => {
 					})
 
 					setSubscriptionRevenue(totalSubscriptionRevenue)
+					
+					// Update chart data with subscriptions
+					if (chartData.revenue) {
+						prepareChartData(allBookingsData, allPropertiesData, allSubscriptions)
+					}
 				} catch (error) {
 					console.error("[AdminDashboard][Wallet] Error fetching subscriptions:", error)
 					setSubscriptions([])
@@ -1583,6 +1644,74 @@ const AdminDashboard = () => {
 			month: "short",
 			day: "numeric",
 		})
+	}
+
+	// Revenue date range calendar functions
+	const generateRevenueCalendarDays = () => {
+		const year = revenueCalendarMonth.getFullYear()
+		const month = revenueCalendarMonth.getMonth()
+		const firstDay = new Date(year, month, 1).getDay()
+		const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+		const days = []
+		// Add empty cells for days before month starts
+		for (let i = 0; i < firstDay; i++) {
+			days.push(null)
+		}
+		// Add days of the month
+		for (let day = 1; day <= daysInMonth; day++) {
+			const dateString = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+			const date = new Date(dateString)
+			days.push({
+				day,
+				dateString,
+				isPast: false, // Allow selecting past dates for revenue reports
+			})
+		}
+		return days
+	}
+
+	const previousRevenueMonth = () => {
+		setRevenueCalendarMonth(
+			new Date(
+				revenueCalendarMonth.getFullYear(),
+				revenueCalendarMonth.getMonth() - 1
+			)
+		)
+	}
+
+	const nextRevenueMonth = () => {
+		setRevenueCalendarMonth(
+			new Date(
+				revenueCalendarMonth.getFullYear(),
+				revenueCalendarMonth.getMonth() + 1
+			)
+		)
+	}
+
+	const handleRevenueDateClick = (dateString) => {
+		if (selectingStartDate) {
+			setTempDateRange({ ...tempDateRange, startDate: dateString })
+			setSelectingStartDate(false)
+			// If endDate is before startDate, clear it
+			if (tempDateRange.endDate && new Date(tempDateRange.endDate) < new Date(dateString)) {
+				setTempDateRange({ ...tempDateRange, startDate: dateString, endDate: "" })
+			}
+		} else {
+			// Selecting end date
+			if (tempDateRange.startDate && new Date(dateString) < new Date(tempDateRange.startDate)) {
+				toast.error("End date must be after start date")
+				return
+			}
+			setTempDateRange({ ...tempDateRange, endDate: dateString })
+			setSelectingStartDate(true)
+		}
+	}
+
+	const openRevenueDatePicker = () => {
+		setTempDateRange({ startDate: revenueFilters.startDate, endDate: revenueFilters.endDate })
+		setSelectingStartDate(true)
+		setShowRevenueDatePicker(true)
 	}
 
 	const handleNextStep = () => {
@@ -1966,32 +2095,154 @@ const AdminDashboard = () => {
 		return filtered
 	}, [allBookingsData, bookingFilters])
 
+	// Create flat list of all revenue transactions
+	const revenueTransactions = useMemo(() => {
+		const transactions = []
+		
+		// Filter bookings
+		let filteredBookings = allBookingsData.filter(b => b.status !== "cancelled" && b.status !== "pending")
+		
+		// Status filter
+		if (revenueFilters.status !== "all") {
+			filteredBookings = filteredBookings.filter((booking) => (booking.status || "pending") === revenueFilters.status)
+		}
+		
+		// Date filters
+		if (revenueFilters.startDate) {
+			const startDate = new Date(revenueFilters.startDate)
+			startDate.setHours(0, 0, 0, 0)
+			filteredBookings = filteredBookings.filter((booking) => {
+				const bookingDate = booking.createdAt?.toDate ? booking.createdAt.toDate() : new Date(booking.createdAt || 0)
+				bookingDate.setHours(0, 0, 0, 0)
+				return bookingDate >= startDate
+			})
+		}
+		if (revenueFilters.endDate) {
+			const endDate = new Date(revenueFilters.endDate)
+			endDate.setHours(23, 59, 59, 999)
+			filteredBookings = filteredBookings.filter((booking) => {
+				const bookingDate = booking.createdAt?.toDate ? booking.createdAt.toDate() : new Date(booking.createdAt || 0)
+				return bookingDate <= endDate
+			})
+		}
+		
+		// Add booking transactions
+		filteredBookings.forEach((booking) => {
+			const bookingDate = booking.createdAt?.toDate ? booking.createdAt.toDate() : new Date(booking.createdAt || 0)
+			const dateKey = bookingDate.toISOString().split('T')[0]
+			const dateDisplay = bookingDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+			const bookingAmount = booking.pricing?.total || 0
+			
+			// Add booking revenue transaction
+			transactions.push({
+				date: dateKey,
+				dateDisplay: dateDisplay,
+				type: "Booking",
+				amount: bookingAmount,
+				bookingId: booking.id,
+				propertyTitle: booking.propertyTitle || "N/A"
+			})
+			
+			// Add service fee transaction
+			const guestServiceFee = policies.serviceFeeGuest
+			if (guestServiceFee > 0) {
+				transactions.push({
+					date: dateKey,
+					dateDisplay: dateDisplay,
+					type: "Service Fee",
+					amount: guestServiceFee,
+					bookingId: booking.id,
+					propertyTitle: booking.propertyTitle || "N/A"
+				})
+			}
+			
+			// Add guest fee per person transaction
+			const numberOfGuests = booking.numberOfGuests || booking.guests || 1
+			const guestFeePerPerson = policies.guestFeePerPerson * numberOfGuests
+			if (guestFeePerPerson > 0) {
+				transactions.push({
+					date: dateKey,
+					dateDisplay: dateDisplay,
+					type: "Guest Fee",
+					amount: guestFeePerPerson,
+					bookingId: booking.id,
+					propertyTitle: booking.propertyTitle || "N/A",
+					numberOfGuests: numberOfGuests
+				})
+			}
+		})
+		
+		// Add subscription transactions
+		subscriptions.forEach((subscription) => {
+			const subDate = subscription.createdAt?.toDate?.() || subscription.createdAt || subscription.startDate?.toDate?.() || subscription.startDate || new Date()
+			const dateKey = subDate.toISOString().split('T')[0]
+			const dateDisplay = subDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+			const price = subscription.price || 0
+			
+			// Apply date filters to subscriptions
+			if (revenueFilters.startDate) {
+				const startDate = new Date(revenueFilters.startDate)
+				startDate.setHours(0, 0, 0, 0)
+				if (subDate < startDate) return
+			}
+			if (revenueFilters.endDate) {
+				const endDate = new Date(revenueFilters.endDate)
+				endDate.setHours(23, 59, 59, 999)
+				if (subDate > endDate) return
+			}
+			
+			if (price > 0) {
+				transactions.push({
+					date: dateKey,
+					dateDisplay: dateDisplay,
+					type: "Subscription",
+					amount: price,
+					subscriptionId: subscription.id,
+					planName: subscription.planName || "N/A"
+				})
+			}
+		})
+		
+		// Type filter
+		let filteredTransactions = transactions
+		if (revenueFilters.type !== "all") {
+			filteredTransactions = transactions.filter((transaction) => transaction.type === revenueFilters.type)
+		}
+		
+		// Sort by date (newest first), then by type
+		return filteredTransactions.sort((a, b) => {
+			const dateCompare = new Date(b.date) - new Date(a.date)
+			if (dateCompare !== 0) return dateCompare
+			return a.type.localeCompare(b.type)
+		})
+	}, [allBookingsData, subscriptions, revenueFilters, policies])
+
+	// Keep filteredRevenueData for backward compatibility (used in stats calculations)
 	const filteredRevenueData = useMemo(() => {
 		let filtered = allBookingsData.filter(b => b.status !== "cancelled" && b.status !== "pending")
-		
-		// Search filter
-		if (revenueFilters.search.trim()) {
-			const search = revenueFilters.search.toLowerCase()
-			filtered = filtered.filter(
-				(booking) =>
-					(booking.guestName || "").toLowerCase().includes(search) ||
-					(booking.propertyTitle || "").toLowerCase().includes(search)
-			)
-		}
 		
 		// Status filter
 		if (revenueFilters.status !== "all") {
 			filtered = filtered.filter((booking) => (booking.status || "pending") === revenueFilters.status)
 		}
 		
-		// Amount filters
-		if (revenueFilters.minAmount) {
-			const minAmount = parseFloat(revenueFilters.minAmount)
-			filtered = filtered.filter((booking) => (booking.pricing?.total || 0) >= minAmount)
+		// Date filters
+		if (revenueFilters.startDate) {
+			const startDate = new Date(revenueFilters.startDate)
+			startDate.setHours(0, 0, 0, 0)
+			filtered = filtered.filter((booking) => {
+				const bookingDate = booking.createdAt?.toDate ? booking.createdAt.toDate() : new Date(booking.createdAt || 0)
+				bookingDate.setHours(0, 0, 0, 0)
+				return bookingDate >= startDate
+			})
 		}
-		if (revenueFilters.maxAmount) {
-			const maxAmount = parseFloat(revenueFilters.maxAmount)
-			filtered = filtered.filter((booking) => (booking.pricing?.total || 0) <= maxAmount)
+		if (revenueFilters.endDate) {
+			const endDate = new Date(revenueFilters.endDate)
+			endDate.setHours(23, 59, 59, 999)
+			filtered = filtered.filter((booking) => {
+				const bookingDate = booking.createdAt?.toDate ? booking.createdAt.toDate() : new Date(booking.createdAt || 0)
+				return bookingDate <= endDate
+			})
 		}
 		
 		return filtered
@@ -2140,26 +2391,66 @@ const AdminDashboard = () => {
 
 				case "revenue": {
 					reportTitle = "Revenue_Report"
-					// Use filtered data if filters are applied, otherwise use all data
-					const revenueToExport = revenueFilters.search || revenueFilters.status !== "all" || revenueFilters.minAmount || revenueFilters.maxAmount
-						? filteredRevenueData 
-						: allBookingsData.filter(b => b.status !== "cancelled" && b.status !== "pending")
+					// Use revenueTransactions which already respects all filters (date, type, status)
+					const transactionsToExport = revenueTransactions
 					
-					const revenueTotal = revenueToExport.reduce((sum, b) => sum + (b.pricing?.total || 0), 0)
-					const hostFees = revenueTotal * (policies.serviceFeeHost / 100)
-					const guestFees = revenueToExport.length * policies.serviceFeeGuest // Fixed fee per booking
-					const totalServiceFees = hostFees + guestFees
-					const netRevenue = revenueTotal - totalServiceFees
+					// Calculate totals by type
+					const totalRevenue = transactionsToExport.reduce((sum, t) => sum + t.amount, 0)
+					const bookingRevenue = transactionsToExport
+						.filter(t => t.type === "Booking")
+						.reduce((sum, t) => sum + t.amount, 0)
+					const serviceFeeRevenue = transactionsToExport
+						.filter(t => t.type === "Service Fee")
+						.reduce((sum, t) => sum + t.amount, 0)
+					const guestFeeRevenue = transactionsToExport
+						.filter(t => t.type === "Guest Fee")
+						.reduce((sum, t) => sum + t.amount, 0)
+					const subscriptionRevenue = transactionsToExport
+						.filter(t => t.type === "Subscription")
+						.reduce((sum, t) => sum + t.amount, 0)
+					
+					// Group transactions by date for monthly breakdown
+					const revenueByMonth = {}
+					transactionsToExport.forEach((transaction) => {
+						const date = new Date(transaction.date)
+						const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+						if (!revenueByMonth[monthKey]) {
+							revenueByMonth[monthKey] = 0
+						}
+						revenueByMonth[monthKey] += transaction.amount
+					})
+					
+					// Get last 6 months
+					const last6Months = []
+					const currentDate = new Date()
+					for (let i = 5; i >= 0; i--) {
+						const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1)
+						const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+						const monthName = date.toLocaleDateString("en-US", { month: "short", year: "numeric" })
+						last6Months.push({
+							month: monthName,
+							revenue: revenueByMonth[monthKey] || 0,
+						})
+					}
 					
 					reportData = {
 						generatedAt: new Date().toISOString(),
 						summary: {
-							totalRevenue: revenueTotal,
-							hostServiceFees: hostFees.toFixed(2),
-							guestServiceFees: guestFees.toFixed(2),
-							totalServiceFees: totalServiceFees.toFixed(2),
-							netRevenue: netRevenue.toFixed(2),
+							totalRevenue: totalRevenue.toFixed(2),
+							bookingRevenue: bookingRevenue.toFixed(2),
+							serviceFeeRevenue: serviceFeeRevenue.toFixed(2),
+							guestFeeRevenue: guestFeeRevenue.toFixed(2),
+							subscriptionRevenue: subscriptionRevenue.toFixed(2),
+							totalTransactions: transactionsToExport.length,
 						},
+						transactions: transactionsToExport.map((t) => ({
+							date: t.dateDisplay,
+							type: t.type,
+							amount: t.amount.toFixed(2),
+							reference: t.bookingId || t.subscriptionId || "N/A",
+							propertyTitle: t.propertyTitle || t.planName || "N/A",
+						})),
+						monthlyBreakdown: last6Months,
 						chartData: chartData.revenue,
 					}
 					break
@@ -2220,9 +2511,15 @@ const AdminDashboard = () => {
 					const bestReviews = sortedByRating.filter(p => (p.rating || 0) > 0)
 					const lowestReviews = [...sortedByRating].reverse().filter(p => (p.rating || 0) > 0)
 
-					const hostFees = stats.totalRevenue * (policies.serviceFeeHost / 100)
-					const guestFees =
-						stats.totalRevenue * (policies.serviceFeeGuest / 100)
+					// Calculate service fees: Guest Service Fee (per booking) + Guest Fee Per Person (per guest)
+					const allRevenueBookings = allBookingsData.filter(b => b.status !== "cancelled" && b.status !== "pending")
+					const totalGuestServiceFees = allRevenueBookings.length * policies.serviceFeeGuest
+					const totalGuestFeesPerPerson = allRevenueBookings.reduce((sum, b) => {
+						const numberOfGuests = b.numberOfGuests || b.guests || 1
+						return sum + (policies.guestFeePerPerson * numberOfGuests)
+					}, 0)
+					const totalServiceFees = totalGuestServiceFees + totalGuestFeesPerPerson
+					const netRevenue = stats.totalRevenue - totalServiceFees
 
 					reportData = {
 						generatedAt: new Date().toISOString(),
@@ -2296,16 +2593,13 @@ const AdminDashboard = () => {
 						revenue: {
 							summary: {
 								totalRevenue: stats.totalRevenue,
-								hostServiceFees: hostFees.toFixed(2),
-								guestServiceFees: guestFees.toFixed(2),
-								totalServiceFees: (hostFees + guestFees).toFixed(2),
-								netRevenue: (stats.totalRevenue - hostFees - guestFees).toFixed(
-									2
-								),
+								guestServiceFees: totalGuestServiceFees.toFixed(2),
+								guestFeesPerPerson: totalGuestFeesPerPerson.toFixed(2),
+								totalServiceFees: totalServiceFees.toFixed(2),
+								netRevenue: netRevenue.toFixed(2),
 							},
 						},
 						policies: {
-							serviceFeeHost: policies.serviceFeeHost,
 							serviceFeeGuest: policies.serviceFeeGuest,
 							guestFeePerPerson: policies.guestFeePerPerson,
 							walletWithdrawalFee: policies.walletWithdrawalFee,
@@ -2658,6 +2952,80 @@ const AdminDashboard = () => {
 							</View>
 						)}
 
+						{/* Revenue Transactions Table */}
+						{type === "revenue" && data.transactions && (
+							<View style={styles.section}>
+								<Text style={styles.sectionTitle}>
+									Revenue Transactions ({data.transactions.length} total)
+								</Text>
+								<View style={styles.table}>
+									<View style={[styles.tableRow, styles.tableHeader]}>
+										<Text style={[styles.tableCell, { width: "18%" }]}>
+											Date
+										</Text>
+										<Text style={[styles.tableCell, { width: "18%" }]}>
+											Type
+										</Text>
+										<Text style={[styles.tableCell, { width: "22%" }]}>
+											Reference
+										</Text>
+										<Text style={[styles.tableCell, { width: "22%" }]}>
+											Property/Plan
+										</Text>
+										<Text style={[styles.tableCell, { width: "20%" }]}>
+											Amount
+										</Text>
+									</View>
+									{data.transactions.map((transaction, idx) => (
+										<View key={idx} style={styles.tableRow}>
+											<Text style={[styles.tableCell, { width: "18%" }]}>
+												{transaction.date}
+											</Text>
+											<Text style={[styles.tableCell, { width: "18%" }]}>
+												{transaction.type}
+											</Text>
+											<Text style={[styles.tableCell, { width: "22%" }]}>
+												{transaction.reference}
+											</Text>
+											<Text style={[styles.tableCell, { width: "22%" }]}>
+												{transaction.propertyTitle}
+											</Text>
+											<Text style={[styles.tableCell, { width: "20%" }]}>
+												₱{parseFloat(transaction.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+											</Text>
+										</View>
+									))}
+								</View>
+							</View>
+						)}
+
+						{/* Monthly Breakdown for Revenue */}
+						{type === "revenue" && data.monthlyBreakdown && (
+							<View style={styles.section} break>
+								<Text style={styles.sectionTitle}>Monthly Revenue Breakdown</Text>
+								<View style={styles.table}>
+									<View style={[styles.tableRow, styles.tableHeader]}>
+										<Text style={[styles.tableCell, { width: "50%" }]}>
+											Month
+										</Text>
+										<Text style={[styles.tableCell, { width: "50%" }]}>
+											Revenue
+										</Text>
+									</View>
+									{data.monthlyBreakdown.map((month, idx) => (
+										<View key={idx} style={styles.tableRow}>
+											<Text style={[styles.tableCell, { width: "50%" }]}>
+												{month.month}
+											</Text>
+											<Text style={[styles.tableCell, { width: "50%" }]}>
+												₱{parseFloat(month.revenue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+											</Text>
+										</View>
+									))}
+								</View>
+							</View>
+						)}
+
 					</Page>
 				</Document>
 			)
@@ -2827,7 +3195,20 @@ const AdminDashboard = () => {
 									<div className="mini-stat">
 										<div className="mini-stat-icon">💰</div>
 										<div>
-											<h3>₱{stats.totalRevenue.toLocaleString()}</h3>
+											<h3>₱{(() => {
+												// Calculate total revenue including bookings, service fees, guest fees, and subscriptions
+												const bookingRevenue = stats.totalRevenue || 0
+												// Calculate service fees and guest fees from bookings
+												const allRevenueBookings = allBookingsData.filter(b => b.status !== "cancelled" && b.status !== "pending")
+												const totalServiceFees = allRevenueBookings.length * policies.serviceFeeGuest
+												const totalGuestFees = allRevenueBookings.reduce((sum, b) => {
+													const numberOfGuests = b.numberOfGuests || b.guests || 1
+													return sum + (policies.guestFeePerPerson * numberOfGuests)
+												}, 0)
+												const subscriptionRev = subscriptionRevenue || 0
+												const totalRevenue = bookingRevenue + totalServiceFees + totalGuestFees + subscriptionRev
+												return totalRevenue.toLocaleString()
+											})()}</h3>
 											<p>Revenue</p>
 										</div>
 									</div>
@@ -4469,25 +4850,9 @@ const AdminDashboard = () => {
 									<div className="report-stats-summary">
 										<div className="stat-summary">
 											<span className="stat-value">
-												₱{filteredRevenueData.reduce((sum, b) => sum + (b.pricing?.total || 0), 0).toLocaleString()}
+												₱{revenueTransactions.reduce((sum, t) => sum + t.amount, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 											</span>
-											<span className="stat-label">Filtered Revenue</span>
-										</div>
-										<div className="stat-summary">
-											<span className="stat-value">
-												₱
-												{filteredRevenueData.length > 0
-													? (
-															filteredRevenueData.reduce((sum, b) => {
-																const amount = b.pricing?.total || 0
-																const hostFee = amount * (policies.serviceFeeHost / 100)
-																const guestFee = policies.serviceFeeGuest
-																return sum + hostFee + guestFee
-															}, 0)
-													  ).toFixed(0).toLocaleString()
-													: "0"}
-											</span>
-											<span className="stat-label">Service Fees</span>
+											<span className="stat-label">Total Revenue</span>
 										</div>
 									</div>
 									<button
@@ -4501,52 +4866,52 @@ const AdminDashboard = () => {
 								{/* Revenue Filter */}
 								<div className="report-filters">
 									<div className="filter-group">
-										<label>Search</label>
-										<input
-											type="text"
-											placeholder="Search by guest or property..."
-											value={revenueFilters.search}
-											onChange={(e) => setRevenueFilters({ ...revenueFilters, search: e.target.value })}
+										<label>Date Range</label>
+										<button
+											type="button"
+											onClick={openRevenueDatePicker}
 											className="filter-input"
-										/>
-									</div>
-									<div className="filter-group">
-										<label>Status</label>
-										<select
-											value={revenueFilters.status}
-											onChange={(e) => setRevenueFilters({ ...revenueFilters, status: e.target.value })}
-											className="filter-select"
+											style={{
+												display: "flex",
+												alignItems: "center",
+												justifyContent: "space-between",
+												cursor: "pointer",
+												textAlign: "left",
+												background: "#fff",
+												border: "1px solid #ddd",
+												borderRadius: "4px",
+												padding: "0.5rem",
+											}}
 										>
-											<option value="all">All Status</option>
-											<option value="confirmed">Confirmed</option>
-											<option value="completed">Completed</option>
+											<span>
+												{revenueFilters.startDate && revenueFilters.endDate
+													? `${new Date(revenueFilters.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${new Date(revenueFilters.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+													: revenueFilters.startDate
+													? `From ${new Date(revenueFilters.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+													: revenueFilters.endDate
+													? `Until ${new Date(revenueFilters.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+													: "Select Date Range"}
+											</span>
+											<FaCalendarAlt style={{ marginLeft: "0.5rem" }} />
+										</button>
+									</div>
+									<div className="filter-group">
+										<label>Type</label>
+										<select
+											className="filter-input"
+											value={revenueFilters.type}
+											onChange={(e) => setRevenueFilters({ ...revenueFilters, type: e.target.value })}
+										>
+											<option value="all">All Types</option>
+											<option value="Booking">Booking</option>
+											<option value="Service Fee">Service Fee</option>
+											<option value="Guest Fee">Guest Fee</option>
+											<option value="Subscription">Subscription</option>
 										</select>
-									</div>
-									<div className="filter-group">
-										<label>Min Amount (₱)</label>
-										<input
-											type="number"
-											placeholder="0"
-											min="0"
-											value={revenueFilters.minAmount}
-											onChange={(e) => setRevenueFilters({ ...revenueFilters, minAmount: e.target.value })}
-											className="filter-input"
-										/>
-									</div>
-									<div className="filter-group">
-										<label>Max Amount (₱)</label>
-										<input
-											type="number"
-											placeholder="No limit"
-											min="0"
-											value={revenueFilters.maxAmount}
-											onChange={(e) => setRevenueFilters({ ...revenueFilters, maxAmount: e.target.value })}
-											className="filter-input"
-										/>
 									</div>
 									<button
 										className="clear-filters-btn"
-										onClick={() => setRevenueFilters({ search: "", status: "all", minAmount: "", maxAmount: "" })}
+										onClick={() => setRevenueFilters({ startDate: "", endDate: "", status: "all", type: "all", minAmount: "", maxAmount: "" })}
 									>
 										Clear Filters
 									</button>
@@ -4556,47 +4921,206 @@ const AdminDashboard = () => {
 									<table className="report-table">
 										<thead>
 											<tr>
-												<th>Booking ID</th>
-												<th>Guest</th>
-												<th>Property</th>
-												<th>Booking Amount</th>
-												<th>Service Fee</th>
-												<th>Net Revenue</th>
-												<th>Status</th>
+												<th>Date</th>
+												<th>Type</th>
+												<th>Total Revenue</th>
 											</tr>
 										</thead>
 										<tbody>
-											{filteredRevenueData.length === 0 ? (
+											{revenueTransactions.length === 0 ? (
 												<tr>
-													<td colSpan="7" className="empty-state">No revenue data found</td>
+													<td colSpan="3" className="empty-state">No revenue data found</td>
 												</tr>
 											) : (
-												filteredRevenueData.map((booking) => {
-													const bookingAmount = booking.pricing?.total || 0
-													// serviceFeeHost is percentage, serviceFeeGuest is fixed amount
-													const hostServiceFee = bookingAmount * (policies.serviceFeeHost / 100)
-													const guestServiceFee = policies.serviceFeeGuest
-													const totalServiceFee = hostServiceFee + guestServiceFee
-													const netRevenue = bookingAmount - totalServiceFee
-													return (
-														<tr key={booking.id}>
-															<td>{booking.id.substring(0, 8)}...</td>
-															<td>{booking.guestName || "N/A"}</td>
-															<td>{booking.propertyTitle || "N/A"}</td>
-															<td>₱{bookingAmount.toLocaleString()}</td>
-															<td>₱{totalServiceFee.toFixed(2).toLocaleString()}</td>
-															<td>₱{netRevenue.toFixed(2).toLocaleString()}</td>
-															<td>
-																<span className={`booking-status ${booking.status || "pending"}`}>
-																	{booking.status || "pending"}
+												revenueTransactions.map((transaction, idx) => (
+													<tr key={`${transaction.date}-${transaction.type}-${idx}`}>
+														<td>{transaction.dateDisplay}</td>
+														<td>
+															{transaction.type}
+															{transaction.type === "Guest Fee" && transaction.numberOfGuests && (
+																<span style={{ fontSize: "0.85em", color: "#666", marginLeft: "0.5rem" }}>
+																	({transaction.numberOfGuests} {transaction.numberOfGuests === 1 ? "guest" : "guests"})
 																</span>
-															</td>
-														</tr>
-													)
-												})
+															)}
+														</td>
+														<td>₱{transaction.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+													</tr>
+												))
 											)}
 										</tbody>
 									</table>
+								</div>
+							</div>
+						)}
+
+						{/* Revenue Date Range Picker Modal */}
+						{showRevenueDatePicker && (
+							<div
+								className="date-picker-modal-overlay"
+								onClick={() => setShowRevenueDatePicker(false)}
+							>
+								<div
+									className="date-picker-modal-content"
+									onClick={(e) => e.stopPropagation()}
+								>
+									<button
+										className="close-date-modal"
+										onClick={() => setShowRevenueDatePicker(false)}
+									>
+										<FaTimes />
+									</button>
+									<h2>
+										<FaCalendarAlt /> Select Date Range
+									</h2>
+									<div className="modal-date-info">
+										<div className="selected-dates-display">
+											{tempDateRange.startDate && (
+												<div className="selected-date-item check-in">
+													<span className="date-type">Start Date:</span>
+													<span className="date-text">
+														{new Date(tempDateRange.startDate).toLocaleDateString("en-US", {
+															weekday: "short",
+															month: "short",
+															day: "numeric",
+															year: "numeric",
+														})}
+													</span>
+												</div>
+											)}
+											{tempDateRange.endDate && (
+												<div className="selected-date-item check-out">
+													<span className="date-type">End Date:</span>
+													<span className="date-text">
+														{new Date(tempDateRange.endDate).toLocaleDateString("en-US", {
+															weekday: "short",
+															month: "short",
+															day: "numeric",
+															year: "numeric",
+														})}
+													</span>
+												</div>
+											)}
+											{!tempDateRange.startDate && !tempDateRange.endDate && (
+												<p className="instruction-text">
+													{selectingStartDate
+														? "Click on a date to select start date"
+														: "Click on a date to select end date"}
+												</p>
+											)}
+										</div>
+									</div>
+
+									<div className="modal-calendar">
+										<div className="month-view">
+											<div className="month-header">
+												<button onClick={previousRevenueMonth} className="month-nav-btn">
+													◀
+												</button>
+												<h3>
+													{revenueCalendarMonth.toLocaleString("default", {
+														month: "long",
+														year: "numeric",
+													})}
+												</h3>
+												<button onClick={nextRevenueMonth} className="month-nav-btn">
+													▶
+												</button>
+											</div>
+											<div className="calendar-days">
+												{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+													(day) => (
+														<div key={day} className="day-label">
+															{day}
+														</div>
+													)
+												)}
+												{generateRevenueCalendarDays().map((dayData, index) =>
+													dayData ? (
+														<div
+															key={index}
+															className={`calendar-day available ${
+																dayData.dateString === tempDateRange.startDate
+																	? "selected-check-in"
+																	: ""
+															} ${
+																dayData.dateString === tempDateRange.endDate
+																	? "selected-check-out"
+																	: ""
+															} ${
+																tempDateRange.startDate &&
+																tempDateRange.endDate &&
+																dayData.dateString >= tempDateRange.startDate &&
+																dayData.dateString <= tempDateRange.endDate
+																	? "in-range"
+																	: ""
+															}`}
+															onClick={() => handleRevenueDateClick(dayData.dateString)}
+															title="Click to select"
+														>
+															{dayData.day}
+														</div>
+													) : (
+														<div key={index} className="calendar-day empty"></div>
+													)
+												)}
+											</div>
+										</div>
+										<div className="calendar-legend">
+											<div className="legend-item">
+												<span className="legend-color available"></span>
+												Available
+											</div>
+											<div className="legend-item">
+												<span className="legend-color selected-check-in"></span>
+												Start Date
+											</div>
+											<div className="legend-item">
+												<span className="legend-color selected-check-out"></span>
+												End Date
+											</div>
+										</div>
+									</div>
+
+									<div style={{ display: "flex", gap: "1rem", marginTop: "1.5rem" }}>
+										<button
+											onClick={() => {
+												setRevenueFilters({ ...revenueFilters, startDate: tempDateRange.startDate, endDate: tempDateRange.endDate })
+												setShowRevenueDatePicker(false)
+											}}
+											style={{
+												flex: 1,
+												padding: "0.75rem",
+												background: "var(--primary)",
+												color: "#fff",
+												border: "none",
+												borderRadius: "6px",
+												cursor: "pointer",
+												fontSize: "1rem",
+												fontWeight: "500",
+											}}
+										>
+											Apply
+										</button>
+										<button
+											onClick={() => {
+												setTempDateRange({ startDate: "", endDate: "" })
+												setRevenueFilters({ ...revenueFilters, startDate: "", endDate: "" })
+												setShowRevenueDatePicker(false)
+											}}
+											style={{
+												flex: 1,
+												padding: "0.75rem",
+												background: "#f0f0f0",
+												color: "#333",
+												border: "none",
+												borderRadius: "6px",
+												cursor: "pointer",
+												fontSize: "1rem",
+											}}
+										>
+											Clear
+										</button>
+									</div>
 								</div>
 							</div>
 						)}

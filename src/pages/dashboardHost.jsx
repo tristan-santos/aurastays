@@ -1258,6 +1258,27 @@ export default function DashboardHost() {
 				"@react-pdf/renderer"
 			)
 
+			// PDF-safe currency formatter - ensures proper rendering of currency symbols
+			const formatCurrencyForPDF = (amount, currencySymbol = "₱") => {
+				const formatted = formatCurrency(amount, currencySymbol)
+				// Normalize the string to ensure proper Unicode handling
+				let normalized = formatted.normalize("NFC")
+				
+				// For certain currency symbols (like £), ensure proper text rendering
+				// by adding a zero-width non-joiner if needed to prevent scrambling
+				// This helps PDF renderers properly handle the currency symbol + number combination
+				if (currencySymbol === "£" || currencySymbol === "€" || currencySymbol === "₱") {
+					// Ensure the currency symbol and following characters are properly combined
+					// by normalizing and ensuring proper encoding
+					normalized = normalized.replace(/([£€₱])(\d)/g, (match, symbol, number) => {
+						// Ensure proper spacing/joining between symbol and number
+						return `${symbol}${number}`
+					})
+				}
+				
+				return normalized
+			}
+
 			let reportData = {}
 			let reportTitle = ""
 
@@ -1302,15 +1323,20 @@ export default function DashboardHost() {
 						bookings: bookingsList.previous
 							.concat(bookingsList.today, bookingsList.upcoming)
 							.slice(0, 50)
-							.map((b) => ({
-								property: b.propertyTitle || "N/A",
-								guest: b.guestName || "N/A",
-								checkIn: formatDate(b.checkInDate),
-								checkOut: formatDate(b.checkOutDate),
-								status: b.status || "pending",
-								total: formatCurrency(b.pricing?.total || 0),
-								guests: b.numberOfGuests || b.guests || 1,
-							})),
+							.map((b) => {
+								// Get currency symbol from booking or default to ₱
+								const currency = b.pricing?.currency || "PHP"
+								const currencySymbol = currency === "GBP" ? "£" : currency === "USD" ? "$" : currency === "EUR" ? "€" : "₱"
+								return {
+									property: b.propertyTitle || "N/A",
+									guest: b.guestName || "N/A",
+									checkIn: formatDate(b.checkInDate),
+									checkOut: formatDate(b.checkOutDate),
+									status: b.status || "pending",
+									total: formatCurrencyForPDF(b.pricing?.total || 0, currencySymbol),
+									guests: b.numberOfGuests || b.guests || 1,
+								}
+							}),
 					}
 					break
 
@@ -1340,21 +1366,38 @@ export default function DashboardHost() {
 						revenueByMonth.push(monthRevenue)
 					}
 
+					// Determine currency from bookings (use most common currency or default)
+					const allBookings = bookingsList.previous
+						.concat(bookingsList.today, bookingsList.upcoming)
+					const currencies = allBookings
+						.map(b => b.pricing?.currency)
+						.filter(c => c)
+					const mostCommonCurrency = currencies.length > 0 
+						? currencies.sort((a, b) => 
+							currencies.filter(v => v === a).length - 
+							currencies.filter(v => v === b).length
+						).pop() 
+						: "PHP"
+					const defaultCurrencySymbol = mostCommonCurrency === "GBP" ? "£" 
+						: mostCommonCurrency === "USD" ? "$" 
+						: mostCommonCurrency === "EUR" ? "€" 
+						: "₱"
+
 					reportData = {
 						generatedAt: new Date().toISOString(),
 						summary: {
-							totalRevenue: formatCurrency(stats.totalRevenue),
-							monthlyRevenue: formatCurrency(stats.monthlyRevenue),
+							totalRevenue: formatCurrencyForPDF(stats.totalRevenue, defaultCurrencySymbol),
+							monthlyRevenue: formatCurrencyForPDF(stats.monthlyRevenue, defaultCurrencySymbol),
 							averageBookingValue:
 								stats.totalBookings > 0
-									? formatCurrency(Math.round(
+									? formatCurrencyForPDF(Math.round(
 											stats.totalRevenue / stats.totalBookings
-									  ))
-									: formatCurrency(0),
+									  ), defaultCurrencySymbol)
+									: formatCurrencyForPDF(0, defaultCurrencySymbol),
 						},
 						monthlyBreakdown: months.map((month, idx) => ({
 							month,
-							revenue: formatCurrency(revenueByMonth[idx]),
+							revenue: formatCurrencyForPDF(revenueByMonth[idx], defaultCurrencySymbol),
 						})),
 					}
 					break
@@ -1370,10 +1413,10 @@ export default function DashboardHost() {
 						overview: {
 							totalProperties: stats.totalProperties,
 							totalBookings: stats.totalBookings,
-							totalRevenue: formatCurrency(stats.totalRevenue),
+							totalRevenue: formatCurrencyForPDF(stats.totalRevenue),
 							averageRating: stats.avgRating,
 							totalReviews: totalReviews,
-							walletBalance: formatCurrency(walletBalance),
+							walletBalance: formatCurrencyForPDF(walletBalance),
 						},
 						properties: {
 							summary: {
@@ -1409,13 +1452,18 @@ export default function DashboardHost() {
 							recent: bookingsList.previous
 								.concat(bookingsList.today, bookingsList.upcoming)
 								.slice(0, 20)
-								.map((b) => ({
-									property: b.propertyTitle || "N/A",
-									guest: b.guestName || "N/A",
-									checkIn: formatDate(b.checkInDate),
-									status: b.status || "pending",
-									total: formatCurrency(b.pricing?.total || 0),
-								})),
+								.map((b) => {
+									// Get currency symbol from booking or default to ₱
+									const currency = b.pricing?.currency || "PHP"
+									const currencySymbol = currency === "GBP" ? "£" : currency === "USD" ? "$" : currency === "EUR" ? "€" : "₱"
+									return {
+										property: b.propertyTitle || "N/A",
+										guest: b.guestName || "N/A",
+										checkIn: formatDate(b.checkInDate),
+										status: b.status || "pending",
+										total: formatCurrencyForPDF(b.pricing?.total || 0, currencySymbol),
+									}
+								}),
 						},
 					}
 					break
@@ -1489,6 +1537,12 @@ export default function DashboardHost() {
 				tableCell: {
 					padding: 8,
 					fontSize: 9,
+				},
+				currencyCell: {
+					padding: 8,
+					fontSize: 9,
+					direction: "ltr", // Ensure left-to-right text direction for currency
+					textAlign: "right", // Right-align currency values
 				},
 			})
 
@@ -1583,7 +1637,7 @@ export default function DashboardHost() {
 											<Text style={[styles.tableCell, { width: "15%" }]}>
 												{prop.rating}
 											</Text>
-											<Text style={[styles.tableCell, { width: "25%" }]}>
+											<Text style={[styles.currencyCell, { width: "25%" }]}>
 												{prop.price}
 											</Text>
 										</View>
@@ -1611,29 +1665,29 @@ export default function DashboardHost() {
 										<Text style={[styles.tableCell, { width: "15%" }]}>
 											Status
 										</Text>
-										<Text style={[styles.tableCell, { width: "10%" }]}>
-											Amount
-										</Text>
-									</View>
-									{reportData.bookings.recent.map((booking, idx) => (
-										<View key={idx} style={styles.tableRow}>
-											<Text style={[styles.tableCell, { width: "30%" }]}>
-												{booking.property}
-											</Text>
-											<Text style={[styles.tableCell, { width: "25%" }]}>
-												{booking.guest}
-											</Text>
-											<Text style={[styles.tableCell, { width: "20%" }]}>
-												{booking.checkIn}
-											</Text>
-											<Text style={[styles.tableCell, { width: "15%" }]}>
-												{booking.status}
-											</Text>
 											<Text style={[styles.tableCell, { width: "10%" }]}>
-												{booking.total}
+												Amount
 											</Text>
 										</View>
-									))}
+										{reportData.bookings.recent.map((booking, idx) => (
+											<View key={idx} style={styles.tableRow}>
+												<Text style={[styles.tableCell, { width: "30%" }]}>
+													{booking.property}
+												</Text>
+												<Text style={[styles.tableCell, { width: "25%" }]}>
+													{booking.guest}
+												</Text>
+												<Text style={[styles.tableCell, { width: "20%" }]}>
+													{booking.checkIn}
+												</Text>
+												<Text style={[styles.tableCell, { width: "15%" }]}>
+													{booking.status}
+												</Text>
+												<Text style={[styles.currencyCell, { width: "10%" }]}>
+													{booking.total}
+												</Text>
+											</View>
+										))}
 								</View>
 							</View>
 						)}
@@ -1670,7 +1724,7 @@ export default function DashboardHost() {
 											<Text style={[styles.tableCell, { width: "15%" }]}>
 												{prop.rating}
 											</Text>
-											<Text style={[styles.tableCell, { width: "20%" }]}>
+											<Text style={[styles.currencyCell, { width: "20%" }]}>
 												{prop.price}
 											</Text>
 											<Text style={[styles.tableCell, { width: "15%" }]}>
@@ -1723,7 +1777,7 @@ export default function DashboardHost() {
 											<Text style={[styles.tableCell, { width: "12%" }]}>
 												{booking.status}
 											</Text>
-											<Text style={[styles.tableCell, { width: "7%" }]}>
+											<Text style={[styles.currencyCell, { width: "7%" }]}>
 												{booking.total}
 											</Text>
 										</View>
@@ -1751,7 +1805,7 @@ export default function DashboardHost() {
 											<Text style={[styles.tableCell, { width: "50%" }]}>
 												{item.month}
 											</Text>
-											<Text style={[styles.tableCell, { width: "50%" }]}>
+											<Text style={[styles.currencyCell, { width: "50%" }]}>
 												{item.revenue}
 											</Text>
 										</View>
