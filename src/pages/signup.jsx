@@ -21,6 +21,8 @@ import viewIcon from "../assets/icons/view.png"
 import { sendVerificationEmail } from "../utils/emailService"
 import { getFirebaseErrorMessage } from "../utils/errorMessages"
 
+const INITIAL_WALLET_BALANCE = 100000
+
 export default function Signup() {
 	const [currentStep, setCurrentStep] = useState(1)
 	const [userType, setUserType] = useState("")
@@ -99,6 +101,8 @@ export default function Signup() {
 				uid: user.uid,
 				displayName: user.displayName,
 				signInMethod: "google",
+				walletBalance: INITIAL_WALLET_BALANCE,
+				eWallet: INITIAL_WALLET_BALANCE,
 			}
 
 			// Save to Firestore pendingUsers collection
@@ -173,6 +177,8 @@ export default function Signup() {
 				reviewsWritten: 0,
 				wishlistItems: 0,
 				totalSpent: 0,
+				walletBalance: INITIAL_WALLET_BALANCE,
+				eWallet: INITIAL_WALLET_BALANCE,
 			}
 
 			await setDoc(doc(db, "pendingUsers", user.uid), userData)
@@ -198,9 +204,9 @@ export default function Signup() {
 				"Verification email sent! Please check your inbox and click the link to verify."
 			)
 
-			// Redirect to login page
+			// Redirect to verify email page
 			setTimeout(() => {
-				navigate("/login")
+				navigate("/verify-email")
 			}, 100)
 		} catch (error) {
 			toast.error(getFirebaseErrorMessage(error))
@@ -245,6 +251,8 @@ export default function Signup() {
 						"",
 					signInMethod: currentUser.providerData[0]?.providerId || "email",
 					createdAt: new Date(),
+					walletBalance: INITIAL_WALLET_BALANCE,
+					eWallet: INITIAL_WALLET_BALANCE,
 				}
 
 				console.log("💾 Attempting to save to pendingUsers collection...")
@@ -269,7 +277,7 @@ export default function Signup() {
 				toast.success(
 					"Verification email sent! Please check your inbox and click the link to verify."
 				)
-				navigate("/login")
+				navigate("/verify-email")
 			} else {
 				console.log("✅ Branch: Creating new email/password account")
 				// Regular email/password signup
@@ -297,6 +305,8 @@ export default function Signup() {
 					lastName: formdata.lastName,
 					signInMethod: "email",
 					createdAt: new Date(),
+					walletBalance: INITIAL_WALLET_BALANCE,
+					eWallet: INITIAL_WALLET_BALANCE,
 				}
 
 				console.log("💾 Attempting to save to pendingUsers collection...")
@@ -322,9 +332,9 @@ export default function Signup() {
 					"Verification email sent! Please check your inbox and click the link to verify."
 				)
 
-				// Redirect to login page
+				// Redirect to verify email page
 				setTimeout(() => {
-					navigate("/login")
+					navigate("/verify-email")
 				}, 100)
 			}
 		} catch (error) {

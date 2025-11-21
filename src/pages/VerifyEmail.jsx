@@ -14,6 +14,8 @@ import { toast } from "react-stacked-toast"
 import "../css/VerifyEmail.css"
 import termsAndConditions from "../components/terms.js"
 
+const INITIAL_WALLET_BALANCE = 100000
+
 export default function VerifyEmail() {
 	const navigate = useNavigate()
 	const [message, setMessage] = useState(
@@ -99,6 +101,14 @@ export default function VerifyEmail() {
 				reviewsWritten: userData.reviewsWritten || 0,
 				wishlistItems: userData.wishlistItems || 0,
 				totalSpent: userData.totalSpent || 0,
+				walletBalance:
+					typeof userData.walletBalance === "number"
+						? userData.walletBalance
+						: INITIAL_WALLET_BALANCE,
+				eWallet:
+					typeof userData.eWallet === "number"
+						? userData.eWallet
+						: INITIAL_WALLET_BALANCE,
 			})
 
 			// Delete from pendingUsers collection
